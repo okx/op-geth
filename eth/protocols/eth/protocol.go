@@ -111,8 +111,85 @@ func (p *NewBlockHashesPacket) Unpack() ([]common.Hash, []uint64) {
 	return hashes, numbers
 }
 
+// transactionEnvelope is an envelope over a transaction such that
+// out-of-protocol metadata can be gossiped to peers
+type transactionEnvelope struct {
+	Tx          *types.Transaction
+	Conditional *types.TransactionConditional
+}
+
+// EncodeRLP will apply the envelope only if there's metadata to
+// pass along. Otherwise the transaction is serialized directly
+func (env transactionEnvelope) EncodeRLP(w io.Writer) error {
+	if env.Conditional == nil {
+		return env.Tx.EncodeRLP(w)
+	}
+	return rlp.Encode(w, [2]interface{}{env.Tx, env.Conditional})
+}
+
+// DecodeRLP will detect if an envelope is present and unwrap it
+// accordingly. Otherwise it remains backwards compatible with
+// transactions serialized directly
+func (env *transactionEnvelope) DecodeRLP(s *rlp.Stream) error {
+	kind, _, err := s.Kind()
+	if err != nil {
+		return err
+	}
+
+	switch kind {
+	case rlp.List:
+		rlpBytes, err := s.Raw()
+		if err != nil {
+			return err
+		}
+
+		// Check if a legacy tx (no envelope)
+		if err := rlp.DecodeBytes(rlpBytes, &env.Tx); err == nil {
+			env.Conditional = nil
+			return nil
+		}
+
+		// Unwrap the envelope
+		type envTxCpy struct {
+			Tx          **types.Transaction
+			Conditional **types.TransactionConditional
+		}
+		return rlp.DecodeBytes(rlpBytes, &envTxCpy{&env.Tx, &env.Conditional})
+
+	default:
+		// No envelope, it's an EIP-2718 typed tx
+		env.Conditional = nil
+		return s.Decode(&env.Tx)
+	}
+}
+
 // TransactionsPacket is the network packet for broadcasting new transactions.
 type TransactionsPacket []*types.Transaction
+
+func (p TransactionsPacket) EncodeRLP(w io.Writer) error {
+	txs := make([]transactionEnvelope, len(p))
+	for i, tx := range p {
+		txs[i] = transactionEnvelope{tx, tx.Conditional()}
+	}
+	return rlp.Encode(w, txs)
+}
+
+func (p *TransactionsPacket) DecodeRLP(s *rlp.Stream) error {
+	var txs []*transactionEnvelope
+	if err := s.Decode(&txs); err != nil {
+		return err
+	}
+
+	for _, tx := range txs {
+		// Attach any gossiped metadata to the transaction
+		if tx.Conditional != nil {
+			tx.Tx.SetConditional(tx.Conditional)
+		}
+
+		*p = append(*p, tx.Tx)
+	}
+	return nil
+}
 
 // GetBlockHeadersRequest represents a block header query.
 type GetBlockHeadersRequest struct {
