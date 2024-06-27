@@ -822,7 +822,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 
 		// ditch the reservation as we've checked that we're allowed `cost` units by the limiter
 		w.conditionalLimiter.ReserveN(now, cost)
-		txConditionalMinedTimer.UpdateSince(conditional.SubmissionTime)
+		txConditionalMinedTimer.UpdateSince(conditional.SubmissionTime())
 
 		// check the conditional
 		if err := env.header.CheckTransactionConditional(conditional); err != nil {
