@@ -5,10 +5,8 @@ import (
 	"math/big"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 func TestTransactionConditionalCost(t *testing.T) {
@@ -254,39 +252,6 @@ func TestTransactionConditionalSerDeser(t *testing.T) {
 			if !reflect.DeepEqual(cond, test.expected) {
 				t.Errorf("Test %s got unexpected value, want %#v, got %#v", test.name, test.expected, cond)
 			}
-
-			// Also rlp encode & decode.
-			if !test.mustFail {
-				rlpBytes, err := rlp.EncodeToBytes(cond)
-				if err != nil {
-					t.Errorf("Test %s failed to rlp encode: %s", test.name, err)
-				}
-
-				var condCpy TransactionConditional
-				if err := rlp.DecodeBytes(rlpBytes, &condCpy); err != nil {
-					t.Errorf("Test %s failed to decode rlp bytes: %s", test.name, err)
-				}
-				if !reflect.DeepEqual(cond, test.expected) {
-					t.Errorf("Test %s got unexpected value, want %#v, got %#v", test.name, test.expected, cond)
-				}
-			}
 		})
 	}
-
-	t.Run("SubmissionTime RLP ser/deser", func(t *testing.T) {
-		cond := TransactionConditional{SubmissionTime: time.Now()}
-		rlpBytes, err := rlp.EncodeToBytes(cond)
-		if err != nil {
-			t.Errorf("Test with Submissiontime failed to rlp encode: %s", err)
-		}
-
-		var condCpy TransactionConditional
-		if err := rlp.DecodeBytes(rlpBytes, &condCpy); err != nil {
-			t.Errorf("Test with SubmissionTime failed to decode rlp bytes: %s", err)
-		}
-
-		if condCpy.SubmissionTime.Unix() != cond.SubmissionTime.Unix() {
-			t.Errorf("SubmissionTime mismatch. Got %d, Expected: %d", condCpy.SubmissionTime.Unix(), cond.SubmissionTime.Unix())
-		}
-	})
 }

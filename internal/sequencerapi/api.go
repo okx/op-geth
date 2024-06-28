@@ -89,7 +89,7 @@ func (s *sendRawTxCond) SendRawTransactionConditional(ctx context.Context, txByt
 	}
 
 	// Tag the transaction with the conditional and current time
-	cond.SetSubmissionTime(time.Now())
+	cond.SubmissionTime = time.Now()
 	tx.SetConditional(&cond)
 	sendRawTxConditionalAcceptedCounter.Inc(1)
 

@@ -87,7 +87,7 @@ type TransactionConditional struct {
 	TimestampMax   *uint64  `json:"timestampMax,omitempty"`
 
 	// Tracked internally for metrics purposes.
-	submissionTime time.Time
+	SubmissionTime time.Time `json:"-"`
 }
 
 // field type overrides for gencodec
@@ -127,12 +127,4 @@ func (opts *TransactionConditional) Cost() int {
 		cost += 1
 	}
 	return cost
-}
-
-func (cond *TransactionConditional) SetSubmissionTime(t time.Time) {
-	cond.submissionTime = t
-}
-
-func (cond *TransactionConditional) SubmissionTime() time.Time {
-	return cond.submissionTime
 }
