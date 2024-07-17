@@ -10,7 +10,12 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
-const TransactionConditionalMaxCost = 1000
+const (
+	TransactionConditionalMaxCost = 1000
+
+	TransactionConditionalRejectedErrCode        = -32003
+	TransactionConditionalCostExceededMaxErrCode = -32005
+)
 
 // KnownAccounts represents a set of KnownAccounts
 type KnownAccounts map[common.Address]KnownAccount
@@ -98,7 +103,7 @@ type transactionConditionalMarshalling struct {
 	TimestampMax   *hexutil.Uint64
 }
 
-// Validate will perform sanity checks on the specified preconditions
+// Validate will perform sanity checks on the preconditions. This does not check the aggregate cost of the preconditions.
 func (cond *TransactionConditional) Validate() error {
 	if cond.BlockNumberMin != nil && cond.BlockNumberMax != nil && cond.BlockNumberMin.Cmp(cond.BlockNumberMax) > 0 {
 		return fmt.Errorf("block number minimum constraint must be less than the maximum")
@@ -109,7 +114,7 @@ func (cond *TransactionConditional) Validate() error {
 	return nil
 }
 
-// Cost computes the cost of checking the conditional -- total number of storage lookups required
+// Cost computes the aggregate cost of the preconditions; total number of storage lookups required
 func (opts *TransactionConditional) Cost() int {
 	cost := 0
 	for _, account := range opts.KnownAccounts {

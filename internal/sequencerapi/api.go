@@ -14,9 +14,6 @@ import (
 )
 
 var (
-	conditionalTxRejectedErrCode        = -32003
-	conditionalTxCostExceededMaxErrCode = -32005
-
 	sendRawTxConditionalCostMeter       = metrics.NewRegisteredMeter("sequencer/sendRawTransactionConditional/cost", nil)
 	sendRawTxConditionalRequestsCounter = metrics.NewRegisteredCounter("sequencer/sendRawTransactionConditional/requests", nil)
 	sendRawTxConditionalAcceptedCounter = metrics.NewRegisteredCounter("sequencer/sendRawTransactionConditional/accepted", nil)
@@ -41,7 +38,7 @@ func (s *sendRawTxCond) SendRawTransactionConditional(ctx context.Context, txByt
 	if cost > types.TransactionConditionalMaxCost {
 		return common.Hash{}, &jsonRpcError{
 			message: fmt.Sprintf("conditional cost, %d, exceeded max: %d", cost, types.TransactionConditionalMaxCost),
-			code:    conditionalTxCostExceededMaxErrCode,
+			code:    types.TransactionConditionalCostExceededMaxErrCode,
 		}
 	}
 
@@ -49,7 +46,7 @@ func (s *sendRawTxCond) SendRawTransactionConditional(ctx context.Context, txByt
 	if err := cond.Validate(); err != nil {
 		return common.Hash{}, &jsonRpcError{
 			message: fmt.Sprintf("failed conditional validation: %s", err),
-			code:    conditionalTxRejectedErrCode,
+			code:    types.TransactionConditionalRejectedErrCode,
 		}
 	}
 
@@ -60,13 +57,13 @@ func (s *sendRawTxCond) SendRawTransactionConditional(ctx context.Context, txByt
 	if err := header.CheckTransactionConditional(&cond); err != nil {
 		return common.Hash{}, &jsonRpcError{
 			message: fmt.Sprintf("failed header check: %s", err),
-			code:    conditionalTxRejectedErrCode,
+			code:    types.TransactionConditionalRejectedErrCode,
 		}
 	}
 	if err := state.CheckTransactionConditional(&cond); err != nil {
 		return common.Hash{}, &jsonRpcError{
 			message: fmt.Sprintf("failed state check: %s", err),
-			code:    conditionalTxRejectedErrCode,
+			code:    types.TransactionConditionalRejectedErrCode,
 		}
 	}
 
@@ -79,7 +76,7 @@ func (s *sendRawTxCond) SendRawTransactionConditional(ctx context.Context, txByt
 	if err := parentState.CheckTransactionConditional(&cond); err != nil {
 		return common.Hash{}, &jsonRpcError{
 			message: fmt.Sprintf("failed parent block %s state check: %s", header.ParentHash, err),
-			code:    conditionalTxRejectedErrCode,
+			code:    types.TransactionConditionalRejectedErrCode,
 		}
 	}
 
