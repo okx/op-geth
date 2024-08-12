@@ -178,6 +178,9 @@ type Config struct {
 	RollupDisableTxPoolGossip               bool
 	RollupDisableTxPoolAdmission            bool
 	RollupHaltOnIncompatibleProtocolVersion string
+
+	// X Layer
+	Nacos NacosConfig
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain config.
