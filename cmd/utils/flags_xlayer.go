@@ -8,22 +8,22 @@ import (
 var (
 	// X Layer nacos
 	NacosURLsFlag = &cli.StringFlag{
-		Name:  "rollup.nacos-urls",
+		Name:  "nacos.urls",
 		Usage: "Nacos urls.",
 		Value: "",
 	}
 	NacosNamespaceIdFlag = &cli.StringFlag{
-		Name:  "rollup.nacos-namespace-id",
+		Name:  "nacos.namespace-id",
 		Usage: "Nacos namespace Id.",
 		Value: "",
 	}
 	NacosApplicationNameFlag = &cli.StringFlag{
-		Name:  "rollup.nacos-application-name",
+		Name:  "nacos.application-name",
 		Usage: "Nacos application name",
 		Value: "",
 	}
 	NacosExternalListenAddrFlag = &cli.StringFlag{
-		Name:  "rollup.nacos-external-listen-addr",
+		Name:  "nacos.external-listen-addr",
 		Usage: "Nacos external listen addr.",
 		Value: "",
 	}
