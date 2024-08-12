@@ -52,6 +52,7 @@ import (
 	"github.com/ethereum/go-ethereum/internal/shutdowncheck"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
+	"github.com/ethereum/go-ethereum/nacos"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/dnsdisc"
@@ -326,6 +327,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			return nil, err
 		}
 		eth.historicalRPCService = client
+	}
+
+	// X Layer
+	cfg := eth.config
+	if len(cfg.Nacos.URLs) > 0 {
+		nacos.StartNacosClient(cfg.Nacos.URLs, cfg.Nacos.NamespaceId, cfg.Nacos.ApplicationName, cfg.Nacos.ExternalListenAddr)
 	}
 
 	// Start the RPC service
