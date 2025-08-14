@@ -1,0 +1,12 @@
+FROM golang:1.24 as builder
+WORKDIR /app
+COPY . .
+
+# Build with cache mounts for maximum efficiency
+RUN --mount=type=cache,target=/root/.cache \
+    --mount=type=cache,target=/tmp/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    make all
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/build/bin/geth /usr/local/bin/
