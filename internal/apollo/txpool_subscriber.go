@@ -40,8 +40,15 @@ func (tcs *TxPoolConfigSubscriber) HandleConfigItem(key, value string) error {
 	configKey := strings.TrimPrefix(key, "txpool.")
 	tcs.logger.Info("Received TxPool configuration change", "key", configKey, "value", value)
 
-	// Handle different configuration keys
-	switch configKey {
+	if strings.HasPrefix(key, "txpool.") {
+		return tcs.handleTxPool(key, value)
+	}
+
+	return nil
+}
+
+func (tcs *TxPoolConfigSubscriber) handleTxPool(key, value string) error {
+	switch key {
 	case "accountslots":
 		return tcs.handleAccountSlots(value)
 	case "globalslots":
@@ -56,10 +63,8 @@ func (tcs *TxPoolConfigSubscriber) HandleConfigItem(key, value string) error {
 		return tcs.handlePriceBump(value)
 	case "lifetime":
 		return tcs.handleLifetime(value)
-	default:
-		tcs.logger.Debug("Unknown TxPool configuration key", "key", configKey)
-		return nil
 	}
+	return nil
 }
 
 // getLegacyPool finds and returns the LegacyPool from TxPool subpools
@@ -77,68 +82,7 @@ func (tcs *TxPoolConfigSubscriber) getLegacyPool() (txpool.LegacyPool, error) {
 	return legacyPool, nil
 }
 
-// updateAccountSlotsDirect directly calls the LegacyPool method
-func (tcs *TxPoolConfigSubscriber) updateAccountSlotsDirect(value uint64) error {
-	legacyPool, err := tcs.getLegacyPool()
-	if err != nil {
-		return err
-	}
-	return legacyPool.UpdateAccountSlots(value)
-}
-
-// updateGlobalSlotsDirect directly calls the LegacyPool method
-func (tcs *TxPoolConfigSubscriber) updateGlobalSlotsDirect(value uint64) error {
-	legacyPool, err := tcs.getLegacyPool()
-	if err != nil {
-		return err
-	}
-	return legacyPool.UpdateGlobalSlots(value)
-}
-
-// updateAccountQueueDirect directly calls the LegacyPool method
-func (tcs *TxPoolConfigSubscriber) updateAccountQueueDirect(value uint64) error {
-	legacyPool, err := tcs.getLegacyPool()
-	if err != nil {
-		return err
-	}
-	return legacyPool.UpdateAccountQueue(value)
-}
-
-// updateGlobalQueueDirect directly calls the LegacyPool method
-func (tcs *TxPoolConfigSubscriber) updateGlobalQueueDirect(value uint64) error {
-	legacyPool, err := tcs.getLegacyPool()
-	if err != nil {
-		return err
-	}
-	return legacyPool.UpdateGlobalQueue(value)
-}
-
-// updatePriceLimitDirect directly calls the LegacyPool method
-func (tcs *TxPoolConfigSubscriber) updatePriceLimitDirect(value uint64) error {
-	legacyPool, err := tcs.getLegacyPool()
-	if err != nil {
-		return err
-	}
-	return legacyPool.UpdatePriceLimit(value)
-}
-
-// updatePriceBumpDirect directly calls the LegacyPool method
-func (tcs *TxPoolConfigSubscriber) updatePriceBumpDirect(value uint64) error {
-	legacyPool, err := tcs.getLegacyPool()
-	if err != nil {
-		return err
-	}
-	return legacyPool.UpdatePriceBump(value)
-}
-
-// updateLifetimeDirect directly calls the LegacyPool method
-func (tcs *TxPoolConfigSubscriber) updateLifetimeDirect(value time.Duration) error {
-	legacyPool, err := tcs.getLegacyPool()
-	if err != nil {
-		return err
-	}
-	return legacyPool.UpdateLifetime(value)
-}
+// getBlobPool finds and returns the BlobPool from TxPool subpools
 
 // handleAccountSlots handles accountslots configuration and returns error
 func (tcs *TxPoolConfigSubscriber) handleAccountSlots(value string) error {
@@ -151,7 +95,11 @@ func (tcs *TxPoolConfigSubscriber) handleAccountSlots(value string) error {
 		return fmt.Errorf("AccountSlots must be at least 1, got %d", newValue)
 	}
 
-	return tcs.updateAccountSlotsDirect(newValue)
+	legacyPool, err := tcs.getLegacyPool()
+	if err != nil {
+		return err
+	}
+	return legacyPool.UpdateAccountSlots(newValue)
 }
 
 // handleGlobalSlots handles globalslots configuration and returns error
@@ -165,7 +113,11 @@ func (tcs *TxPoolConfigSubscriber) handleGlobalSlots(value string) error {
 		return fmt.Errorf("GlobalSlots must be at least 1, got %d", newValue)
 	}
 
-	return tcs.updateGlobalSlotsDirect(newValue)
+	legacyPool, err := tcs.getLegacyPool()
+	if err != nil {
+		return err
+	}
+	return legacyPool.UpdateGlobalSlots(newValue)
 }
 
 // handleAccountQueue handles accountqueue configuration and returns error
@@ -179,7 +131,11 @@ func (tcs *TxPoolConfigSubscriber) handleAccountQueue(value string) error {
 		return fmt.Errorf("AccountQueue must be at least 1, got %d", newValue)
 	}
 
-	return tcs.updateAccountQueueDirect(newValue)
+	legacyPool, err := tcs.getLegacyPool()
+	if err != nil {
+		return err
+	}
+	return legacyPool.UpdateAccountQueue(newValue)
 }
 
 // handleGlobalQueue handles globalqueue configuration and returns error
@@ -193,7 +149,11 @@ func (tcs *TxPoolConfigSubscriber) handleGlobalQueue(value string) error {
 		return fmt.Errorf("GlobalQueue must be at least 1, got %d", newValue)
 	}
 
-	return tcs.updateGlobalQueueDirect(newValue)
+	legacyPool, err := tcs.getLegacyPool()
+	if err != nil {
+		return err
+	}
+	return legacyPool.UpdateGlobalQueue(newValue)
 }
 
 // handlePriceLimit handles pricelimit configuration and returns error
@@ -207,7 +167,11 @@ func (tcs *TxPoolConfigSubscriber) handlePriceLimit(value string) error {
 		return fmt.Errorf("PriceLimit must be at least 1, got %d", newValue)
 	}
 
-	return tcs.updatePriceLimitDirect(newValue)
+	legacyPool, err := tcs.getLegacyPool()
+	if err != nil {
+		return err
+	}
+	return legacyPool.UpdatePriceLimit(newValue)
 }
 
 // handlePriceBump handles pricebump configuration and returns error
@@ -221,7 +185,11 @@ func (tcs *TxPoolConfigSubscriber) handlePriceBump(value string) error {
 		return fmt.Errorf("PriceBump must be at least 1, got %d", newValue)
 	}
 
-	return tcs.updatePriceBumpDirect(newValue)
+	legacyPool, err := tcs.getLegacyPool()
+	if err != nil {
+		return err
+	}
+	return legacyPool.UpdatePriceBump(newValue)
 }
 
 // handleLifetime handles lifetime configuration and returns error
@@ -241,7 +209,11 @@ func (tcs *TxPoolConfigSubscriber) handleLifetime(value string) error {
 		return fmt.Errorf("lifetime must be at least 1 second, got %v", duration)
 	}
 
-	return tcs.updateLifetimeDirect(duration)
+	legacyPool, err := tcs.getLegacyPool()
+	if err != nil {
+		return err
+	}
+	return legacyPool.UpdateLifetime(duration)
 }
 
 // GetSupportedKeys returns all TxPool configuration keys supported by this subscriber
