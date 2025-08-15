@@ -101,4 +101,7 @@ type StateDB interface {
 
 	// Finalise must be invoked at the end of a transaction
 	Finalise(bool)
+
+	// For X Layer, realtime
+	GenerateEntriesSinceSnapshot(int) state.Entries
 }

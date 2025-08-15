@@ -23,6 +23,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -38,6 +39,8 @@ type ExecutionResult struct {
 	MaxUsedGas uint64 // Maximum gas consumed during execution, excluding gas refunds.
 	Err        error  // Any error encountered during the execution(listed in core/vm/errors.go)
 	ReturnData []byte // Returned data from evm(function result or data supplied with revert opcode)
+	// For X Layer, realtime
+	Entries state.Entries
 }
 
 // Unwrap returns the internal evm error which allows us for further
@@ -461,6 +464,9 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 	snap := st.state.Snapshot()
 
 	result, err := st.innerExecute()
+	// For X Layer, realtime
+	result.Entries = st.state.GenerateEntriesSinceSnapshot(snap)
+
 	// Failed deposits must still be included. Unless we cannot produce the block at all due to the gas limit.
 	// On deposit failure, we rewind any state changes from after the minting, and increment the nonce.
 	if err != nil && err != ErrGasLimitReached && st.msg.IsDepositTx {

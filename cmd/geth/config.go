@@ -156,6 +156,10 @@ func loadBaseConfig(ctx *cli.Context) gethConfig {
 
 	// Apply flags.
 	utils.SetNodeConfig(ctx, &cfg.Node)
+
+	// For X Layer
+	utils.SetXLayerConfig(ctx, &cfg.Eth)
+
 	return cfg
 }
 
@@ -253,7 +257,13 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	}
 
 	// Configure log filter RPC API.
-	filterSystem := utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
+	filterSystem, filterApi := utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
+
+	// For X Layer, realtime
+	realtimeApi := eth.TryGetRealtimeAPIs(filterApi)
+	if realtimeApi != nil {
+		stack.RegisterAPIs(realtimeApi)
+	}
 
 	// Configure GraphQL if requested.
 	if ctx.IsSet(utils.GraphQLEnabledFlag.Name) {

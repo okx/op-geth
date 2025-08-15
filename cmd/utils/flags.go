@@ -2215,15 +2215,17 @@ func RegisterGraphQLService(stack *node.Node, backend ethapi.Backend, filterSyst
 }
 
 // RegisterFilterAPI adds the eth log filtering RPC API to the node.
-func RegisterFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconfig.Config) *filters.FilterSystem {
+func RegisterFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconfig.Config) (*filters.FilterSystem, *filters.FilterAPI) {
 	filterSystem := filters.NewFilterSystem(backend, filters.Config{
 		LogCacheSize: ethcfg.FilterLogCacheSize,
 	})
+
+	api := filters.NewFilterAPI(filterSystem)
 	stack.RegisterAPIs([]rpc.API{{
 		Namespace: "eth",
-		Service:   filters.NewFilterAPI(filterSystem),
+		Service:   api,
 	}})
-	return filterSystem
+	return filterSystem, api
 }
 
 // RegisterFullSyncTester adds the full-sync tester service into node.

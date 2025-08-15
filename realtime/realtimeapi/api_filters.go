@@ -1,0 +1,140 @@
+package realtimeapi
+
+import (
+	"context"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/eth/filters"
+	"github.com/ethereum/go-ethereum/log"
+	realtimeSub "github.com/ethereum/go-ethereum/realtime/subscription"
+	"github.com/ethereum/go-ethereum/rpc"
+)
+
+// Realtime send a notification each time when a transaction was received in real-time.
+func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.StreamCriteria) (*rpc.Subscription, error) {
+	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
+		// Custom for realtime
+		return &rpc.Subscription{}, ErrRealtimeNotEnabled
+	}
+
+	if api.subService == nil {
+		// Custom for realtime
+		return &rpc.Subscription{}, ErrRealtimeNotEnabled
+	}
+
+	notifier, supported := rpc.NotifierFromContext(ctx)
+	if !supported {
+		return &rpc.Subscription{}, rpc.ErrNotificationsUnsupported
+	}
+
+	rpcSub := notifier.CreateSubscription()
+	msgChan, id, err := api.subService.SubscribeRealtime()
+	if err != nil {
+		return &rpc.Subscription{}, err
+	}
+
+	go func() {
+		defer api.subService.UnsubscribeRealtime(id)
+
+		for {
+			select {
+			case msg, ok := <-msgChan:
+				if !ok {
+					log.Warn("[realtime subscription] realtime txMsg channel closed")
+					return
+				}
+
+				result := RealtimeSubResult{}
+				sendFlag := false
+				if criteria.NewHeads && msg.BlockMsg != nil {
+					header, _, err := msg.BlockMsg.GetBlockInfo()
+					if err != nil {
+						log.Warn("[realtime subscription] error getting block info", "err", err)
+					}
+					result.Header = header
+					sendFlag = true
+				}
+
+				if msg.TxMsg != nil {
+					_, tx, receipt, innerTxs, err := msg.TxMsg.GetAllTxData()
+					if err != nil {
+						log.Warn("[realtime subscription] error getting tx data", "err", err)
+					}
+					result.TxHash = tx.Hash().Hex()
+					sendFlag = true
+
+					// Add tx data according to stream criteria
+					if criteria.TransactionExtraInfo {
+						result.TxData = tx
+					}
+					if criteria.TransactionReceipt {
+						result.Receipt = receipt
+					}
+					if criteria.TransactionInnerTxs {
+						result.InnerTxs = innerTxs
+					}
+				}
+
+				if sendFlag {
+					err = notifier.Notify(rpcSub.ID, result)
+					if err != nil {
+						log.Warn("[realtime subscription] error while notifying subscription", "err", err)
+					}
+				}
+			case <-rpcSub.Err():
+				return
+			}
+		}
+	}()
+
+	return rpcSub, nil
+}
+
+// Logs send a notification each time a new log appears in real-time.
+func (api *RealtimeAPIImpl) Logs(ctx context.Context, crit filters.FilterCriteria) (*rpc.Subscription, error) {
+	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
+		return api.filterApi.Logs(ctx, crit)
+	}
+
+	if api.subService == nil {
+		return api.filterApi.Logs(ctx, crit)
+	}
+
+	notifier, supported := rpc.NotifierFromContext(ctx)
+	if !supported {
+		return &rpc.Subscription{}, rpc.ErrNotificationsUnsupported
+	}
+
+	rpcSub := notifier.CreateSubscription()
+	logCh, id, err := api.subService.SubscribeRealtimeLogs(crit)
+	if err != nil {
+		return &rpc.Subscription{}, err
+	}
+
+	go func() {
+		defer api.subService.UnsubscribeRealtimeLogs(id)
+
+		for {
+			select {
+			case h, ok := <-logCh:
+				if h != nil {
+					if h.Topics == nil {
+						h.Topics = make([]common.Hash, 0)
+					}
+					err := notifier.Notify(rpcSub.ID, h)
+					if err != nil {
+						log.Warn("[realtime rpc] error while notifying subscription", "err", err)
+					}
+				}
+				if !ok {
+					log.Warn("[realtime rpc] realtime log channel was closed")
+					return
+				}
+			case <-rpcSub.Err():
+				return
+			}
+		}
+	}()
+
+	return rpcSub, nil
+}

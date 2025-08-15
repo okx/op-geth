@@ -178,7 +178,9 @@ func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, 
 		statedb.AccessEvents().Merge(evm.AccessEvents)
 	}
 
-	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce), nil
+	receipt = MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce)
+	statedb.SendTxInfoToRealtimeChannel(tx, receipt, nil, result.Entries)
+	return receipt, nil
 }
 
 // MakeReceipt generates the receipt object for a transaction given its execution result.
