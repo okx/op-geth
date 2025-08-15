@@ -231,6 +231,17 @@ var (
 		utils.MetricsInfluxDBBucketFlag,
 		utils.MetricsInfluxDBOrganizationFlag,
 	}
+
+	// For XLayer
+	apolloFlags = []cli.Flag{
+		utils.ApolloEnabledFlag,
+		utils.ApolloEndpointFlag,
+		utils.ApolloAppIDFlag,
+		utils.ApolloClusterFlag,
+		utils.ApolloNamespaceFlag,
+		utils.ApolloSecretFlag,
+		utils.ApolloSyncTimeoutFlagName,
+	}
 )
 
 var app = flags.NewApp("the go-ethereum command line interface")
@@ -283,6 +294,8 @@ func init() {
 		consoleFlags,
 		debug.Flags,
 		metricsFlags,
+		// For XLayer
+		apolloFlags,
 	)
 	flags.AutoEnvVars(app.Flags, "GETH")
 

@@ -38,6 +38,8 @@ const (
 	MiscCategory       = "MISC"
 	TestingCategory    = "TESTING"
 	DeprecatedCategory = "ALIASED (deprecated)"
+	// For XLayer
+	ApolloCategory = "APOLLO CONFIG"
 )
 
 func init() {

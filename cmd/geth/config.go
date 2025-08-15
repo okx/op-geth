@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/eth/catalyst"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/internal/apollo"
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
@@ -109,6 +110,8 @@ type gethConfig struct {
 	Node     node.Config
 	Ethstats ethstatsConfig
 	Metrics  metrics.Config
+	// For XLayer
+	Apollo apollo.Config
 }
 
 func loadConfig(file string, cfg *gethConfig) error {
@@ -156,6 +159,8 @@ func loadBaseConfig(ctx *cli.Context) gethConfig {
 
 	// Apply flags.
 	utils.SetNodeConfig(ctx, &cfg.Node)
+	// For XLayer
+	utils.SetApolloConfig(ctx, &cfg.Apollo)
 	return cfg
 }
 
@@ -294,6 +299,16 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 			utils.Fatalf("failed to register catalyst service: %v", err)
 		}
 	}
+
+	// For XLayer: Register Apollo configuration service if enabled
+	if cfg.Apollo.Enabled {
+		apolloService := apollo.NewService(cfg.Apollo)
+		stack.RegisterLifecycle(apolloService)
+
+		// Subscribe TxPool to Apollo configuration changes
+		apolloService.RegisterTxPoolSubscriber(eth)
+	}
+
 	return stack
 }
 
