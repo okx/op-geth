@@ -30,13 +30,15 @@ func (pool *LegacyPool) UpdateAccountSlots(newValue uint64) error {
 		return fmt.Errorf("account slots must be at least 1, got %d", newValue)
 	}
 
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-	oldValue := pool.config.AccountSlots
+	// Check if value changed
+	oldValue := pool.config.GlobalSlots
 	if oldValue == newValue {
 		return nil
 	}
+
+	pool.mu.Lock()
 	pool.config.AccountSlots = newValue
+	pool.mu.Unlock()
 
 	log.Info("Updated txpool AccountSlots configuration",
 		"old", oldValue, "new", newValue)
