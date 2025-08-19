@@ -137,22 +137,31 @@ func (rc *RealtimeClient) RealtimeGetBlockTransactionCountByNumber(ctx context.C
 
 // RealtimeGetTransactionByHash returns the information about a transaction requested by transaction hash in real-time
 func (rc *RealtimeClient) RealtimeGetTransactionByHash(ctx context.Context, txHash common.Hash) (*types.Transaction, error) {
-	var json *rpcTransaction
+	json, err := rc.RealtimeGetRpcTransactionByHash(ctx, txHash)
+	if err != nil {
+		return nil, err
+	}
+	if _, r, _ := json.Tx.RawSignatureValues(); r == nil {
+		return nil, errors.New("server returned transaction without signature")
+	}
+	if json.From != nil && json.BlockHash != nil {
+		setSenderFromServer(json.Tx, *json.From, *json.BlockHash)
+	}
+	return json.Tx, nil
+}
+
+func (rc *RealtimeClient) RealtimeGetRpcTransactionByHash(ctx context.Context, txHash common.Hash) (*RpcTransaction, error) {
+	var json *RpcTransaction
 	err := rc.c.CallContext(ctx, &json, "eth_getTransactionByHash", txHash)
 	if err != nil {
 		return nil, err
 	} else if json == nil {
 		return nil, ethereum.NotFound
-	} else if _, r, _ := json.tx.RawSignatureValues(); r == nil {
-		return nil, errors.New("server returned transaction without signature")
 	}
-	if json.From != nil && json.BlockHash != nil {
-		setSenderFromServer(json.tx, *json.From, *json.BlockHash)
-	}
-	return json.tx, nil
+	return json, nil
 }
 
-// RealtimeGetTransactionByHash returns raw information about a transaction requested by transaction hash in real-time
+// RealtimeGetRawTransactionByHash returns raw information about a transaction requested by transaction hash in real-time
 func (rc *RealtimeClient) RealtimeGetRawTransactionByHash(ctx context.Context, txHash common.Hash) ([]byte, error) {
 	var result hexutil.Bytes
 	err := rc.c.CallContext(ctx, &result, "eth_getRawTransactionByHash", txHash)

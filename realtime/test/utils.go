@@ -18,7 +18,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/realtime/rtclient"
 	"github.com/stretchr/testify/require"
@@ -265,7 +264,7 @@ func transTokenBatch(t *testing.T, ctx context.Context, client *rtclient.Realtim
 		require.NoError(t, err)
 	}
 
-	log.Info(fmt.Sprintf("All %d transactions have been mined successfully", len(transactions)))
+	fmt.Printf("All %d transactions have been mined successfully\n", len(transactions))
 	return txHashes
 }
 
@@ -282,8 +281,8 @@ func transTokenWithFrom(t *testing.T, ctx context.Context, client *rtclient.Real
 	to := common.HexToAddress(toAddress)
 	gas := uint64(21000)
 	require.NoError(t, err)
-	log.Info(fmt.Sprintf("gas: %d", gas))
-	log.Info(fmt.Sprintf("gasPrice: %d", gasPrice))
+	fmt.Printf("gas: %d\n", gas)
+	fmt.Printf("gasPrice: %d\n", gasPrice)
 
 	tx := types.NewTransaction(
 		nonce,
@@ -519,7 +518,7 @@ func SendCallPrecompileTx(t *testing.T, ctx context.Context, client *rtclient.Re
 
 	err = client.SendTransaction(ctx, signedTx)
 	require.NoError(t, err)
-	log.Info(fmt.Sprintf("signedTx: %s", signedTx.Hash().String()))
+	fmt.Printf("signedTx: %s\n", signedTx.Hash().String())
 
 	return signedTx
 }

@@ -15,8 +15,8 @@ type RealtimeDebugResult struct {
 	Mismatches      []string `json:"mismatches"`
 }
 
-type rpcTransaction struct {
-	tx *types.Transaction
+type RpcTransaction struct {
+	Tx *types.Transaction
 	txExtraInfo
 }
 
@@ -26,8 +26,8 @@ type txExtraInfo struct {
 	From        *common.Address `json:"from,omitempty"`
 }
 
-func (tx *rpcTransaction) UnmarshalJSON(msg []byte) error {
-	if err := json.Unmarshal(msg, &tx.tx); err != nil {
+func (tx *RpcTransaction) UnmarshalJSON(msg []byte) error {
+	if err := json.Unmarshal(msg, &tx.Tx); err != nil {
 		return err
 	}
 	return json.Unmarshal(msg, &tx.txExtraInfo)
