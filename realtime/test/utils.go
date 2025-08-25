@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/realtime/rtclient"
 	"github.com/stretchr/testify/require"
@@ -264,7 +265,7 @@ func transTokenBatch(t *testing.T, ctx context.Context, client *rtclient.Realtim
 		require.NoError(t, err)
 	}
 
-	fmt.Printf("All %d transactions have been mined successfully\n", len(transactions))
+	log.Info(fmt.Sprintf("All %d transactions have been mined successfully", len(transactions)))
 	return txHashes
 }
 
@@ -281,8 +282,8 @@ func transTokenWithFrom(t *testing.T, ctx context.Context, client *rtclient.Real
 	to := common.HexToAddress(toAddress)
 	gas := uint64(21000)
 	require.NoError(t, err)
-	fmt.Printf("gas: %d\n", gas)
-	fmt.Printf("gasPrice: %d\n", gasPrice)
+	log.Info(fmt.Sprintf("gas: %d", gas))
+	log.Info(fmt.Sprintf("gasPrice: %d", gasPrice))
 
 	tx := types.NewTransaction(
 		nonce,
@@ -518,9 +519,70 @@ func SendCallPrecompileTx(t *testing.T, ctx context.Context, client *rtclient.Re
 
 	err = client.SendTransaction(ctx, signedTx)
 	require.NoError(t, err)
-	fmt.Printf("signedTx: %s\n", signedTx.Hash().String())
+	log.Info(fmt.Sprintf("signedTx: %s", signedTx.Hash().String()))
 
 	return signedTx
+}
+
+// WaitMined waits for tx to be mined on the blockchain.
+// It stops waiting when the context is canceled.
+func WaitMined(ctx context.Context, b bind.DeployBackend, txHash common.Hash) (*types.Receipt, error) {
+	queryTicker := time.NewTicker(time.Millisecond)
+	defer queryTicker.Stop()
+
+	for {
+		receipt, err := b.TransactionReceipt(ctx, txHash)
+		if err == nil {
+			return receipt, nil
+		}
+
+		// Wait for the next round.
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-queryTicker.C:
+		}
+	}
+}
+
+type ethClienter interface {
+	ethereum.TransactionReader
+	ethereum.ContractCaller
+	bind.DeployBackend
+}
+
+// RevertReason returns the revert reason for a tx that has a receipt with failed status
+func RevertReason(ctx context.Context, c ethClienter, tx *types.Transaction, blockNumber *big.Int) (string, error) {
+	if tx == nil {
+		return "", nil
+	}
+
+	signer := types.MakeSigner(GetTestChainConfig(DefaultL2ChainID), big.NewInt(1), 0)
+	from, err := types.Sender(signer, tx)
+	if err != nil {
+		return "", err
+	}
+
+	msg := ethereum.CallMsg{
+		From: from,
+		To:   tx.To(),
+		Gas:  tx.Gas(),
+
+		Value: tx.Value(),
+		Data:  tx.Data(),
+	}
+	hex, err := c.CallContract(ctx, msg, blockNumber)
+	if err != nil {
+		return "", err
+	}
+
+	unpackedMsg, err := abi.UnpackRevert(hex)
+	if err != nil {
+		fmt.Printf("failed to get the revert message for tx %v: %v\n", tx.Hash(), err)
+		return "", errors.New("execution reverted")
+	}
+
+	return unpackedMsg, nil
 }
 
 // RevertReasonRealtime returns the revert reason for a tx that has a receipt with failed status
