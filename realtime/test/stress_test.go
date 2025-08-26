@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/realtime/realtimeapi"
 	"github.com/ethereum/go-ethereum/realtime/rtclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,10 +31,9 @@ func TestStressSendErc20Txs(t *testing.T) {
 	require.NoError(t, err)
 	client, err := rtclient.NewRealtimeClient(ctx, ec, DefaultL2NetworkRealtimeURL)
 	require.NoError(t, err)
-	// nec, err := ethclient.Dial(DefaultL2NetworkNoRealtimeURL)
-	// require.NoError(t, err)
-	// nonRtClient, err := rtclient.NewRealtimeClient(ctx, nec, DefaultL2NetworkNoRealtimeURL)
-	// require.NoError(t, err)
+
+	wsClient, err := rpc.Dial(DefaultL2NetworkWSURL)
+	require.NoError(t, err)
 
 	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(DefaultL2AdminPrivateKey, "0x"))
 	require.NoError(t, err)
@@ -51,56 +51,43 @@ func TestStressSendErc20Txs(t *testing.T) {
 
 	// Send erc20 transfer txs to txpool first
 	time.Sleep(500 * time.Millisecond)
-
-	signedTxs := make([]*types.Transaction, NumTxs)
+	signedTxs := make(map[string]struct{}, NumTxs)
 
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	require.NoError(t, err)
 
+	// Benchmark variables
+	var totalRealtimeDuration time.Duration
+
+	realtimeMsgCh := make(chan realtimeapi.RealtimeSubResult)
+	realtimeSub, err := wsClient.Subscribe(ctx, "eth", realtimeMsgCh, "realtime", map[string]bool{"NewHeads": false, "TransactionExtraInfo": false, "TransactionReceipt": false, "TransactionInnerTxs": false})
+	require.NoError(t, err)
+	defer realtimeSub.Unsubscribe()
+
 	for i := 1; i < NumTxs; i++ {
-		signedTxs[i] = erc20TransferTx(t, ctx, privateKey, client, transferAmount, gasPrice, testAddress, erc20Address, startNonce+uint64(i))
+		signedTx := erc20TransferTx(t, ctx, privateKey, client, transferAmount, gasPrice, testAddress, erc20Address, startNonce+uint64(i))
+		signedTxs[signedTx.Hash().String()] = struct{}{}
 		fmt.Println("Sent tx count: ", i)
 	}
 
 	// Send start nonce to trigger stress test
-	signedTxs[0] = erc20TransferTx(t, ctx, privateKey, client, transferAmount, gasPrice, testAddress, erc20Address, startNonce)
+	startTime := time.Now()
+	signedTx := erc20TransferTx(t, ctx, privateKey, client, transferAmount, gasPrice, testAddress, erc20Address, startNonce)
+	signedTxs[signedTx.Hash().String()] = struct{}{}
 	fmt.Println("Starting stress test")
 
-	// g, ctx := errgroup.WithContext(ctx)
-	// var totalRealtimeBalanceDuration, totalEthBalanceDuration time.Duration
-	// var totalRealtimeBalanceMutex, totalEthBalanceMutex sync.Mutex
-	// for i := 0; i < NumTxs; i++ {
-	// 	g.Go(func() error {
-	// 		startTime := time.Now()
-	// 		err = WaitRealtimeTxToBeConfirmed(ctx, client, signedTxs[i], DefaultTimeoutTxToBeMined)
-	// 		require.NoError(t, err)
-	// 		totalRealtimeBalanceMutex.Lock()
-	// 		defer totalRealtimeBalanceMutex.Unlock()
-	// 		totalRealtimeBalanceDuration += time.Since(startTime)
-	// 		fmt.Printf("RT erc20 tx transfer confirmation took: %s\n", time.Since(startTime))
-	// 		return nil
-	// 	})
-
-	// 	g.Go(func() error {
-	// 		startTime := time.Now()
-	// 		err = WaitEthTxToBeConfirmed(ctx, nonRtClient, signedTxs[i], DefaultTimeoutTxToBeMined)
-	// 		require.NoError(t, err)
-	// 		totalEthBalanceMutex.Lock()
-	// 		defer totalEthBalanceMutex.Unlock()
-	// 		totalEthBalanceDuration += time.Since(startTime)
-	// 		fmt.Printf("ETH erc20 tx transfer confirmation took: %s\n", time.Since(startTime))
-	// 		return nil
-	// 	})
-	// }
-
-	// // Wait for all goroutines to complete
-	// err = g.Wait()
-	// require.NoError(t, err)
-
-	// avgRealtimeBalanceDuration := time.Duration(int64(totalRealtimeBalanceDuration) / int64(NumTxs))
-	// avgEthBalanceDuration := time.Duration(int64(totalEthBalanceDuration) / int64(NumTxs))
-
-	// // Log out metrics
-	// fmt.Printf("Avg RT erc20 tx transfer confirmation took: %s\n", avgRealtimeBalanceDuration)
-	// fmt.Printf("Avg ETH erc20 tx transfer confirmation took: %s\n", avgEthBalanceDuration)
+	count := 0
+	for count < NumTxs {
+		select {
+		case msg := <-realtimeMsgCh:
+			if _, ok := signedTxs[msg.TxHash]; ok {
+				fmt.Printf("Confirmed tx: %s\n", msg.TxHash)
+				count++
+			}
+		case err := <-realtimeSub.Err():
+			require.NoError(t, err)
+		}
+	}
+	totalRealtimeDuration = time.Since(startTime)
+	fmt.Printf("Stress test took: %s\n", totalRealtimeDuration)
 }
