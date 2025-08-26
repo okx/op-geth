@@ -307,7 +307,7 @@ func TestRealtimeRPC(t *testing.T) {
 		transferAmount := new(big.Int).Mul(big.NewInt(1), big.NewInt(1e18))
 		nonce, err := client.RealtimeGetTransactionCount(ctx, fromAddress)
 		require.NoError(t, err)
-		signedTx := erc20TransferTx(t, ctx, privateKey, client, transferAmount, testAddress, erc20Address, nonce)
+		signedTx := erc20TransferTx(t, ctx, privateKey, client, transferAmount, nil, testAddress, erc20Address, nonce)
 		err = WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
 		require.NoError(t, err)
 

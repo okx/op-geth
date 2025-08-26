@@ -178,6 +178,7 @@ func erc20TransferTx(
 	privateKey *ecdsa.PrivateKey,
 	client *rtclient.RealtimeClient,
 	amount *big.Int,
+	gasPrice *big.Int,
 	toAddress common.Address,
 	erc20Address common.Address,
 	nonce uint64,
@@ -187,8 +188,11 @@ func erc20TransferTx(
 	data, err := erc20ABI.Pack("transfer", toAddress, amount)
 	require.NoError(t, err)
 
-	gasPrice, err := client.SuggestGasPrice(ctx)
-	require.NoError(t, err)
+	if gasPrice == nil {
+		gasPrice, err = client.SuggestGasPrice(ctx)
+		require.NoError(t, err)
+	}
+
 	transferERC20TokenTx := types.NewTransaction(
 		nonce,
 		erc20Address,
