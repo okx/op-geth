@@ -182,10 +182,10 @@ func TestStressTestKafkaProducer(t *testing.T) {
 		assert.NilError(t, err)
 	}
 
-	// Sending 1000 messages should not be blocking, and should take less than 100ms
+	// Sending 1000 messages should not be blocking, and should take less than 50ms
 	elapsed := time.Since(startTime)
 	fmt.Printf("Batch producer send took %s to dispatch 1000 messages\n", elapsed)
-	require.Less(t, elapsed, 100*time.Millisecond)
+	require.Less(t, elapsed, 50*time.Millisecond)
 
 	for i := 0; i < 1000; i++ {
 		select {
@@ -196,7 +196,7 @@ func TestStressTestKafkaProducer(t *testing.T) {
 	}
 	elapsed = time.Since(startTime)
 	fmt.Printf("Producer took %s to send 1000 messages to kafka broker\n", elapsed)
-	require.Less(t, elapsed, 200*time.Millisecond)
+	require.Less(t, elapsed, 100*time.Millisecond)
 
 	err = producer.Close()
 	assert.NilError(t, err)
