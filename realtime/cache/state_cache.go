@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/log"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
@@ -270,8 +269,6 @@ func (cache *GlobalStateCache) DebugCompare(statedb vm.StateDB) []string {
 
 	mismatches := []string{}
 	for addr, accCache := range cache.cache.accountCache {
-		log.Info(fmt.Sprintf("[Realtime] Comparing account address: %s", addr.String()))
-
 		accDbNonce := statedb.GetNonce(addr)
 		if accCache.Nonce != accDbNonce {
 			mismatch := fmt.Sprintf("nonce mismatch, account %s, cache nonce: %d, db nonce: %d", addr.String(), accCache.Nonce, accDbNonce)

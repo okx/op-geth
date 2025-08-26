@@ -203,6 +203,26 @@ func AssertCommonTx(t *testing.T, msg kafkaTypes.TransactionMessage, tx *types.T
 	assert.Equal(t, txSender, testFromAddr)
 }
 
+func AssertCommonTxWithoutBlockNumber(t *testing.T, msg kafkaTypes.TransactionMessage, tx *types.Transaction, txType int) {
+	assert.Equal(t, int(msg.Type), txType)
+	assert.Equal(t, msg.Hash, tx.Hash())
+	assert.Equal(t, msg.ChainID.Uint64(), tx.ChainId().Uint64())
+	assert.Equal(t, msg.Nonce, tx.Nonce())
+	assert.Equal(t, msg.Gas, tx.Gas())
+	assert.Equal(t, msg.To.String(), testToAddr.String())
+	assert.Equal(t, msg.Value.String(), tx.Value().String())
+	assert.Equal(t, string(msg.Data), string(tx.Data()))
+	v, r, s := tx.RawSignatureValues()
+	assert.Equal(t, msg.R.String(), r.String())
+	assert.Equal(t, msg.S.String(), s.String())
+	assert.Equal(t, msg.V.String(), v.String())
+
+	// Check sender
+	txSender, err := types.Sender(signer, tx)
+	assert.NilError(t, err)
+	assert.Equal(t, txSender, testFromAddr)
+}
+
 func AssertAccessList(t *testing.T, msgAccessList []kafkaTypes.AccessTupleMessage) {
 	assert.Equal(t, len(msgAccessList), len(accesses))
 	for idx, access := range msgAccessList {

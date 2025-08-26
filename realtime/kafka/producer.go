@@ -14,23 +14,17 @@ import (
 
 // KafkaProducer represents a Kafka producer client for sending transaction messages
 type KafkaProducer struct {
-	producer sarama.SyncProducer
+	producer *BatchProducer
 	config   KafkaConfig
 	ctx      context.Context
 	bc       *core.BlockChain
 }
 
-func NewKafkaProducer(config KafkaConfig, ctx context.Context, bc *core.BlockChain) (*KafkaProducer, error) {
-	saramaConfig := sarama.NewConfig()
-	saramaConfig.Version = DEFAULT_VERSION
-	saramaConfig.ClientID = config.ClientID
-	saramaConfig.Producer.Return.Successes = true
-	saramaConfig.Producer.Return.Errors = true
-
+func NewKafkaProducer(config KafkaConfig, ctx context.Context, bc *core.BlockChain, successChan chan struct{}) (*KafkaProducer, error) {
 	// Create sync producer
-	producer, err := sarama.NewSyncProducer(config.BootstrapServers, saramaConfig)
+	producer, err := NewBatchProducer(ctx, config, successChan)
 	if err != nil {
-		return nil, fmt.Errorf("error creating Kafka producer: %v", err)
+		return nil, err
 	}
 
 	return &KafkaProducer{
@@ -65,7 +59,7 @@ func (client *KafkaProducer) SendKafkaTransaction(blockNumber uint64, tx *types.
 	}
 
 	// Send message
-	_, _, err = client.producer.SendMessage(kafkaMsg)
+	err = client.producer.SendMessage(kafkaMsg)
 	if err != nil {
 		return fmt.Errorf("error sending message to Kafka: %v", err)
 	}
@@ -101,7 +95,7 @@ func (client *KafkaProducer) SendKafkaBlockMessage(msg kafkaTypes.BlockMessage) 
 	}
 
 	// Send message
-	_, _, err = client.producer.SendMessage(kafkaMsg)
+	err = client.producer.SendMessage(kafkaMsg)
 	if err != nil {
 		return fmt.Errorf("error sending message to Kafka: %v", err)
 	}
@@ -127,7 +121,7 @@ func (client *KafkaProducer) SendKafkaErrorTrigger(blockNumber uint64) error {
 	}
 
 	// Send message
-	_, _, err = client.producer.SendMessage(kafkaMsg)
+	err = client.producer.SendMessage(kafkaMsg)
 	if err != nil {
 		return fmt.Errorf("error sending message to Kafka: %v", err)
 	}

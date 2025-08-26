@@ -427,7 +427,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// For X Layer, realtime
 	if eth.config.XLayer.Realtime.Enable {
 		if eth.config.XLayer.IsSequencer {
-			kafkaProducer, err := realtimeKafka.NewKafkaProducer(eth.config.XLayer.Realtime.Kafka, context.Background(), eth.blockchain)
+			kafkaProducer, err := realtimeKafka.NewKafkaProducer(eth.config.XLayer.Realtime.Kafka, context.Background(), eth.blockchain, nil)
 			if err != nil {
 				eth.kafkaEnabled = false
 				log.Warn("[Realtime] Failed to initialize kafka producer", "error", err)
