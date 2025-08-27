@@ -121,6 +121,7 @@ func TestTransferToPrecompileAddress(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, balanceBefore, balance, "realtime balance should have incremented")
 
+	time.Sleep(1 * time.Second)
 	// Check to ensure non-realtime balance of precompile address is 1gwei
 	nonRTBalance, err := nonRealtimeRPCClient.BalanceAt(ctx, testAddress, nil)
 	require.NoError(t, err)
