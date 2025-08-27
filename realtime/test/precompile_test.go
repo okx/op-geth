@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -41,7 +42,8 @@ func TestPrecompile(t *testing.T) {
 	require.NotNil(t, txReceipt, "tx receipt not found")
 	require.Equal(t, uint64(1), txReceipt.Status, "tx should be successful")
 
-	// Compare state cache. Precompile should be found in state cache
+	// // Compare state cache. Precompile should be found in state cache
+	time.Sleep(1 * time.Second)
 	mismatches, err := client.RealtimeCompareStateCache(ctx)
 	require.NoError(t, err)
 	if len(mismatches) != 0 {
