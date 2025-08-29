@@ -35,6 +35,7 @@ func (g Genesis) MarshalJSON() ([]byte, error) {
 		ExcessBlobGas *math.HexOrDecimal64                       `json:"excessBlobGas"`
 		BlobGasUsed   *math.HexOrDecimal64                       `json:"blobGasUsed"`
 		StateHash     *common.Hash                               `json:"stateHash,omitempty"`
+		HeaderOverride *types.Header                              `json:"headerOverride,omitempty"`
 	}
 	var enc Genesis
 	enc.Config = g.Config
@@ -58,6 +59,7 @@ func (g Genesis) MarshalJSON() ([]byte, error) {
 	enc.ExcessBlobGas = (*math.HexOrDecimal64)(g.ExcessBlobGas)
 	enc.BlobGasUsed = (*math.HexOrDecimal64)(g.BlobGasUsed)
 	enc.StateHash = g.StateHash
+	enc.HeaderOverride = g.HeaderOverride
 	return json.Marshal(&enc)
 }
 
@@ -80,6 +82,7 @@ func (g *Genesis) UnmarshalJSON(input []byte) error {
 		ExcessBlobGas *math.HexOrDecimal64                       `json:"excessBlobGas"`
 		BlobGasUsed   *math.HexOrDecimal64                       `json:"blobGasUsed"`
 		StateHash     *common.Hash                               `json:"stateHash,omitempty"`
+		HeaderOverride *types.Header                              `json:"headerOverride,omitempty"`
 	}
 	var dec Genesis
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -138,6 +141,9 @@ func (g *Genesis) UnmarshalJSON(input []byte) error {
 	}
 	if dec.StateHash != nil {
 		g.StateHash = dec.StateHash
+	}
+	if dec.HeaderOverride != nil {
+		g.HeaderOverride = dec.HeaderOverride
 	}
 	return nil
 }

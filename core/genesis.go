@@ -79,6 +79,10 @@ type Genesis struct {
 	// Chains with history pruning, or extraordinarily large genesis allocation (e.g. after a regenesis event)
 	// may utilize this to get started, and then state-sync the latest state, while still verifying the header chain.
 	StateHash *common.Hash `json:"stateHash,omitempty"`
+
+	// HeaderOverride allows overriding the genesis block header with custom values.
+	// This is useful for testing and verification purposes.
+	HeaderOverride *types.Header `json:"headerOverride,omitempty"`
 }
 
 // copy copies the genesis.
@@ -677,7 +681,21 @@ func (g *Genesis) toBlockWithRoot(stateRoot, storageRootMessagePasser common.Has
 			head.WithdrawalsHash = &storageRootMessagePasser
 		}
 	}
-	return types.NewBlock(head, &types.Body{Withdrawals: withdrawals}, nil, trie.NewStackTrie(nil), g.Config)
+
+	// Create the block
+	block := types.NewBlock(head, &types.Body{Withdrawals: withdrawals}, nil, trie.NewStackTrie(nil), g.Config)
+
+	// Apply header override if specified
+	if g.HeaderOverride != nil {
+		log.Info("Applying header override to genesis block",
+			"original_hash", block.Hash().Hex(),
+			"override_hash", g.HeaderOverride.Hash().Hex())
+
+		// Create a new block with the overridden header
+		block = types.NewBlock(g.HeaderOverride, &types.Body{Withdrawals: withdrawals}, nil, trie.NewStackTrie(nil), g.Config)
+	}
+
+	return block
 }
 
 // Commit writes the block and state of a genesis specification to the database.
