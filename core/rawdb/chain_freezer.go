@@ -212,7 +212,8 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore) {
 		batch := db.NewBatch()
 		for i := 0; i < len(ancients); i++ {
 			// Always keep the genesis block in active database
-			if first+uint64(i) != 0 {
+			trueGenesisNumber := getGenesisBlockNumber(db)
+			if first+uint64(i) != trueGenesisNumber {
 				DeleteBlockWithoutNumber(batch, ancients[i], first+uint64(i))
 				DeleteCanonicalHash(batch, first+uint64(i))
 			}
@@ -225,9 +226,10 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore) {
 		// Wipe out side chains also and track dangling side chains
 		var dangling []common.Hash
 		frozen, _ = f.Ancients() // Needs reload after during freezeRange
+		trueGenesisNumber := getGenesisBlockNumber(db)
 		for number := first; number < frozen; number++ {
 			// Always keep the genesis block in active database
-			if number != 0 {
+			if number != trueGenesisNumber {
 				dangling = ReadAllHashes(db, number)
 				for _, hash := range dangling {
 					log.Trace("Deleting side chain", "number", number, "hash", hash)

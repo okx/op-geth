@@ -683,9 +683,9 @@ func (g *Genesis) toBlockWithRoot(stateRoot, storageRootMessagePasser common.Has
 // Commit writes the block and state of a genesis specification to the database.
 // The block is committed as the canonical head block.
 func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Block, error) {
-	if g.Number != 0 {
-		return nil, errors.New("can't commit genesis block with number > 0")
-	}
+	// if g.Number != 0 {
+	// 	return nil, errors.New("can't commit genesis block with number > 0")
+	// }
 	config := g.Config
 	if config == nil {
 		return nil, errors.New("invalid genesis without chain config")
@@ -727,6 +727,13 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 	rawdb.WriteHeadFastBlockHash(batch, block.Hash())
 	rawdb.WriteHeadHeaderHash(batch, block.Hash())
 	rawdb.WriteChainConfig(batch, block.Hash(), config)
+
+	if block.NumberU64() != 0 {
+		// Also write the genesis block as number 0
+		rawdb.WriteCanonicalHash(batch, block.Hash(), 0)
+		rawdb.WriteGenesisHeader(batch, block.Header())
+	}
+
 	return block, batch.Write()
 }
 
