@@ -307,6 +307,9 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 
 		// Subscribe TxPool to Apollo configuration changes
 		apolloService.RegisterTxPoolSubscriber(eth)
+
+		// Subscribe Rollup to Apollo configuration changes
+		apolloService.RegisterRollupSubscriber(eth)
 	}
 
 	return stack

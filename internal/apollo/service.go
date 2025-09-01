@@ -101,3 +101,21 @@ func (s *Service) RegisterTxPoolSubscriber(backend interface{}) {
 
 	s.logger.Info("Registered TxPool configuration handlers", "keys", len(subscriber.GetSupportedKeys()))
 }
+
+// RegisterRollupSubscriber is a convenience method to register Rollup configuration handlers
+func (s *Service) RegisterRollupSubscriber(backend interface{}) {
+	subscriber := NewRollupConfigSubscriber(backend)
+	if subscriber == nil {
+		s.logger.Error("Failed to create Rollup configuration subscriber")
+		return
+	}
+
+	// Register handlers for each TxGossip configuration key
+	for _, key := range subscriber.GetSupportedKeys() {
+		s.RegisterConfigHandler(key, func(value string) error {
+			return subscriber.HandleConfigItem(key, value)
+		})
+	}
+
+	s.logger.Info("Registered TxGossip configuration handlers", "keys", len(subscriber.GetSupportedKeys()))
+}

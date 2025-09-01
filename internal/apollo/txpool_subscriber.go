@@ -40,11 +40,7 @@ func (tcs *TxPoolConfigSubscriber) HandleConfigItem(key, value string) error {
 	configKey := strings.TrimPrefix(key, "txpool.")
 	tcs.logger.Info("Received TxPool configuration change", "key", configKey, "value", value)
 
-	if strings.HasPrefix(key, "txpool.") {
-		return tcs.handleTxPool(key, value)
-	}
-
-	return nil
+	return tcs.handleTxPool(key, value)
 }
 
 func (tcs *TxPoolConfigSubscriber) handleTxPool(key, value string) error {
