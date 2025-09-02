@@ -209,20 +209,25 @@ func initGenesis(ctx *cli.Context) error {
 	if ctx.Args().Len() != 1 {
 		utils.Fatalf("need genesis.json file as the only argument")
 	}
+	start := time.Now()
 	genesisPath := ctx.Args().First()
 	if len(genesisPath) == 0 {
 		utils.Fatalf("invalid path to genesis file")
 	}
+	log.Info("start reading genesis", "path", genesisPath)
 	file, err := os.Open(genesisPath)
 	if err != nil {
 		utils.Fatalf("Failed to read genesis file: %v", err)
 	}
 	defer file.Close()
+	log.Info("end reading genesis file...")
 
+	log.Info("start decoding genesis file into json")
 	genesis := new(core.Genesis)
 	if err := json.NewDecoder(file).Decode(genesis); err != nil {
 		utils.Fatalf("invalid genesis file: %v", err)
 	}
+	log.Info("end decoding genesis file...")
 	// Open and initialise both full and light databases
 	stack, _ := makeConfigNode(ctx)
 	defer stack.Close()
@@ -253,7 +258,9 @@ func initGenesis(ctx *cli.Context) error {
 	if compatErr != nil {
 		utils.Fatalf("Failed to write chain config: %v", compatErr)
 	}
-	log.Info("Successfully wrote genesis state", "database", "chaindata", "hash", hash)
+
+	elapsed := time.Since(start)
+	log.Info("Successfully wrote genesis state", "database", "chaindata", "hash", hash, "elapsed", elapsed.Minutes())
 
 	return nil
 }

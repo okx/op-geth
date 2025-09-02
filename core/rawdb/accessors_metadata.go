@@ -84,18 +84,104 @@ func WriteChainConfig(db ethdb.KeyValueWriter, hash common.Hash, cfg *params.Cha
 	}
 }
 
-// ReadGenesisStateSpec retrieves the genesis state specification based on the
-// given genesis (block-)hash.
-func ReadGenesisStateSpec(db ethdb.KeyValueReader, blockhash common.Hash) []byte {
-	data, _ := db.Get(genesisStateSpecKey(blockhash))
-	return data
-}
+const (
+	maxChunkSize = 4 * 1024 * 1024 // 4MB
+	chunkPrefix  = 0x00            // Special prefix indicating chunked data
+)
 
 // WriteGenesisStateSpec writes the genesis state specification into the disk.
+// If the data is larger than 4KB, it will be split into chunks.
 func WriteGenesisStateSpec(db ethdb.KeyValueWriter, blockhash common.Hash, data []byte) {
-	if err := db.Put(genesisStateSpecKey(blockhash), data); err != nil {
-		log.Crit("Failed to store genesis state", "err", err)
+	key := genesisStateSpecKey(blockhash)
+
+	if len(data) <= maxChunkSize {
+		// Data is small enough, write directly
+		if err := db.Put(key, data); err != nil {
+			log.Crit("Failed to store genesis state", "err", err, "size", len(data))
+		}
+		log.Info("Genesis state written directly", "size", len(data))
+		return
 	}
+
+	// Data is too large, split into chunks
+	numChunks := (len(data) + maxChunkSize - 1) / maxChunkSize // Ceiling division
+
+	if numChunks > 65535 { // (1<<16) - 1
+		log.Crit("Genesis state too large for chunking", "size", len(data), "max_chunks", 255)
+	}
+
+	// Write the special header indicating chunked data
+	header := []byte{chunkPrefix, byte(numChunks)}
+	if err := db.Put(key, header); err != nil {
+		log.Crit("Failed to store genesis state header", "err", err, "chunks", numChunks)
+	}
+
+	// Write each chunk
+	for i := 0; i < numChunks; i++ {
+		start := i * maxChunkSize
+		end := start + maxChunkSize
+		if end > len(data) {
+			end = len(data)
+		}
+
+		chunkKey := append(key, byte(i)) // Append chunk index to original key
+		chunk := data[start:end]
+
+		if err := db.Put(chunkKey, chunk); err != nil {
+			log.Crit("Failed to store genesis state chunk", "err", err, "chunk", i, "size", len(chunk))
+		}
+	}
+
+	log.Info("Genesis state written in chunks", "total_size", len(data), "chunks", numChunks, "chunk_size", maxChunkSize)
+}
+
+// ReadGenesisStateSpec retrieves the genesis state specification based on the
+// given genesis (block-)hash. Handles both direct and chunked data.
+func ReadGenesisStateSpec(db ethdb.KeyValueReader, blockhash common.Hash) []byte {
+	key := genesisStateSpecKey(blockhash)
+	data, _ := db.Get(key)
+
+	if len(data) == 0 {
+		return nil
+	}
+
+	// Check if this is chunked data
+	if len(data) == 2 && data[0] == chunkPrefix {
+		numChunks := int(data[1])
+
+		if numChunks == 0 || numChunks > 65535 {
+			log.Error("Invalid chunk count in genesis state header", "chunks", numChunks)
+			return nil
+		}
+
+		// Read all chunks
+		var chunks [][]byte
+		totalSize := 0
+
+		for i := 0; i < numChunks; i++ {
+			chunkKey := append(key, byte(i))
+			chunk, _ := db.Get(chunkKey)
+			if len(chunk) == 0 {
+				log.Error("Missing genesis state chunk", "chunk", i, "total_chunks", numChunks)
+				return nil
+			}
+			chunks = append(chunks, chunk)
+			totalSize += len(chunk)
+		}
+
+		// Combine all chunks
+		result := make([]byte, 0, totalSize)
+		for _, chunk := range chunks {
+			result = append(result, chunk...)
+		}
+
+		log.Info("Genesis state read from chunks", "total_size", totalSize, "chunks", numChunks)
+		return result
+	}
+
+	// Direct data (not chunked)
+	log.Info("Genesis state read directly", "size", len(data))
+	return data
 }
 
 // crashList is a list of unclean-shutdown-markers, for rlp-encoding to the

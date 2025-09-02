@@ -129,6 +129,7 @@ func New(diskdb ethdb.Database, config *Config) *Database {
 		config = Defaults
 	}
 	var cleans *fastcache.Cache
+	log.Info("clean cache size", "config.CleanCacheSize", config.CleanCacheSize)
 	if config.CleanCacheSize > 0 {
 		cleans = fastcache.New(config.CleanCacheSize)
 	}

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto"
 	"math/big"
 	"strings"
 
@@ -31,7 +32,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -212,10 +212,12 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool)
 			statedb.SetState(addr, key, value)
 		}
 	}
+	log.Info("before statedb commit")
 	root, err := statedb.Commit(0, false, false)
 	if err != nil {
 		return common.Hash{}, common.Hash{}, err
 	}
+	log.Info("end statedb commit")
 	// get the storage root of the L2ToL1MessagePasser contract
 	var storageRootMessagePasser common.Hash
 	if isIsthmus {
@@ -223,9 +225,11 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool)
 	}
 	// Commit newly generated states into disk if it's not empty.
 	if root != types.EmptyRootHash {
+		log.Info("before triedb commit")
 		if err := triedb.Commit(root, true); err != nil {
 			return common.Hash{}, common.Hash{}, err
 		}
+		log.Info("end statedb commit")
 	}
 	return root, storageRootMessagePasser, nil
 }
@@ -683,9 +687,10 @@ func (g *Genesis) toBlockWithRoot(stateRoot, storageRootMessagePasser common.Has
 // Commit writes the block and state of a genesis specification to the database.
 // The block is committed as the canonical head block.
 func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Block, error) {
-	// if g.Number != 0 {
-	// 	return nil, errors.New("can't commit genesis block with number > 0")
-	// }
+	log.Info("Start Committing genesis")
+	if g.Number != 0 {
+		return nil, errors.New("can't commit genesis block with number > 0")
+	}
 	config := g.Config
 	if config == nil {
 		return nil, errors.New("invalid genesis without chain config")
@@ -706,35 +711,106 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 		}
 	} else {
 		// flush the data to disk and compute the state root
+		log.Info("begin flushAlloc")
 		stateRoot, storageRootMessagePasser, err = flushAlloc(&g.Alloc, triedb, g.Config.IsIsthmus(g.Timestamp))
+		log.Info("end flushAlloc")
 		if err != nil {
 			return nil, err
 		}
 	}
+	log.Info("start toBlockWithRoot")
 	block := g.toBlockWithRoot(stateRoot, storageRootMessagePasser)
-
-	// Marshal the genesis state specification and persist.
+	log.Info("end toBlockWithRoot")
+	//Marshal the genesis state specification and persist.
 	blob, err := json.Marshal(g.Alloc)
 	if err != nil {
+		log.Error("marshaling allocation error", "err", err)
 		return nil, err
 	}
-	batch := db.NewBatch()
-	rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
-	rawdb.WriteBlock(batch, block)
-	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), nil)
-	rawdb.WriteCanonicalHash(batch, block.Hash(), block.NumberU64())
-	rawdb.WriteHeadBlockHash(batch, block.Hash())
-	rawdb.WriteHeadFastBlockHash(batch, block.Hash())
-	rawdb.WriteHeadHeaderHash(batch, block.Hash())
-	rawdb.WriteChainConfig(batch, block.Hash(), config)
 
-	if block.NumberU64() != 0 {
-		// Also write the genesis block as number 0
-		rawdb.WriteCanonicalHash(batch, block.Hash(), 0)
-		rawdb.WriteGenesisHeader(batch, block.Header())
+	// Write genesis state spec in its own batch
+	batch1 := db.NewBatch()
+
+	//rawdb.WriteGenesisStateSpec(batch1, block.Hash(), blob)
+	zeroHash := common.Hash{}
+	log.Info("start WriteGenesisStateSpec")
+	rawdb.WriteGenesisStateSpec(batch1, zeroHash, blob)
+
+	if err := batch1.Write(); err != nil {
+		log.Error("write genesis state failed", "err", err)
+		return nil, err
+	}
+	log.Info("end WriteGenesisStateSpec", "size", batch1.ValueSize())
+
+	// Write block in its own batch
+	batch2 := db.NewBatch()
+	rawdb.WriteBlock(batch2, block)
+	log.Info("WriteBlock", "size", batch2.ValueSize())
+	if err := batch2.Write(); err != nil {
+		return nil, err
 	}
 
-	return block, batch.Write()
+	// Write receipts in its own batch
+	batch3 := db.NewBatch()
+	rawdb.WriteReceipts(batch3, block.Hash(), block.NumberU64(), nil)
+	log.Info("WriteReceipts", "size", batch3.ValueSize())
+	if err := batch3.Write(); err != nil {
+		return nil, err
+	}
+
+	// Write canonical hash in its own batch
+	batch4 := db.NewBatch()
+	rawdb.WriteCanonicalHash(batch4, block.Hash(), block.NumberU64())
+	log.Info("WriteCanonicalHash", "size", batch4.ValueSize())
+	if err := batch4.Write(); err != nil {
+		return nil, err
+	}
+
+	// Write head block hash in its own batch
+	batch5 := db.NewBatch()
+	rawdb.WriteHeadBlockHash(batch5, block.Hash())
+	log.Info("WriteHeadBlockHash", "size", batch5.ValueSize())
+	if err := batch5.Write(); err != nil {
+		return nil, err
+	}
+
+	// Write head fast block hash in its own batch
+	batch6 := db.NewBatch()
+	rawdb.WriteHeadFastBlockHash(batch6, block.Hash())
+	log.Info("WriteHeadFastBlockHash", "size", batch6.ValueSize())
+	if err := batch6.Write(); err != nil {
+		return nil, err
+	}
+
+	// Write head header hash in its own batch
+	batch7 := db.NewBatch()
+	rawdb.WriteHeadHeaderHash(batch7, block.Hash())
+	log.Info("WriteHeadHeaderHash", "size", batch7.ValueSize())
+	if err := batch7.Write(); err != nil {
+		return nil, err
+	}
+
+	// Write chain config in its own batch
+	batch8 := db.NewBatch()
+	rawdb.WriteChainConfig(batch8, block.Hash(), config)
+	log.Info("WriteChainConfig", "size", batch8.ValueSize())
+	if err := batch8.Write(); err != nil {
+		return nil, err
+	}
+
+	if block.NumberU64() != 0 {
+		// Also write the genesis block as number 0 in its own batch
+		batch9 := db.NewBatch()
+		rawdb.WriteCanonicalHash(batch9, block.Hash(), 0)
+		rawdb.WriteGenesisHeader(batch9, block.Header())
+		if err := batch9.Write(); err != nil {
+			return nil, err
+		}
+	}
+
+	log.Info("completed all batch writes")
+
+	return block, nil
 }
 
 // MustCommit writes the genesis block and state to db, panicking on error.
