@@ -90,7 +90,7 @@ const (
 )
 
 // WriteGenesisStateSpec writes the genesis state specification into the disk.
-// If the data is larger than 4KB, it will be split into chunks.
+// If the data is larger than 4MB, it will be split into chunks.
 func WriteGenesisStateSpec(db ethdb.KeyValueWriter, blockhash common.Hash, data []byte) {
 	key := genesisStateSpecKey(blockhash)
 

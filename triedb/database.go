@@ -109,10 +109,8 @@ func NewDatabase(diskdb ethdb.Database, config *Config) *Database {
 		log.Crit("Both 'hash' and 'path' mode are configured")
 	}
 	if config.PathDB != nil {
-		log.Info("new pathdb")
 		db.backend = pathdb.New(diskdb, config.PathDB, config.IsVerkle)
 	} else {
-		log.Info("new hashdb")
 		db.backend = hashdb.New(diskdb, config.HashDB)
 	}
 	return db

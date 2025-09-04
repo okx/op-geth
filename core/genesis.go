@@ -731,10 +731,8 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 	// Write genesis state spec in its own batch
 	batch1 := db.NewBatch()
 
-	//rawdb.WriteGenesisStateSpec(batch1, block.Hash(), blob)
-	zeroHash := common.Hash{}
 	log.Info("start WriteGenesisStateSpec")
-	rawdb.WriteGenesisStateSpec(batch1, zeroHash, blob)
+	rawdb.WriteGenesisStateSpec(batch1, block.Hash(), blob)
 
 	if err := batch1.Write(); err != nil {
 		log.Error("write genesis state failed", "err", err)
