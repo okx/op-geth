@@ -6,8 +6,6 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const EnvKafkaConsumerGroupID = "REALTIME_KAFKA_CONSUMER_GROUP_ID"
-
 var (
 	// OkPay
 	OkPayPriorityEnableFlag = cli.BoolFlag{
