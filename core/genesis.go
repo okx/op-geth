@@ -688,9 +688,9 @@ func (g *Genesis) toBlockWithRoot(stateRoot, storageRootMessagePasser common.Has
 // The block is committed as the canonical head block.
 func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Block, error) {
 	log.Info("Start Committing genesis")
-	if g.Number != 0 {
-		return nil, errors.New("can't commit genesis block with number > 0")
-	}
+	//if g.Number != 0 {
+	//	return nil, errors.New("can't commit genesis block with number > 0")
+	//}
 	config := g.Config
 	if config == nil {
 		return nil, errors.New("invalid genesis without chain config")
