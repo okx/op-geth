@@ -357,7 +357,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	eth.dropper = newDropper(eth.p2pServer.MaxDialedConns(), eth.p2pServer.MaxInboundConns())
 
-	eth.miner = miner.New(eth, config.Miner, eth.engine)
+	// For X Layer
+	minerConfig := config.Miner
+	minerConfig.OkPayEnable = config.XLayer.OkPay.Enable
+	minerConfig.OkPaySenderAccounts = config.XLayer.OkPay.OkPaySenderAccountsList
+	minerConfig.OkPayBlockPriorityTxsLimit = config.XLayer.OkPay.OkPayBlockPriorityTxsLimit
+
+	eth.miner = miner.New(eth, minerConfig, eth.engine)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 	eth.miner.SetPrioAddresses(config.TxPool.Locals)
 

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	libcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
@@ -71,6 +72,11 @@ type Config struct {
 	EffectiveGasCeil uint64   // if non-zero, a gas ceiling to apply independent of the header's gaslimit value
 	MaxDATxSize      *big.Int `toml:",omitempty"` // if non-nil, don't include any txs with data availability size larger than this in any built block
 	MaxDABlockSize   *big.Int `toml:",omitempty"` // if non-nil, then don't build a block requiring more than this amount of total data availability
+
+	// For X Layer
+	OkPayEnable                bool                                     `toml:",omitempty"`
+	OkPaySenderAccounts        libcommon.OrderedList[libcommon.Address] `toml:",omitempty"`
+	OkPayBlockPriorityTxsLimit uint64                                   `toml:",omitempty"`
 }
 
 // DefaultConfig contains default settings for miner.

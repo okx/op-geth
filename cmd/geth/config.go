@@ -156,6 +156,10 @@ func loadBaseConfig(ctx *cli.Context) gethConfig {
 
 	// Apply flags.
 	utils.SetNodeConfig(ctx, &cfg.Node)
+
+	// For X Layer
+	utils.SetOkPayXLayer(ctx, &cfg.Eth)
+
 	return cfg
 }
 
