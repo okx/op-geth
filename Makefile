@@ -67,3 +67,21 @@ help: Makefile
 	@echo ''
 	@echo 'Targets:'
 	@sed -n 's/^#?//p' $< | column -t -s ':' |  sort | sed -e 's/^/ /'
+
+test-coverage:
+	@if [ "$(word 2,$(MAKECMDGOALS))" = "" ]; then \
+		echo "Usage: make test-coverage <directory>"; \
+		echo "Example: make test-coverage ./miner"; \
+		echo "         make test-coverage ./..."; \
+		exit 1; \
+	fi
+	@PKG=$(word 2,$(MAKECMDGOALS)); \
+	if echo "$$PKG" | grep -q "^\./" ; then \
+		go test -coverprofile=coverage.out $$PKG; \
+	else \
+		go test -coverprofile=coverage.out ./$$PKG; \
+	fi
+	go tool cover -html=coverage.out -o coverage.html
+	open coverage.html  # macOS
+	sleep 0.5
+	rm coverage.out coverage.html
