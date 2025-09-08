@@ -21,8 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/holiman/uint256"
-	"github.com/urfave/cli/v2"
 	"os"
 	"runtime"
 	"slices"
@@ -31,6 +29,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/holiman/uint256"
+	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -118,25 +119,59 @@ var (
 			utils.CachePreimagesFlag,
 			utils.OverridePrague,
 			utils.OverrideVerkle,
-			&cli.BoolFlag{
-				Name:  "no-verify",
-				Usage: "do not perform verification",
-			},
-			&cli.StringFlag{
-				Name:  "ignore-addresses",
-				Usage: "Comma-separated list of addresses to ignore during verification",
-			},
 		}, utils.DatabaseFlags),
 		Description: `
 The init command initializes a new genesis block and definition for the network.
 This is a destructive action and changes the network in which you will be
 participating.
 
-It expects the genesis file as argument.
+It expects the genesis file as argument.`,
+	}
 
-If --no-verify is provided, the command will skip verify
-the genesis state after initialization. Use --ignore-addresses to specify
-addresses to skip during verification.`,
+	migrateCommand = &cli.Command{
+		Action:    migrateGenesis,
+		Name:      "migrate",
+		Usage:     "Migrate state data and initialize a new genesis block",
+		ArgsUsage: "<genesisPath>",
+		Flags: slices.Concat([]cli.Flag{
+			utils.CachePreimagesFlag,
+			utils.OverridePrague,
+			utils.OverrideVerkle,
+			&cli.BoolFlag{
+				Name:  "no-verify",
+				Usage: "do not perform verification",
+			},
+			&cli.StringFlag{
+				Name:     "chaindata",
+				Usage:    "Path to mdbx database for state migration",
+				Category: flags.EthCategory,
+			},
+			&cli.StringFlag{
+				Name:     "ignore-addresses",
+				Usage:    "Comma-separated list of addresses to ignore during migration (e.g., 0x123...,0x456...)",
+				Category: flags.EthCategory,
+			},
+			&cli.StringFlag{
+				Name:     "smt-db-path",
+				Usage:    "Path to SMT database for migration",
+				Category: flags.EthCategory,
+			},
+			&cli.BoolFlag{
+				Name:     "ignore-smt-verify",
+				Usage:    "Ignore SMT verification during migration",
+				Category: flags.EthCategory,
+			},
+		}, utils.DatabaseFlags),
+		Description: `
+The migrate command migrates state data from a migration database and initializes 
+a new genesis block. This command is specifically designed for state migration 
+scenarios where you need to transfer account states from one database to another.
+
+It expects the genesis file as argument and requires --chaindata to 
+specify the path to the migration database.
+
+Use --ignore-addresses to specify addresses to ignore during migration.
+Use --no-verify to skip verification after migration.`,
 	}
 
 	verifyGenesisCommand = &cli.Command{
@@ -304,7 +339,6 @@ helps reduce storage requirements for nodes that don't need full historical data
 // initGenesis will initialise the given JSON format genesis file and writes it as
 // the zero'd block (i.e. genesis) or will fail hard if it can't succeed.
 func initGenesis(ctx *cli.Context) error {
-	initStart := time.Now()
 	if ctx.Args().Len() != 1 {
 		utils.Fatalf("need genesis.json file as the only argument")
 	}
@@ -339,6 +373,7 @@ func initGenesis(ctx *cli.Context) error {
 		overrides.OverrideVerkle = &v
 	}
 
+	start0 := time.Now()
 	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", 0, 0, ctx.String(utils.AncientFlag.Name), "", false)
 	if err != nil {
 		utils.Fatalf("Failed to open database: %v", err)
@@ -348,6 +383,7 @@ func initGenesis(ctx *cli.Context) error {
 	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), false, genesis.IsVerkle())
 	defer triedb.Close()
 
+	// Setup genesis block
 	_, hash, compatErr, err := core.SetupGenesisBlockWithOverride(chaindb, triedb, genesis, &overrides)
 	if err != nil {
 		utils.Fatalf("Failed to write genesis block: %v", err)
@@ -355,46 +391,7 @@ func initGenesis(ctx *cli.Context) error {
 	if compatErr != nil {
 		utils.Fatalf("Failed to write chain config: %v", compatErr)
 	}
-	log.Info("Successfully wrote genesis state", "database", "chaindata", "hash", hash, "elapsed", time.Since(initStart))
-
-	// Check if verification is requested
-	if !ctx.Bool("no-verify") {
-		log.Info("Starting genesis verification after initialization")
-
-		// Parse ignore addresses if provided
-		var ignoreAddresses map[common.Address]bool
-		if ctx.IsSet("ignore-addresses") {
-			ignoreList := ctx.String("ignore-addresses")
-			if ignoreList != "" {
-				ignoreAddresses = make(map[common.Address]bool)
-				addresses := strings.Split(ignoreList, ",")
-				for _, addrStr := range addresses {
-					addrStr = strings.TrimSpace(addrStr)
-					if addrStr != "" {
-						addr := common.HexToAddress(addrStr)
-						ignoreAddresses[addr] = true
-						log.Info("Ignoring address during verification", "address", addr.Hex())
-					}
-				}
-			}
-		}
-
-		if err := triedb.Close(); err != nil {
-			log.Warn("Failed to close trie database", "error", err)
-		}
-		if err := chaindb.Close(); err != nil {
-			log.Warn("Failed to close chain database", "error", err)
-		}
-		if err := stack.Close(); err != nil {
-			log.Warn("Failed to close node stack", "error", err)
-		}
-		verifyStart := time.Now()
-		if err := verifyGenesisInternal(ctx, genesis, ignoreAddresses); err != nil {
-			log.Error("Genesis verification failed", "error", err)
-			return err
-		}
-		log.Info("Genesis verification completed successfully", "elapsed", common.PrettyDuration(time.Since(verifyStart)))
-	}
+	log.Info("Successfully wrote genesis state", "database", "chaindata", "hash", hash, "elapsed", time.Since(start0))
 	return nil
 }
 
@@ -984,4 +981,105 @@ func verifyGenesis(ctx *cli.Context) error {
 	}
 
 	return verifyGenesisInternal(ctx, genesis, ignoreAddresses)
+}
+
+// migrateGenesis will migrate state data and initialize a new genesis block
+func migrateGenesis(ctx *cli.Context) error {
+	if ctx.Args().Len() != 1 {
+		utils.Fatalf("need genesis.json file as the only argument")
+	}
+	genesisPath := ctx.Args().First()
+	if len(genesisPath) == 0 {
+		utils.Fatalf("invalid path to genesis file")
+	}
+
+	file, err := os.Open(genesisPath)
+	if err != nil {
+		utils.Fatalf("Failed to read genesis file: %v", err)
+	}
+	defer file.Close()
+
+	start := time.Now()
+	genesis := new(core.Genesis)
+	if err := json.NewDecoder(file).Decode(genesis); err != nil {
+		utils.Fatalf("invalid genesis file: %v", err)
+	}
+	log.Info("read file and decode json", "elapsed", time.Since(start))
+
+	// Open and initialise both full and light databases
+	stack, _ := makeConfigNode(ctx)
+	defer stack.Close()
+
+	var overrides core.ChainOverrides
+	if ctx.IsSet(utils.OverridePrague.Name) {
+		v := ctx.Uint64(utils.OverridePrague.Name)
+		overrides.OverridePrague = &v
+	}
+	if ctx.IsSet(utils.OverrideVerkle.Name) {
+		v := ctx.Uint64(utils.OverrideVerkle.Name)
+		overrides.OverrideVerkle = &v
+	}
+
+	chaindb := utils.MakeChainDatabase(ctx, stack, false)
+	defer chaindb.Close()
+
+	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), false, genesis.IsVerkle())
+	defer triedb.Close()
+
+	// Declare variables for genesis setup
+	var hash common.Hash
+	var compatErr *params.ConfigCompatError
+	var setupErr error
+
+	// Use SetupGenesisBlockWithMigrationData to handle migration and setup genesis block
+	_, hash, compatErr, setupErr = core.SetupGenesisBlockWithMigrationData(chaindb, triedb, genesis, &overrides, ctx)
+
+	if setupErr != nil {
+		utils.Fatalf("Failed to write genesis block: %v", setupErr)
+	}
+	if compatErr != nil {
+		utils.Fatalf("Failed to write chain config: %v", compatErr)
+	}
+	log.Info("Successfully wrote genesis state with migration", "database", "chaindata", "hash", hash, "elapsed", time.Since(start))
+
+	// Check if verification is requested
+	if !ctx.Bool("no-verify") {
+		log.Info("Starting genesis verification after migration")
+
+		// Parse ignore addresses if provided
+		var ignoreAddresses map[common.Address]bool
+		if ctx.IsSet("ignore-addresses") {
+			ignoreList := ctx.String("ignore-addresses")
+			if ignoreList != "" {
+				ignoreAddresses = make(map[common.Address]bool)
+				addresses := strings.Split(ignoreList, ",")
+				for _, addrStr := range addresses {
+					addrStr = strings.TrimSpace(addrStr)
+					if addrStr != "" {
+						addr := common.HexToAddress(addrStr)
+						ignoreAddresses[addr] = true
+						log.Info("Ignoring address during verification", "address", addr.Hex())
+					}
+				}
+			}
+		}
+
+		if err := triedb.Close(); err != nil {
+			log.Warn("Failed to close trie database", "error", err)
+		}
+		if err := chaindb.Close(); err != nil {
+			log.Warn("Failed to close chain database", "error", err)
+		}
+		if err := stack.Close(); err != nil {
+			log.Warn("Failed to close node stack", "error", err)
+		}
+		verifyStart := time.Now()
+		if err := verifyGenesisInternal(ctx, genesis, ignoreAddresses); err != nil {
+			log.Error("Genesis verification failed", "error", err)
+			return err
+		}
+		log.Info("Genesis verification completed successfully", "elapsed", common.PrettyDuration(time.Since(verifyStart)))
+	}
+
+	return nil
 }
