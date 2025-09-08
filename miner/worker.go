@@ -617,7 +617,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	okpayTxs := make(map[common.Address][]*txpool.LazyTransaction)
 	okPayTxCount := uint64(0)
 
-	accounts := miner.config.OkPaySenderAccounts.Items()
+	accounts := miner.config.OkPaySenderAccounts
 	var startIdx int
 
 	// Skip the entire loop if OkPay priority feature is disabled

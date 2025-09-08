@@ -26,7 +26,6 @@ import (
 	"crypto/ecdsa"
 
 	"github.com/ethereum/go-ethereum/common"
-	libcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -254,13 +253,10 @@ func testOkPayPriorityOrder(t *testing.T) {
 	allAccounts := []common.Address{okPayAddr1, okPayAddr2, priorityAddr, normalAddr}
 	miner := createMiner(t, allAccounts)
 
-	// Configure OkPay settings
+	// Configure OkX Pay settings
 	miner.config.OkPayEnable = true
 	miner.config.OkPayBlockPriorityTxsLimit = 5
-	miner.config.OkPaySenderAccounts = *libcommon.NewOrderedListOfAddresses(2)
-	miner.config.OkPaySenderAccounts.Add(okPayAddr1)
-	miner.config.OkPaySenderAccounts.Add(okPayAddr2)
-	miner.config.OkPaySenderAccounts.Sort()
+	miner.config.OkPaySenderAccounts = []common.Address{okPayAddr1, okPayAddr2}
 
 	// Set priority addresses
 	miner.prio = []common.Address{priorityAddr}
@@ -377,11 +373,10 @@ func testOkPayTransactionLimit(t *testing.T) {
 	limit := 3
 	miner.config.OkPayEnable = true
 	miner.config.OkPayBlockPriorityTxsLimit = uint64(limit)
-	miner.config.OkPaySenderAccounts = *libcommon.NewOrderedListOfAddresses(2)
+	miner.config.OkPaySenderAccounts = make([]common.Address, 0, len(okPayAddrs))
 	for _, addr := range okPayAddrs {
-		miner.config.OkPaySenderAccounts.Add(addr)
+		miner.config.OkPaySenderAccounts = append(miner.config.OkPaySenderAccounts, addr)
 	}
-	miner.config.OkPaySenderAccounts.Sort()
 
 	signer := types.LatestSigner(miner.chainConfig)
 
@@ -475,11 +470,10 @@ func testOkPayMixedPriorities(t *testing.T) {
 	allAccounts := []common.Address{okPayAddr, priorityAddr, normalAddr1, normalAddr2}
 	miner := createMiner(t, allAccounts)
 
-	// Configure OkPay and priority settings
+	// Configure OkX Pay and priority settings
 	miner.config.OkPayEnable = true
 	miner.config.OkPayBlockPriorityTxsLimit = 1
-	miner.config.OkPaySenderAccounts = *libcommon.NewOrderedListOfAddresses(1)
-	miner.config.OkPaySenderAccounts.Add(okPayAddr)
+	miner.config.OkPaySenderAccounts = []common.Address{okPayAddr}
 
 	miner.prio = []common.Address{priorityAddr}
 

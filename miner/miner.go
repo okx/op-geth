@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	libcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
@@ -74,9 +73,9 @@ type Config struct {
 	MaxDABlockSize   *big.Int `toml:",omitempty"` // if non-nil, then don't build a block requiring more than this amount of total data availability
 
 	// For X Layer
-	OkPayEnable                bool                                     `toml:",omitempty"`
-	OkPaySenderAccounts        libcommon.OrderedList[libcommon.Address] `toml:",omitempty"`
-	OkPayBlockPriorityTxsLimit uint64                                   `toml:",omitempty"`
+	OkPayEnable                bool             `toml:",omitempty"`
+	OkPaySenderAccounts        []common.Address `toml:",omitempty"`
+	OkPayBlockPriorityTxsLimit uint64           `toml:",omitempty"`
 }
 
 // DefaultConfig contains default settings for miner.
