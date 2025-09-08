@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/eth/filters"
 	"math/big"
 	"runtime"
 	"sync"
@@ -452,6 +453,16 @@ func (s *Ethereum) APIs() []rpc.API {
 		apis = WrapAPIsForMigration(apis, s.migrationConfig)
 		// Register fallback methods for unimplemented APIs
 		apis = RegisterFallbackMethods(apis, s.migrationConfig)
+		// Register filter here
+		filterSystem := filters.NewFilterSystem(s.APIBackend, filters.Config{
+			LogCacheSize: s.config.FilterLogCacheSize,
+		})
+		originalFilterApi := filters.NewFilterAPI(filterSystem)
+		filterApi := rpc.API{
+			Namespace: "eth",
+			Service:   NewMigrationFilterAPI(originalFilterApi, s.migrationConfig),
+		}
+		apis = append(apis, filterApi)
 	}
 
 	// Append any Sequencer APIs as enabled

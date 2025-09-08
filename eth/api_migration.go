@@ -1,19 +1,3 @@
-// Copyright 2024 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
 package eth
 
 import (
@@ -24,7 +8,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -193,6 +179,36 @@ func (api *MigrationTransactionAPI) GetTransactionReceipt(ctx context.Context, h
 	return receipt, err
 }
 
+type MigrationFilterAPI struct {
+	*filters.FilterAPI
+	config *MigrationConfig
+}
+
+// NewMigrationFilterAPI creates a new migration-aware FilterAPI
+func NewMigrationFilterAPI(original *filters.FilterAPI, config *MigrationConfig) *MigrationFilterAPI {
+	return &MigrationFilterAPI{
+		FilterAPI: original,
+		config:    config,
+	}
+}
+
+func (api *MigrationFilterAPI) GetLogs(ctx context.Context, crit filters.FilterCriteria) ([]*types.Log, error) {
+	// begin := rpc.LatestBlockNumber.Int64()
+	// if crit.FromBlock != nil {
+	// 	begin = crit.FromBlock.Int64()
+	// }
+	// end := rpc.LatestBlockNumber.Int64()
+	// if crit.ToBlock != nil {
+	// 	end = crit.ToBlock.Int64()
+	// }
+	// if api.config != nil && api.config.shouldProxy(uint64(crit.ToBlock.Int64())) {
+	// 	var result []*types.Log
+	// 	err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getLogs", crit)
+	// 	return result, err
+	// }
+	return api.FilterAPI.GetLogs(ctx, crit)
+}
+
 // WrapAPIsForMigration wraps the standard APIs with migration-aware versions
 func WrapAPIsForMigration(apis []rpc.API, config *MigrationConfig) []rpc.API {
 	if config == nil {
@@ -209,13 +225,19 @@ func WrapAPIsForMigration(apis []rpc.API, config *MigrationConfig) []rpc.API {
 			switch original := api.Service.(type) {
 			case *ethapi.BlockChainAPI:
 				wrapped = append(wrapped, rpc.API{
-					Namespace: api.Namespace,
-					Service:   NewMigrationBlockChainAPI(original, config),
+					Namespace:     api.Namespace,
+					Version:       api.Version,
+					Service:       NewMigrationBlockChainAPI(original, config),
+					Public:        api.Public,
+					Authenticated: api.Authenticated,
 				})
 			case *ethapi.TransactionAPI:
 				wrapped = append(wrapped, rpc.API{
-					Namespace: api.Namespace,
-					Service:   NewMigrationTransactionAPI(original, config),
+					Namespace:     api.Namespace,
+					Version:       api.Version,
+					Service:       NewMigrationTransactionAPI(original, config),
+					Public:        api.Public,
+					Authenticated: api.Authenticated,
 				})
 			default:
 				wrapped = append(wrapped, api)

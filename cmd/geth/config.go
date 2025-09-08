@@ -252,13 +252,15 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		})
 	}
 
-	// Configure log filter RPC API.
-	filterSystem := utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
-
-	// Configure GraphQL if requested.
-	if ctx.IsSet(utils.GraphQLEnabledFlag.Name) {
-		utils.RegisterGraphQLService(stack, backend, filterSystem, &cfg.Node)
+	if cfg.Eth.MigrationBlock == nil || cfg.Eth.PPRPCUrl == "" {
+		// Configure log filter RPC API.
+		filterSystem := utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
+		// Configure GraphQL if requested.
+		if ctx.IsSet(utils.GraphQLEnabledFlag.Name) {
+			utils.RegisterGraphQLService(stack, backend, filterSystem, &cfg.Node)
+		}
 	}
+
 	// Add the Ethereum Stats daemon if requested.
 	if cfg.Ethstats.URL != "" {
 		utils.RegisterEthStatsService(stack, backend, cfg.Ethstats.URL)
