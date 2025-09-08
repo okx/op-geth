@@ -112,7 +112,8 @@ type Ethereum struct {
 	seqRPCService        *rpc.Client
 	historicalRPCService *rpc.Client
 
-	interopRPC *interop.InteropClient
+	interopRPC      *interop.InteropClient
+	migrationConfig *MigrationConfig // Migration configuration for routing to xlayer-erigon
 
 	nodeCloser func() error
 }
@@ -367,6 +368,21 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, config.GPO, config.Miner.GasPrice)
 
+	// Set up migration configuration if configured
+	if config.MigrationBlock != nil && config.PPRPCUrl != "" {
+		migrationConfig, err := NewMigrationConfig(config)
+		if err != nil {
+			log.Error("Failed to create migration configuration", "error", err)
+			return nil, err
+		}
+		if migrationConfig != nil {
+			eth.migrationConfig = migrationConfig
+			log.Info("Migration routing enabled",
+				"migrationBlock", *config.MigrationBlock,
+				"ppUrl", config.PPRPCUrl)
+		}
+	}
+
 	if config.RollupSequencerHTTP != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		client, err := rpc.DialContext(ctx, config.RollupSequencerHTTP)
@@ -425,10 +441,18 @@ func makeExtraData(extra []byte) []byte {
 // APIs return the collection of RPC services the ethereum package offers.
 // NOTE, some of these services probably need to be moved to somewhere else.
 func (s *Ethereum) APIs() []rpc.API {
+	// Get standard APIs
 	apis := ethapi.GetAPIs(s.APIBackend)
 
 	// Append any APIs exposed explicitly by the consensus engine
 	apis = append(apis, s.engine.APIs(s.BlockChain())...)
+
+	// Wrap APIs with migration routing if configured
+	if s.migrationConfig != nil {
+		apis = WrapAPIsForMigration(apis, s.migrationConfig)
+		// Register fallback methods for unimplemented APIs
+		apis = RegisterFallbackMethods(apis, s.migrationConfig)
+	}
 
 	// Append any Sequencer APIs as enabled
 	if s.config.RollupSequencerTxConditionalEnabled {
@@ -618,6 +642,9 @@ func (s *Ethereum) Stop() error {
 	}
 	if s.historicalRPCService != nil {
 		s.historicalRPCService.Close()
+	}
+	if s.migrationConfig != nil {
+		s.migrationConfig.Close()
 	}
 	if s.interopRPC != nil {
 		s.interopRPC.Close()

@@ -1047,6 +1047,29 @@ var (
 		Value:    5000,
 	}
 
+	// Migration flags for XLayer routing
+	MigrationBlockFlag = &cli.Uint64Flag{
+		Name:     "migration-block",
+		Usage:    "Block height threshold for migration routing from erigon to op-geth",
+		Category: flags.EthCategory,
+		EnvVars:  []string{"OP_MIGRATION_BLOCK"},
+	}
+
+	PPRPCUrlFlag = &cli.StringFlag{
+		Name:     "pp-rpc-url",
+		Usage:    "XLayer-Erigon RPC endpoint URL for pre-migration blocks",
+		Category: flags.EthCategory,
+		EnvVars:  []string{"OP_PP_RPC_URL"},
+	}
+
+	PPRPCTimeoutFlag = &cli.DurationFlag{
+		Name:     "pp-rpc-timeout",
+		Usage:    "Timeout for PP RPC calls",
+		Value:    10 * time.Second,
+		Category: flags.EthCategory,
+		EnvVars:  []string{"OP_PP_RPC_TIMEOUT"},
+	}
+
 	// Metrics flags
 	MetricsEnabledFlag = &cli.BoolFlag{
 		Name:     "metrics",
@@ -1968,6 +1991,20 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	cfg.RollupDisableTxPoolGossip = ctx.Bool(RollupDisableTxPoolGossipFlag.Name)
 	cfg.RollupDisableTxPoolAdmission = cfg.RollupSequencerHTTP != "" && !ctx.Bool(RollupEnableTxPoolAdmissionFlag.Name)
 	cfg.RollupHaltOnIncompatibleProtocolVersion = ctx.String(RollupHaltOnIncompatibleProtocolVersionFlag.Name)
+
+	// Migration configuration
+	if ctx.IsSet(MigrationBlockFlag.Name) {
+		migrationBlock := ctx.Uint64(MigrationBlockFlag.Name)
+		cfg.MigrationBlock = &migrationBlock
+	}
+	if ctx.IsSet(PPRPCUrlFlag.Name) {
+		cfg.PPRPCUrl = ctx.String(PPRPCUrlFlag.Name)
+	}
+	if ctx.IsSet(PPRPCTimeoutFlag.Name) {
+		cfg.PPRPCTimeout = ctx.Duration(PPRPCTimeoutFlag.Name)
+	} else if cfg.PPRPCTimeout == 0 && cfg.PPRPCUrl != "" {
+		cfg.PPRPCTimeout = 10 * time.Second
+	}
 	cfg.ApplySuperchainUpgrades = ctx.Bool(RollupSuperchainUpgradesFlag.Name)
 	cfg.RollupSequencerTxConditionalEnabled = ctx.Bool(RollupSequencerTxConditionalEnabledFlag.Name)
 	cfg.RollupSequencerTxConditionalCostRateLimit = ctx.Int(RollupSequencerTxConditionalCostRateLimitFlag.Name)
