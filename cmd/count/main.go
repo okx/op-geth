@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/pebble"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 func countKeys(db *pebble.DB) (int64, error) {
@@ -72,6 +74,16 @@ func main() {
 			log.Printf("Error closing database: %v", err)
 		}
 	}()
+	configPrefix := []byte("ethereum-config-")
+	storedHash := common.HexToHash("0x0233022796c4160f5998145f153974ba65376a83825294f7811f44034461652f")
+	configKey := append(configPrefix, storedHash.Bytes()...)
+	data, c, err := db.Get(configKey)
+	if err != nil {
+		panic(err)
+	}
+	defer c.Close()
+	fmt.Printf("%s\n", hex.EncodeToString(data))
+	return
 
 	count, err := countKeys(db)
 	if err != nil {
