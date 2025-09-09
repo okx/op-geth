@@ -18,7 +18,6 @@ package miner
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -614,55 +613,59 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	prioBlobTxs, normalBlobTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingBlobTxs
 
 	// For X Layer
-	okpayTxs := make(map[common.Address][]*txpool.LazyTransaction)
-	okPayTxCount := uint64(0)
+	type okPayTx struct {
+		account common.Address
+		tx      *txpool.LazyTransaction
+	}
+
+	okPayTxs := make(map[common.Address][]*txpool.LazyTransaction)
+
+	sortedOkPayTxs := common.OrderedList[*okPayTx]{}
+	sortedOkPayTxs.SetCompareFunc(func(a, b *okPayTx) int {
+		if a.tx.Time.Before(b.tx.Time) {
+			return -1
+		}
+		return 1
+	})
 
 	accounts := miner.config.OkPaySenderAccounts
-	var startIdx int
 
 	// Skip the entire loop if OkPay priority feature is disabled
 	if miner.config.OkPayPriorityEnable && len(accounts) > 0 {
-		// Randomise the start index based on the parent hash to rotate through the accounts for fairness
-		parentHashBytes := env.header.ParentHash.Bytes()
-		hashSeed := binary.BigEndian.Uint64(parentHashBytes)
-		startIdx = int(hashSeed % uint64(len(accounts)))
-
-		for idx := range accounts {
-			if okPayTxCount >= miner.config.OkPayBlockPriorityTxsLimit {
-				break
-			}
-
-			accountIdx := (startIdx + idx) % len(accounts)
-			account := accounts[accountIdx]
-
+		for _, account := range accounts {
 			if txs := normalPlainTxs[account]; len(txs) > 0 {
-				// Calculate how many transactions we can add from this account
-				remainingSlots := int(miner.config.OkPayBlockPriorityTxsLimit) - int(okPayTxCount)
-				if remainingSlots <= 0 {
-					break // No more slots available
+				for _, tx := range txs {
+					sortedOkPayTxs.Add(&okPayTx{account: account, tx: tx})
 				}
+				delete(normalPlainTxs, account)
+			}
+		}
 
-				// Take up to remainingSlots transactions from this account
-				txsToAdd := txs
-				if len(txs) > remainingSlots {
-					txsToAdd = txs[:remainingSlots]
-				}
+		if sortedOkPayTxs.Size() > 0 {
+			sortedOkPayTxs.Sort()
+			items := sortedOkPayTxs.Items()
 
-				// Remove the account's transactions from normal pool and add to OkPay
-				if len(txs) > len(txsToAdd) {
-					normalPlainTxs[account] = txs[len(txsToAdd):]
-				} else {
-					delete(normalPlainTxs, account)
+			limit := int(miner.config.OkPayBlockPriorityTxsLimit)
+			if len(items) > limit {
+				// Process priority transactions
+				for _, item := range items[:limit] {
+					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
 				}
-				okpayTxs[account] = txsToAdd
-				okPayTxCount += uint64(len(txsToAdd))
+				// Put back unselected transactions
+				for _, item := range items[limit:] {
+					normalPlainTxs[item.account] = append(normalPlainTxs[item.account], item.tx)
+				}
+			} else {
+				// All transactions get priority
+				for _, item := range items {
+					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
+				}
 			}
 		}
 	}
-
 	// Process OkPay transactions first (highest priority)
-	if len(okpayTxs) > 0 {
-		okpayPlainTxs := newTransactionsByPriceAndNonce(env.signer, okpayTxs, env.header.BaseFee)
+	if len(okPayTxs) > 0 {
+		okpayPlainTxs := newTransactionsByPriceAndNonce(env.signer, okPayTxs, env.header.BaseFee)
 		emptyBlobTxs := newTransactionsByPriceAndNonce(env.signer, nil, env.header.BaseFee)
 
 		if err := miner.commitTransactions(env, okpayPlainTxs, emptyBlobTxs, interrupt); err != nil {

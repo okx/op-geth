@@ -19,6 +19,7 @@ package miner
 
 import (
 	"math/big"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -233,6 +234,8 @@ func TestOkPayPrioritization(t *testing.T) {
 	t.Run("PriorityOrder", testOkPayPriorityOrder)
 	t.Run("TransactionLimit", testOkPayTransactionLimit)
 	t.Run("MixedPriorities", testOkPayMixedPriorities)
+	t.Run("TimeOrdering", testOkPayTimeOrdering)
+
 }
 
 // testOkPayPriorityOrder tests that transactions are included in order: OkPay → Priority → Normal
@@ -581,5 +584,98 @@ func testOkPayMixedPriorities(t *testing.T) {
 		t.Logf("✓ Priority override working: OkPay tx (gas price %d) included before tx with gas price %d",
 			okPayGasPrice, blockTxs[i].GasPrice())
 		break
+	}
+}
+
+// testOkPayTimeOrdering tests that OkPay transactions are ordered by their arrival time
+func testOkPayTimeOrdering(t *testing.T) {
+	numAccounts := 10
+	// Create multiple OkPay accounts
+	okPayKeys := make([]*ecdsa.PrivateKey, numAccounts)
+	okPayAddrs := make([]common.Address, numAccounts)
+	for i := 0; i < numAccounts; i++ {
+		key, _ := crypto.GenerateKey()
+		okPayKeys[i] = key
+		okPayAddrs[i] = crypto.PubkeyToAddress(key.PublicKey)
+	}
+
+	// Create miner with funded accounts
+	miner := createMiner(t, okPayAddrs)
+
+	// Configure OkPay with high limit to ensure all transactions are prioritized
+	miner.config.OkPayPriorityEnable = true
+	miner.config.OkPayBlockPriorityTxsLimit = 5
+	miner.config.OkPaySenderAccounts = okPayAddrs
+
+	signer := types.LatestSigner(miner.chainConfig)
+
+	// Create transactions with same gas price but different arrival times
+	txs := make([]*types.Transaction, numAccounts)
+	expectedIncluded := map[common.Hash]bool{}
+
+	for i := 0; i < numAccounts; i++ {
+		tx := types.MustSignNewTx(okPayKeys[i], signer, &types.LegacyTx{
+			Nonce:    0,
+			To:       &testUserAddress,
+			Value:    big.NewInt(1000),
+			Gas:      params.TxGas,
+			GasPrice: big.NewInt(int64(params.InitialBaseFee * (1 + rand.Intn(10)))), // Same gas price for all
+		})
+		txs[i] = tx
+
+		// Add to expected included transactions
+		if i < int(miner.config.OkPayBlockPriorityTxsLimit) {
+			expectedIncluded[tx.Hash()] = true
+		}
+
+		// Add transaction to pool one by one with time delays
+		// This ensures different arrival times
+		miner.txpool.Add(types.Transactions{tx}, true)
+
+		// Small delay to ensure different timestamps
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Verify transactions are in the pool
+	for _, tx := range txs {
+		if !miner.txpool.Has(tx.Hash()) {
+			t.Fatalf("Transaction %s is not in the pool", tx.Hash().Hex())
+		}
+	}
+
+	// Generate block
+	timestamp := uint64(time.Now().Unix())
+	r := miner.generateWork(&generateParams{
+		parentHash: miner.chain.CurrentBlock().Hash(),
+		timestamp:  timestamp,
+		random:     common.HexToHash("0xcafebabe"),
+		noTxs:      false,
+		forceTime:  true,
+	}, false)
+
+	if r.err != nil {
+		t.Fatalf("Failed to generate work: %v", r.err)
+	}
+
+	// Verify all transactions are included because the block has enough slots
+	blockTxs := r.block.Transactions()
+
+	// Verify only expected fast transactions are included at the start
+	for id := range len(expectedIncluded) {
+		actualHash := blockTxs[id].Hash()
+		included, ok := expectedIncluded[actualHash]
+		if !ok || !included {
+			t.Fatalf("Transaction at position %d: expected %s, got %s",
+				id, actualHash.Hex(), actualHash.Hex())
+		}
+	}
+
+	// Verify late transactions are included only after the priority expected transactions
+	for id := len(expectedIncluded); id < len(blockTxs); id++ {
+		actualHash := blockTxs[id].Hash()
+		included, ok := expectedIncluded[actualHash]
+		if ok || included {
+			t.Fatalf("Transaction at position %d should not be included", id)
+		}
 	}
 }
