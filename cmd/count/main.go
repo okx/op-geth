@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -23,9 +24,14 @@ func countKeys(db *pebble.DB) (int64, error) {
 	}
 	defer iter.Close()
 
+	configPrefix := []byte("ethereum-config-")
+
 	iter.SeekGE(nil)
 	for iter.Valid() {
 		count++
+		if bytes.HasPrefix(iter.Key(), configPrefix) {
+			fmt.Printf("key: %x\n", iter.Key())
+		}
 		if count%1000000 == 0 {
 			now := time.Now()
 			elapsed := now.Sub(lastReport)
