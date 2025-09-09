@@ -43,7 +43,7 @@ func setOkPayXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 		cfg.XLayer.OkPay.BlockPriorityTxsLimit = ctx.Uint64(OkPayBlockPriorityTxsLimit.Name)
 	}
 	if ctx.IsSet(OkPaySenderAccountsList.Name) {
-		addrHexes := common.CliString2Array(ctx.String(OkPaySenderAccountsList.Name))
+		addrHexes := SplitAndTrim(ctx.String(OkPaySenderAccountsList.Name))
 		cfg.XLayer.OkPay.SenderAccountsList = make([]common.Address, 0, len(addrHexes))
 		for _, senderHex := range addrHexes {
 			cfg.XLayer.OkPay.SenderAccountsList = append(cfg.XLayer.OkPay.SenderAccountsList, common.HexToAddress(senderHex))
