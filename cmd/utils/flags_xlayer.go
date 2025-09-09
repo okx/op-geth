@@ -9,7 +9,7 @@ import (
 var (
 	// OkPay
 	OkPayPriorityEnableFlag = cli.BoolFlag{
-		Name:  "okpay.enable-flag",
+		Name:  "okpay.priority-enable-flag",
 		Usage: "OkPay",
 	}
 	OkPaySenderAccountsList = cli.StringFlag{
