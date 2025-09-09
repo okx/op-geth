@@ -621,7 +621,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	var startIdx int
 
 	// Skip the entire loop if OkPay priority feature is disabled
-	if miner.config.OkPayEnable && len(accounts) > 0 {
+	if miner.config.OkPayPriorityEnable && len(accounts) > 0 {
 		// Randomise the start index based on the parent hash to rotate through the accounts for fairness
 		parentHashBytes := env.header.ParentHash.Bytes()
 		hashSeed := binary.BigEndian.Uint64(parentHashBytes)

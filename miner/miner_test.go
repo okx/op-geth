@@ -254,7 +254,7 @@ func testOkPayPriorityOrder(t *testing.T) {
 	miner := createMiner(t, allAccounts)
 
 	// Configure OkX Pay settings
-	miner.config.OkPayEnable = true
+	miner.config.OkPayPriorityEnable = true
 	miner.config.OkPayBlockPriorityTxsLimit = 5
 	miner.config.OkPaySenderAccounts = []common.Address{okPayAddr1, okPayAddr2}
 
@@ -371,7 +371,7 @@ func testOkPayTransactionLimit(t *testing.T) {
 
 	// Configure OkPay with limit of 3 transactions
 	limit := 3
-	miner.config.OkPayEnable = true
+	miner.config.OkPayPriorityEnable = true
 	miner.config.OkPayBlockPriorityTxsLimit = uint64(limit)
 	miner.config.OkPaySenderAccounts = make([]common.Address, 0, len(okPayAddrs))
 	for _, addr := range okPayAddrs {
@@ -471,7 +471,7 @@ func testOkPayMixedPriorities(t *testing.T) {
 	miner := createMiner(t, allAccounts)
 
 	// Configure OkX Pay and priority settings
-	miner.config.OkPayEnable = true
+	miner.config.OkPayPriorityEnable = true
 	miner.config.OkPayBlockPriorityTxsLimit = 1
 	miner.config.OkPaySenderAccounts = []common.Address{okPayAddr}
 
