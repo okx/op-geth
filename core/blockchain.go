@@ -1525,14 +1525,18 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	rawdb.WriteBlock(blockBatch, block)
 	rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
 	rawdb.WritePreimages(blockBatch, statedb.Preimages())
+	batchStart := time.Now()
 	if err := blockBatch.Write(); err != nil {
 		log.Crit("Failed to write block into disk", "err", err)
 	}
+	metrics.GetLogStatistics().CumulativeTiming(metrics.DBBatchWriteMs, time.Since(batchStart))
 	// Commit all cached state changes into underlying memory database.
+	stateCommitStart := time.Now()
 	root, err := statedb.Commit(block.NumberU64(), bc.chainConfig.IsEIP158(block.Number()), bc.chainConfig.IsCancun(block.Number(), block.Time()))
 	if err != nil {
 		return err
 	}
+	metrics.GetLogStatistics().CumulativeTiming(metrics.DBStateCommitMs, time.Since(stateCommitStart))
 	// If node is running in path mode, skip explicit gc operation
 	// which is unnecessary in this mode.
 	if bc.triedb.Scheme() == rawdb.PathScheme {
@@ -1540,7 +1544,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	}
 	// If we're running an archive node, always flush
 	if bc.cacheConfig.TrieDirtyDisabled {
-		return bc.triedb.Commit(root, false)
+		trieStart := time.Now()
+		err := bc.triedb.Commit(root, false)
+		metrics.GetLogStatistics().CumulativeTiming(metrics.DBTrieCommitMs, time.Since(trieStart))
+		return err
 	}
 	// Full but not archive node, do proper garbage collection
 	bc.triedb.Reference(root, common.Hash{}) // metadata reference to keep trie alive
@@ -1576,7 +1583,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 				log.Info("State in memory for too long, committing", "time", bc.gcproc, "allowance", flushInterval, "optimum", float64(chosen-bc.lastWrite)/state.TriesInMemory)
 			}
 			// Flush an entire trie and restart the counters
+			trieStart := time.Now()
 			bc.triedb.Commit(header.Root, true)
+			metrics.GetLogStatistics().CumulativeTiming(metrics.DBTrieCommitMs, time.Since(trieStart))
 			bc.lastWrite = chosen
 			bc.gcproc = 0
 		}
@@ -2431,7 +2440,9 @@ func (bc *BlockChain) InsertBlockWithoutSetHead(block *types.Block, makeWitness 
 	}
 	defer bc.chainmu.Unlock()
 
+	insertStart := time.Now()
 	witness, _, err := bc.insertChain(types.Blocks{block}, false, makeWitness)
+	metrics.GetLogStatistics().CumulativeTiming(metrics.DBInsertTotalMs, time.Since(insertStart))
 	return witness, err
 }
 

@@ -123,10 +123,18 @@ type generateParams struct {
 
 // generateWork generates a sealing block based on the given parameters.
 func (miner *Miner) generateWork(params *generateParams, witness bool) *newPayloadResult {
+	// Per-block statistics aggregator
+	stats := metrics.GetLogStatistics()
+
+	// Measure prepareWork duration
+	startPrepare := time.Now()
 	work, err := miner.prepareWork(params, witness)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
+	// Tag block number as early as possible and record prepare-work timing
+	stats.SetTag(metrics.BlockNumberTag, fmt.Sprint(work.header.Number.Uint64()))
+	stats.CumulativeTiming(metrics.PrepareWorkMs, time.Since(startPrepare))
 	if work.gasPool == nil {
 		gasLimit := work.header.GasLimit
 
@@ -144,6 +152,8 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 
 	misc.EnsureCreate2Deployer(miner.chainConfig, work.header.Time, work.state)
 
+	// Process forced transactions with timing
+	forcedTxStart := time.Now()
 	for _, tx := range params.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
@@ -152,6 +162,7 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 			return &newPayloadResult{err: fmt.Errorf("failed to force-include tx: %s type: %d sender: %s nonce: %d, err: %w", tx.Hash(), tx.Type(), from, tx.Nonce(), err)}
 		}
 	}
+	stats.CumulativeTiming(metrics.ForcedTxMs, time.Since(forcedTxStart))
 	if !params.noTxs {
 		// use shared interrupt if present
 		interrupt := params.interrupt
@@ -162,6 +173,7 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 			interrupt.Store(commitInterruptTimeout)
 		})
 
+		// fillTransactions will record getTx/commit timings into stats
 		err := miner.fillTransactions(interrupt, work)
 		timer.Stop() // don't need timeout interruption any more
 		if errors.Is(err, errBlockInterruptedByTimeout) {
@@ -209,10 +221,16 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		work.header.RequestsHash = &reqHash
 	}
 
+	finalizeStart := time.Now()
 	block, err := miner.engine.FinalizeAndAssemble(miner.chain, work.header, work.state, &body, work.receipts)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
+	stats.CumulativeTiming(metrics.FinalizeBlockMs, time.Since(finalizeStart))
+	stats.CumulativeValue(metrics.TxCounter, int64(len(block.Transactions())))
+	stats.CumulativeValue(metrics.GasUsedCounter, int64(block.GasUsed()))
+	_ = stats.SummaryCheckpoint()
+
 	return &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),
@@ -487,6 +505,8 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 		// If we don't have enough space for the next transaction, skip the account.
 		if env.gasPool.Gas() < ltx.Gas {
 			log.Trace("Not enough gas left for transaction", "hash", ltx.Hash, "left", env.gasPool.Gas(), "needed", ltx.Gas)
+			// Stats: gas-over tx
+			metrics.GetLogStatistics().CumulativeCounting(metrics.GasOverTxCounter)
 			txs.Pop()
 			continue
 		}
@@ -565,6 +585,8 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 
 		case err != nil && tx.Rejected():
 			log.Warn("Transaction was rejected during block-building", "hash", ltx.Hash, "err", err)
+			// Stats: invalid tx encountered during processing
+			metrics.GetLogStatistics().CumulativeCounting(metrics.InvalidTxCounter)
 			txs.Pop()
 
 		case errors.Is(err, nil):
@@ -586,6 +608,8 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
 func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) error {
+	stats := metrics.GetLogStatistics()
+	getTxStart := time.Now()
 	miner.confMu.RLock()
 	tip := miner.config.GasPrice
 	prio := miner.prio
@@ -607,6 +631,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 
 	filter.OnlyPlainTxs, filter.OnlyBlobTxs = false, true
 	pendingBlobTxs := miner.txpool.Pending(filter)
+	stats.CumulativeTiming(metrics.GetTxMs, time.Since(getTxStart))
 
 	// Split the pending transactions into locals and remotes.
 	prioPlainTxs, normalPlainTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingPlainTxs
@@ -623,6 +648,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 		}
 	}
 	// Fill the block with all available pending transactions.
+	commitStart := time.Now()
 	if len(prioPlainTxs) > 0 || len(prioBlobTxs) > 0 {
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, prioPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, prioBlobTxs, env.header.BaseFee)
@@ -639,6 +665,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 			return err
 		}
 	}
+	stats.CumulativeTiming(metrics.CommitTxMs, time.Since(commitStart))
 	return nil
 }
 
