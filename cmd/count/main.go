@@ -98,7 +98,7 @@ func main() {
 	}
 	defer iter.Close()
 
-	if iter.SeekGE(configPrefix) {
+	if iter.SeekGE([]byte("ethereum")) {
 		key := iter.Key()
 		fmt.Printf("Found key: %s\n", hex.EncodeToString(key[:]))
 		value, err := iter.ValueAndErr()
