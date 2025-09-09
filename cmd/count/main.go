@@ -90,6 +90,7 @@ func main() {
 	configPrefix := []byte("ethereum-config-")
 	storedHash := common.HexToHash("0x0233022796c4160f5998145f153974ba65376a83825294f7811f44034461652f")
 	configKey := append(configPrefix, storedHash.Bytes()...)
+	_ = configKey
 
 	iter, err := db.NewIter(&pebble.IterOptions{})
 	if err != nil {
@@ -97,7 +98,7 @@ func main() {
 	}
 	defer iter.Close()
 
-	if iter.SeekGE(configKey) {
+	if iter.SeekGE(configPrefix) {
 		key := iter.Key()
 		fmt.Printf("Found key: %s\n", hex.EncodeToString(key[:]))
 		value, err := iter.ValueAndErr()
