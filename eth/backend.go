@@ -359,9 +359,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	// For X Layer
 	minerConfig := config.Miner
-	minerConfig.OkPayEnable = config.XLayer.OkPay.Enable
-	minerConfig.OkPaySenderAccounts = config.XLayer.OkPay.OkPaySenderAccountsList
-	minerConfig.OkPayBlockPriorityTxsLimit = config.XLayer.OkPay.OkPayBlockPriorityTxsLimit
+	minerConfig.OkPayEnable = config.XLayer.OkPay.PriorityEnable
+	minerConfig.OkPaySenderAccounts = config.XLayer.OkPay.SenderAccountsList
+	minerConfig.OkPayBlockPriorityTxsLimit = config.XLayer.OkPay.BlockPriorityTxsLimit
 
 	eth.miner = miner.New(eth, minerConfig, eth.engine)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))

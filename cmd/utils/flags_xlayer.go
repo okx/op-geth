@@ -42,6 +42,6 @@ func setOkPayXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 }
 
 // SetOkPayXLayer is a public wrapper function to internally call setOkPayXLayer
-func SetOkPayXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
+func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setOkPayXLayer(ctx, cfg)
 }

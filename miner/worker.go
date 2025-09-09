@@ -627,24 +627,24 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 		hashSeed := binary.BigEndian.Uint64(parentHashBytes)
 		startIdx = int(hashSeed % uint64(len(accounts)))
 
-		for i := 0; i < len(accounts); i++ {
+		for idx := range accounts {
 			if okPayTxCount >= miner.config.OkPayBlockPriorityTxsLimit {
 				break
 			}
 
-			accountIdx := (startIdx + i) % len(accounts)
+			accountIdx := (startIdx + idx) % len(accounts)
 			account := accounts[accountIdx]
 
 			if txs := normalPlainTxs[account]; len(txs) > 0 {
 				// Calculate how many transactions we can add from this account
-				remainingSlots := miner.config.OkPayBlockPriorityTxsLimit - okPayTxCount
+				remainingSlots := int(miner.config.OkPayBlockPriorityTxsLimit) - int(okPayTxCount)
 				if remainingSlots <= 0 {
 					break // No more slots available
 				}
 
 				// Take up to remainingSlots transactions from this account
 				txsToAdd := txs
-				if uint64(len(txs)) > remainingSlots {
+				if len(txs) > remainingSlots {
 					txsToAdd = txs[:remainingSlots]
 				}
 
@@ -660,6 +660,16 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 		}
 	}
 
+	// Process OkPay transactions first (highest priority)
+	if len(okpayTxs) > 0 {
+		okpayPlainTxs := newTransactionsByPriceAndNonce(env.signer, okpayTxs, env.header.BaseFee)
+		emptyBlobTxs := newTransactionsByPriceAndNonce(env.signer, nil, env.header.BaseFee)
+
+		if err := miner.commitTransactions(env, okpayPlainTxs, emptyBlobTxs, interrupt); err != nil {
+			return err
+		}
+	}
+
 	for _, account := range prio {
 		if txs := normalPlainTxs[account]; len(txs) > 0 {
 			delete(normalPlainTxs, account)
@@ -668,16 +678,6 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 		if txs := normalBlobTxs[account]; len(txs) > 0 {
 			delete(normalBlobTxs, account)
 			prioBlobTxs[account] = txs
-		}
-	}
-
-	// Process OkPay transactions first (highest priority)
-	if len(okpayTxs) > 0 {
-		okpayPlainTxs := newTransactionsByPriceAndNonce(env.signer, okpayTxs, env.header.BaseFee)
-		emptyBlobTxs := newTransactionsByPriceAndNonce(env.signer, nil, env.header.BaseFee)
-
-		if err := miner.commitTransactions(env, okpayPlainTxs, emptyBlobTxs, interrupt); err != nil {
-			return err
 		}
 	}
 
