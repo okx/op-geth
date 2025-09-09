@@ -73,7 +73,7 @@ type Config struct {
 	MaxDABlockSize   *big.Int `toml:",omitempty"` // if non-nil, then don't build a block requiring more than this amount of total data availability
 
 	// For X Layer
-	OkPayEnable                bool             `toml:",omitempty"`
+	OkPayPriorityEnable        bool             `toml:",omitempty"`
 	OkPaySenderAccounts        []common.Address `toml:",omitempty"`
 	OkPayBlockPriorityTxsLimit uint64           `toml:",omitempty"`
 }

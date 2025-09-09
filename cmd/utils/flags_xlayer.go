@@ -11,14 +11,24 @@ var (
 	OkPayPriorityEnableFlag = cli.BoolFlag{
 		Name:  "okpay.priority-enable-flag",
 		Usage: "OkPay",
+		Value: false,
 	}
 	OkPaySenderAccountsList = cli.StringFlag{
 		Name:  "okpay.sender-accounts-list",
 		Usage: "List of OkPay sender accounts",
+		Value: "",
 	}
 	OkPayBlockPriorityTxsLimit = cli.Uint64Flag{
 		Name:  "okpay.block-priority-txs-limit",
 		Usage: "Max number of OkPay txs that we will prioritize per block",
+		Value: 0,
+	}
+
+	// XLayerFlags are the default flags for X Layer features
+	XLayerFlags = []cli.Flag{
+		&OkPayPriorityEnableFlag,
+		&OkPaySenderAccountsList,
+		&OkPayBlockPriorityTxsLimit,
 	}
 )
 
