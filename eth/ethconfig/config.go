@@ -70,6 +70,7 @@ var Defaults = Config{
 	RPCEVMTimeout:      5 * time.Second,
 	GPO:                FullNodeGPO,
 	RPCTxFeeCap:        1, // 1 ether
+	Monitor:            DefaultMonitorConfig(),
 }
 
 //go:generate go run github.com/fjl/gencodec -type Config -formats toml -out gen_config.go
@@ -188,9 +189,12 @@ type Config struct {
 	RollupSequencerTxConditionalCostRateLimit int
 	RollupHistoricalRPC                       string
 	RollupHistoricalRPCTimeout                time.Duration
-	RollupDisableTxPoolGossip                 bool
-	RollupDisableTxPoolAdmission              bool
-	RollupHaltOnIncompatibleProtocolVersion   string
+
+	// Transaction monitoring configuration
+	Monitor                                 MonitorConfig
+	RollupDisableTxPoolGossip               bool
+	RollupDisableTxPoolAdmission            bool
+	RollupHaltOnIncompatibleProtocolVersion string
 
 	InteropMessageRPC       string `toml:",omitempty"`
 	InteropMempoolFiltering bool   `toml:",omitempty"`
