@@ -74,9 +74,35 @@ func main() {
 			log.Printf("Error closing database: %v", err)
 		}
 	}()
+
+	count, err := countKeys(db)
+	if err != nil {
+		log.Fatalf("Error counting keys: %v", err)
+	}
+	fmt.Printf("\nTotal number of keys in the database: %d\n", count)
+
 	configPrefix := []byte("ethereum-config-")
 	storedHash := common.HexToHash("0x0233022796c4160f5998145f153974ba65376a83825294f7811f44034461652f")
 	configKey := append(configPrefix, storedHash.Bytes()...)
+
+	iter, err := db.NewIter(&pebble.IterOptions{})
+	if err != nil {
+		panic(err)
+	}
+	defer iter.Close()
+
+	if iter.SeekGE(configKey) {
+		key := iter.Key()
+		fmt.Printf("Found key: %s\n", hex.EncodeToString(key[:]))
+		value, err := iter.ValueAndErr()
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("Value: %s\n", hex.EncodeToString(value[:]))
+	} else {
+		fmt.Printf("Key not found\n")
+	}
+
 	data, c, err := db.Get(configKey)
 	if err != nil {
 		panic(err)
@@ -84,10 +110,4 @@ func main() {
 	defer c.Close()
 	fmt.Printf("%s\n", hex.EncodeToString(data))
 	return
-
-	count, err := countKeys(db)
-	if err != nil {
-		log.Fatalf("Error counting keys: %v", err)
-	}
-	fmt.Printf("\nTotal number of keys in the database: %d\n", count)
 }
