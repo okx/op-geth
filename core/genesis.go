@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/holiman/uint256"
 	"math/big"
 	"runtime"
 	"strings"
@@ -44,7 +45,6 @@ import (
 	"github.com/ethereum/go-ethereum/trie/trienode"
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/ethereum/go-ethereum/triedb/pathdb"
-	"github.com/holiman/uint256"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -249,6 +249,11 @@ func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus b
 		allocMap[addr] = &types.StateAccount{}
 	}
 
+	scheme, err := rawdb.ParseStateScheme("", triedb.Disk())
+	if err != nil {
+		return common.Hash{}, common.Hash{}, err
+	}
+
 	dbWorker, _ := errgroup.WithContext(context.Background())
 	dbWorker.SetLimit(1)
 
@@ -302,8 +307,8 @@ func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus b
 					batch.Reset()
 				}
 
-				for _, n := range nodes.Nodes {
-					rawdb.WriteLegacyTrieNode(batch, n.Hash, n.Blob)
+				for path, n := range nodes.Nodes {
+					rawdb.WriteTrieNode(batch, nodes.Owner, []byte(path), n.Hash, n.Blob, scheme)
 					if batch.ValueSize() > 1<<30 {
 						start := time.Now()
 						if err := batch.Write(); err != nil {
