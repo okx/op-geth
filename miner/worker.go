@@ -620,8 +620,8 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 
 	okPayTxs := make(map[common.Address][]*txpool.LazyTransaction)
 
-	sortedOkPayTxs := common.OrderedList[*okPayTx]{}
-	sortedOkPayTxs.SetCompareFunc(func(a, b *okPayTx) int {
+	sortedOkPayTxs := common.OrderedList[okPayTx]{}
+	sortedOkPayTxs.SetCompareFunc(func(a, b okPayTx) int {
 		if a.tx.Time.Before(b.tx.Time) {
 			return -1
 		}
@@ -635,7 +635,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 		for _, account := range accounts {
 			if txs := normalPlainTxs[account]; len(txs) > 0 {
 				for _, tx := range txs {
-					sortedOkPayTxs.Add(&okPayTx{account: account, tx: tx})
+					sortedOkPayTxs.Add(okPayTx{account: account, tx: tx})
 				}
 				delete(normalPlainTxs, account)
 			}
