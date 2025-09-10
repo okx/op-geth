@@ -625,7 +625,10 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 		if a.tx.Time.Before(b.tx.Time) {
 			return -1
 		}
-		return 1
+		if a.tx.Time.After(b.tx.Time) {
+			return 1
+		}
+		return 0
 	})
 
 	accounts := miner.config.OkPaySenderAccounts
