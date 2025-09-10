@@ -2,10 +2,10 @@ package metrics
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -16,25 +16,42 @@ const (
 	// Identifiers / tags
 	BlockNumberTag LogTag = iota
 
-	// Counters (cumulative, diffed per block)
+	// Counters (per-block)
 	TxCounter
 	GasUsedCounter
 	InvalidTxCounter
 	GasOverTxCounter
 
-	// Timings in milliseconds (cumulative, diffed per block)
+	// Timings (per-block)
 	TotalBuildMs
-	PrepareWorkMs
-	ForcedTxMs
-	GetTxMs
-	CommitTxMs
-	FinalizeBlockMs
 
-	// DB timings (ms)
-	DBBatchWriteMs
-	DBStateCommitMs
-	DBTrieCommitMs
-	DBInsertTotalMs
+	// Execution/validation/write phases
+	ExecuteMs
+	ValidateMs
+	CrossValidateMs
+	WriteBlockMs
+	BlockWriteAdjustedMs
+	EvmExecPureMs
+	ValidationPureMs
+
+	// Trie/Snapshot pressure indicators
+	TrieDiffNodes
+	TrieBufNodes
+	SnapDiffItems
+	SnapBufItems
+
+	// State-level timings (per-block)
+	AccountReadMs
+	StorageReadMs
+	AccountUpdateMs
+	StorageUpdateMs
+	AccountHashMs
+	TrieHashMs
+	TrieUpdateMs
+	AccountCommitMs
+	StorageCommitMs
+	SnapshotCommitMs
+	TrieDBCommitMs
 )
 
 // Statistics exposes accumulation helpers and summary output.
@@ -47,6 +64,7 @@ type Statistics interface {
 	GetTag(tag LogTag) string
 	GetStatistics(tag LogTag) int64
 	SummaryCheckpoint() string
+	ResetStatistics()
 }
 
 var (
@@ -58,45 +76,53 @@ var (
 func GetLogStatistics() Statistics {
 	once.Do(func() {
 		instance = &statisticsInstance{}
-		instance.resetStatistics()
 	})
 	return instance
 }
 
 type statisticsInstance struct {
-	mu            sync.RWMutex
-	newBlockTime  time.Time
-	statistics    map[LogTag]int64 // value is a counter or time (ms)
-	statisticsOld map[LogTag]int64
-	tags          map[LogTag]string
+	mu        sync.RWMutex
+	durations map[LogTag]time.Duration // per-block durations
+	counters  map[LogTag]int64         // per-block counters
+	tags      map[LogTag]string
 }
 
 func (l *statisticsInstance) CumulativeCounting(tag LogTag) {
 	l.mu.Lock()
-	l.statistics[tag]++
+	if l.counters == nil {
+		l.counters = make(map[LogTag]int64)
+	}
+	l.counters[tag]++
 	l.mu.Unlock()
 }
 
 func (l *statisticsInstance) CumulativeValue(tag LogTag, value int64) {
 	l.mu.Lock()
-	l.statistics[tag] += value
+	if l.counters == nil {
+		l.counters = make(map[LogTag]int64)
+	}
+	l.counters[tag] += value
 	l.mu.Unlock()
 }
 
 func (l *statisticsInstance) CumulativeTiming(tag LogTag, duration time.Duration) {
 	l.mu.Lock()
-	l.statistics[tag] += duration.Milliseconds()
+	if l.durations == nil {
+		l.durations = make(map[LogTag]time.Duration)
+	}
+	l.durations[tag] += duration
 	l.mu.Unlock()
 }
 
 func (l *statisticsInstance) CumulativeMicroTiming(tag LogTag, duration time.Duration) {
-	l.mu.Lock()
-	l.statistics[tag] += duration.Microseconds()
-	l.mu.Unlock()
+	l.CumulativeTiming(tag, duration)
 }
 
 func (l *statisticsInstance) SetTag(tag LogTag, value string) {
 	l.mu.Lock()
+	if l.tags == nil {
+		l.tags = make(map[LogTag]string)
+	}
 	l.tags[tag] = value
 	l.mu.Unlock()
 }
@@ -110,97 +136,68 @@ func (l *statisticsInstance) GetTag(tag LogTag) string {
 func (l *statisticsInstance) GetStatistics(tag LogTag) int64 {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	return l.statistics[tag]
+	return l.counters[tag]
 }
 
-func (l *statisticsInstance) resetStatistics() {
+func (l *statisticsInstance) ResetStatistics() {
 	l.mu.Lock()
-	l.newBlockTime = time.Now()
-	l.statistics = make(map[LogTag]int64)
-	l.statisticsOld = make(map[LogTag]int64)
+	l.durations = make(map[LogTag]time.Duration)
+	l.counters = make(map[LogTag]int64)
 	l.tags = make(map[LogTag]string)
 	l.mu.Unlock()
 }
 
-// SummaryCheckpoint computes the per-block delta and logs a single-line summary.
+// SummaryCheckpoint computes per-block stats and logs a single-line summary.
 func (l *statisticsInstance) SummaryCheckpoint() string {
 	l.mu.RLock()
-	block := l.tags[BlockNumberTag]
+	block := l.counters[BlockNumberTag]
+	blockDuration := l.durations[TotalBuildMs]
 
-	// Deltas
-	blockDuration := time.Since(l.newBlockTime).Milliseconds()
-	tx := l.statistics[TxCounter] - l.statisticsOld[TxCounter]
-	gasUsed := l.statistics[GasUsedCounter] - l.statisticsOld[GasUsedCounter]
-	invalidTx := l.statistics[InvalidTxCounter] - l.statisticsOld[InvalidTxCounter]
-	gasOverTx := l.statistics[GasOverTxCounter] - l.statisticsOld[GasOverTxCounter]
+	// Current block values
+	tx := l.counters[TxCounter]
+	gasUsed := l.counters[GasUsedCounter]
+	invalidTx := l.counters[InvalidTxCounter]
+	gasOverTx := l.counters[GasOverTxCounter]
 
-	// total build time (not currently printed separately, but kept for potential use)
-	_ = l.statistics[TotalBuildMs] - l.statisticsOld[TotalBuildMs]
-	prepare := l.statistics[PrepareWorkMs] - l.statisticsOld[PrepareWorkMs]
-	forced := l.statistics[ForcedTxMs] - l.statisticsOld[ForcedTxMs]
-	gettx := l.statistics[GetTxMs] - l.statisticsOld[GetTxMs]
-	commit := l.statistics[CommitTxMs] - l.statisticsOld[CommitTxMs]
-	finalize := l.statistics[FinalizeBlockMs] - l.statisticsOld[FinalizeBlockMs]
+	exec := l.durations[ExecuteMs]
+	validate := l.durations[ValidateMs]
+	xvalidate := l.durations[CrossValidateMs]
+	writeBlk := l.durations[WriteBlockMs]
+	writeBlkAdj := l.durations[BlockWriteAdjustedMs]
+	evmPure := l.durations[EvmExecPureMs]
+	valPure := l.durations[ValidationPureMs]
 
-	dbBatch := l.statistics[DBBatchWriteMs] - l.statisticsOld[DBBatchWriteMs]
-	dbState := l.statistics[DBStateCommitMs] - l.statisticsOld[DBStateCommitMs]
-	dbTrie := l.statistics[DBTrieCommitMs] - l.statisticsOld[DBTrieCommitMs]
-	dbTotal := l.statistics[DBInsertTotalMs] - l.statisticsOld[DBInsertTotalMs]
+	trieDiff := l.counters[TrieDiffNodes]
+	trieBuf := l.counters[TrieBufNodes]
+	snapDiff := l.counters[SnapDiffItems]
+	snapBuf := l.counters[SnapBufItems]
+
+	accRead := l.durations[AccountReadMs]
+	storRead := l.durations[StorageReadMs]
+	accUpdate := l.durations[AccountUpdateMs]
+	storUpdate := l.durations[StorageUpdateMs]
+	accHash := l.durations[AccountHashMs]
+	trieHash := l.durations[TrieHashMs]
+	trieUpd := l.durations[TrieUpdateMs]
+	accCommit := l.durations[AccountCommitMs]
+	storCommit := l.durations[StorageCommitMs]
+	snapCommit := l.durations[SnapshotCommitMs]
+	triedbCommit := l.durations[TrieDBCommitMs]
 	l.mu.RUnlock()
 
-	// Compose subsections conditionally
-	var processParts []string
-	if gettx > 0 {
-		processParts = append(processParts, fmt.Sprintf("getTx[%dms]", gettx))
-	}
-	if commit > 0 {
-		processParts = append(processParts, fmt.Sprintf("commitTx[%dms]", commit))
-	}
-	processSection := ""
-	if len(processParts) > 0 {
-		processTotal := prepare + forced + gettx + commit
-		processSection = fmt.Sprintf("ProcessTxTiming<%dms> { %s }, ", processTotal, strings.Join(processParts, ", "))
-	}
-
-	var dbParts []string
-	if dbBatch > 0 {
-		dbParts = append(dbParts, fmt.Sprintf("blockBatchWrite[%dms]", dbBatch))
-	}
-	if dbState > 0 {
-		dbParts = append(dbParts, fmt.Sprintf("stateCommit[%dms]", dbState))
-	}
-	if dbTrie > 0 {
-		dbParts = append(dbParts, fmt.Sprintf("trieCommit[%dms]", dbTrie))
-	}
-	if dbTotal > 0 {
-		dbParts = append(dbParts, fmt.Sprintf("insertTotal[%dms]", dbTotal))
-	}
-	dbSection := ""
-	if len(dbParts) > 0 {
-		dbSection = fmt.Sprintf("DB { %s }, ", strings.Join(dbParts, ", "))
-	}
-
-	// Final line
 	line := fmt.Sprintf(
-		"Block<%s>, Txs<%d>, TotalDuration-block<%dms> { %sFinalizeBlockTiming<%dms>, %s}, GasUsed<%d>",
-		block, tx, blockDuration, processSection, finalize, dbSection, gasUsed,
+		"Block<%d>, Txs<%d>, BlockTime<%s> { Exec { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] }, Write { writeBlock[%s], writeAdjusted[%s] }, Trie<diff:%d, buf:%d>, Snap<diff:%d, buf:%d>, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }, GasUsed<%d>, GasOverTx<%d>, InvalidTx<%d>",
+		block,
+		tx,
+		common.PrettyDuration(blockDuration),
+		common.PrettyDuration(exec), common.PrettyDuration(validate), common.PrettyDuration(xvalidate), common.PrettyDuration(evmPure), common.PrettyDuration(valPure),
+		common.PrettyDuration(writeBlk), common.PrettyDuration(writeBlkAdj),
+		trieDiff, trieBuf, snapDiff, snapBuf,
+		common.PrettyDuration(accRead), common.PrettyDuration(storRead), common.PrettyDuration(accUpdate), common.PrettyDuration(storUpdate), common.PrettyDuration(accHash), common.PrettyDuration(trieHash), common.PrettyDuration(trieUpd),
+		common.PrettyDuration(accCommit), common.PrettyDuration(storCommit), common.PrettyDuration(snapCommit), common.PrettyDuration(triedbCommit),
+		gasUsed, gasOverTx, invalidTx,
 	)
-	// Optional tails
-	if gasOverTx > 0 {
-		line += fmt.Sprintf(", GasOverTx<%d>", gasOverTx)
-	}
-	if invalidTx > 0 {
-		line += fmt.Sprintf(", InvalidTx<%d>", invalidTx)
-	}
-
 	log.Info(line)
 
-	// roll window
-	l.mu.Lock()
-	for k, v := range l.statistics {
-		l.statisticsOld[k] = v
-	}
-	l.newBlockTime = time.Now()
-	l.mu.Unlock()
 	return line
 }
