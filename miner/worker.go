@@ -123,13 +123,10 @@ type generateParams struct {
 
 // generateWork generates a sealing block based on the given parameters.
 func (miner *Miner) generateWork(params *generateParams, witness bool) *newPayloadResult {
-	// Measure prepareWork duration
-	startPrepare := time.Now()
 	work, err := miner.prepareWork(params, witness)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
-	_ = startPrepare // local timing no longer exported to LogStatistics
 	if work.gasPool == nil {
 		gasLimit := work.header.GasLimit
 
@@ -147,7 +144,6 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 
 	misc.EnsureCreate2Deployer(miner.chainConfig, work.header.Time, work.state)
 
-	// Process forced transactions
 	for _, tx := range params.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
@@ -166,7 +162,6 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 			interrupt.Store(commitInterruptTimeout)
 		})
 
-		// fill transactions from txpool
 		err := miner.fillTransactions(interrupt, work)
 		timer.Stop() // don't need timeout interruption any more
 		if errors.Is(err, errBlockInterruptedByTimeout) {
@@ -214,13 +209,10 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		work.header.RequestsHash = &reqHash
 	}
 
-	finalizeStart := time.Now()
 	block, err := miner.engine.FinalizeAndAssemble(miner.chain, work.header, work.state, &body, work.receipts)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
-	_ = finalizeStart // local timing no longer exported to LogStatistics
-
 	return &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),
