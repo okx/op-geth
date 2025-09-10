@@ -181,6 +181,7 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 	if memTableSize >= maxMemTableSize {
 		memTableSize = maxMemTableSize - 1
 	}
+	log.Info("memTableSize", "size", memTableSize, "maxMemTableSize", maxMemTableSize)
 	db := &Database{
 		fn:           file,
 		log:          logger,
@@ -259,24 +260,57 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 	return db, nil
 }
 
-// Close stops the metrics collection, flushes any pending data to disk and closes
-// all io accesses to the underlying key-value store.
+// Close stops the metrics collection, flushes any remaining data to disk and closes
+// all the database files and the resources it holds.
 func (d *Database) Close() error {
+	// Print comprehensive performance metrics
+	log.Info("PebbleDB performance summary",
+		"level0_compactions", d.level0Comp.Load(),
+		"non_level0_compactions", d.nonLevel0Comp.Load(),
+		"total_compactions", d.level0Comp.Load()+d.nonLevel0Comp.Load(),
+		"write_delays", d.writeDelayCount.Load(),
+		"write_throughput_mb_s", d.diskWriteMeter.Snapshot().Rate1()/1024/1024,
+		"compaction_read_mb", d.compReadMeter.Snapshot().Count()/1024/1024,
+		"compaction_write_mb", d.compWriteMeter.Snapshot().Count()/1024/1024,
+		"compaction_ratio", float64(d.compWriteMeter.Snapshot().Count())/float64(d.compReadMeter.Snapshot().Count()))
+
+	// Print compaction statistics before closing
+	log.Info("PebbleDB compaction statistics",
+		"level0_compactions", d.level0Comp.Load(),
+		"non_level0_compactions", d.nonLevel0Comp.Load(),
+		"total_compactions", d.level0Comp.Load()+d.nonLevel0Comp.Load())
+
+	// Print write performance metrics
+	if d.writeDelayNMeter != nil {
+		log.Info("PebbleDB write performance",
+			"write_delays_count", d.writeDelayCount.Load(),
+			"write_throughput_mb_s", d.diskWriteMeter.Snapshot().Rate1()/1024/1024) // Convert to MB/s
+	}
+	//
+	//// Print compaction timing
+	//if d.compTimeMeter != nil {
+	//	log.Info("PebbleDB compaction timing",
+	//		"compaction_time_total", d.compTimeMeter.Count(),
+	//		"compaction_time_rate", d.compTimeMeter.Rate1())
+	//}
+
 	d.quitLock.Lock()
 	defer d.quitLock.Unlock()
-	// Allow double closing, simplifies things
+
 	if d.closed {
 		return nil
 	}
 	d.closed = true
+
 	if d.quitChan != nil {
 		errc := make(chan error)
 		d.quitChan <- errc
 		if err := <-errc; err != nil {
-			d.log.Error("Metrics collection failed", "err", err)
+			log.Error("Metrics collection failed", "err", err)
 		}
 		d.quitChan = nil
 	}
+
 	return d.db.Close()
 }
 
@@ -639,4 +673,21 @@ func (iter *pebbleIterator) Release() {
 		iter.iter.Close()
 		iter.released = true
 	}
+}
+
+// Add these methods to the Database struct
+
+// Level0Compactions returns the number of level 0 compactions
+func (d *Database) Level0Compactions() uint32 {
+	return d.level0Comp.Load()
+}
+
+// NonLevel0Compactions returns the number of non-level 0 compactions
+func (d *Database) NonLevel0Compactions() uint32 {
+	return d.nonLevel0Comp.Load()
+}
+
+// TotalCompactions returns the total number of compactions
+func (d *Database) TotalCompactions() uint32 {
+	return d.level0Comp.Load() + d.nonLevel0Comp.Load()
 }

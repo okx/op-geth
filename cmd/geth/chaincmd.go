@@ -21,16 +21,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/holiman/uint256"
-	"github.com/urfave/cli/v2"
 	"os"
 	"runtime"
+	"runtime/pprof"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/holiman/uint256"
+	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -72,8 +74,13 @@ func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB s
 		return
 	}
 
-	// Verify balance
-	expectedBalance := uint256.MustFromBig(expectedAccount.Balance)
+	var expectedBalance *uint256.Int
+	if expectedAccount.Balance != nil {
+		expectedBalance = uint256.MustFromBig(expectedAccount.Balance)
+	} else {
+		expectedBalance = uint256.NewInt(0)
+	}
+
 	actualBalance := statedb.GetBalance(addr)
 	if actualBalance.Cmp(expectedBalance) != 0 {
 		result.Errors = append(result.Errors, fmt.Sprintf("Balance mismatch: expected %v, actual %v", expectedBalance, actualBalance))
@@ -120,23 +127,60 @@ var (
 			utils.OverrideVerkle,
 			&cli.BoolFlag{
 				Name:  "no-verify",
-				Usage: "do not perform verification",
+				Usage: "Automatically verify genesis state after initialization",
 			},
 			&cli.StringFlag{
 				Name:  "ignore-addresses",
 				Usage: "Comma-separated list of addresses to ignore during verification",
 			},
+			&cli.IntFlag{
+				Name:  "db-cache",
+				Usage: "Database cache size in MB (0 = use default)",
+				Value: 0,
+			},
+			&cli.IntFlag{
+				Name:  "db-handles",
+				Usage: "Database handles count (0 = use default)",
+				Value: 0,
+			},
 		}, utils.DatabaseFlags),
 		Description: `
 The init command initializes a new genesis block and definition for the network.
 This is a destructive action and changes the network in which you will be
-participating.
+operating. It should only be executed for private networks.
 
-It expects the genesis file as argument.
+The genesis file is a JSON file which specifies the initial state of your system
+which makes it easier for you to configure and test your network.
 
-If --no-verify is provided, the command will skip verify
-the genesis state after initialization. Use --ignore-addresses to specify
-addresses to skip during verification.`,
+Example:
+    geth --datadir /path/to/data init genesis.json
+
+The genesis file should contain the following fields:
+    - config:     A JSON object which defines the chain configuration
+    - alloc:      Defines the initial state of accounts
+    - coinbase:   The 16-byte address to which any rewards given by
+                  the network will be added
+    - difficulty: A number used to show how "hard" it is to generate a
+                  hash in the network. In private networks, this is the
+                  initial difficulty
+    - gasLimit:   The maximum amount of gas that may be used per block
+    - nonce:      A 64-bit hash which proves (combined with the
+                  mix-hash) that a sufficient amount of computation has been
+                  carried out
+    - timestamp:  The genesis time of the network
+    - extraData:  An optional field for arbitrary data
+    - mixHash:    A 256-bit hash which proves (combined with the nonce)
+                  that a sufficient amount of computation has been carried out
+    - parentHash: The genesis block's parent hash
+
+The genesis file is used to initialize the blockchain and the state database.
+It is also used to verify that the blockchain is in a consistent state.
+
+Examples:
+    geth --datadir /path/to/data init genesis.json
+    geth --datadir /path/to/data init genesis.json --db-cache=2048 --db-handles=1000
+    geth --datadir /path/to/data init genesis.json --verify-after-init --ignore-addresses=0x1234...,0x5678...
+`,
 	}
 
 	verifyGenesisCommand = &cli.Command{
@@ -304,6 +348,7 @@ helps reduce storage requirements for nodes that don't need full historical data
 // initGenesis will initialise the given JSON format genesis file and writes it as
 // the zero'd block (i.e. genesis) or will fail hard if it can't succeed.
 func initGenesis(ctx *cli.Context) error {
+
 	initStart := time.Now()
 	if ctx.Args().Len() != 1 {
 		utils.Fatalf("need genesis.json file as the only argument")
@@ -339,11 +384,27 @@ func initGenesis(ctx *cli.Context) error {
 		overrides.OverrideVerkle = &v
 	}
 
-	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", 0, 0, ctx.String(utils.AncientFlag.Name), "", false)
+	// Create a file to store CPU profile
+	f, err := os.Create("cpu_full.prof")
+	if err != nil {
+		fmt.Println("could not create CPU profile: ", err)
+	}
+	defer f.Close()
+
+	// Start CPU profiling
+	if err := pprof.StartCPUProfile(f); err != nil {
+		fmt.Println("could not start CPU profile: ", err)
+	}
+	defer pprof.StopCPUProfile() // stop when main exits
+
+	cache := ctx.Int("db-cache")
+	handles := ctx.Int("db-handles")
+	startAll := time.Now()
+	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", cache, handles, ctx.String(utils.AncientFlag.Name), "", false)
 	if err != nil {
 		utils.Fatalf("Failed to open database: %v", err)
 	}
-	defer chaindb.Close()
+	defer chaindb.Close() // This will print compaction stats
 
 	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), false, genesis.IsVerkle())
 	defer triedb.Close()
@@ -357,6 +418,7 @@ func initGenesis(ctx *cli.Context) error {
 	}
 	log.Info("Successfully wrote genesis state", "database", "chaindata", "hash", hash, "elapsed", time.Since(initStart))
 
+	log.Info("start all", "elapsed", time.Since(startAll))
 	// Check if verification is requested
 	if !ctx.Bool("no-verify") {
 		log.Info("Starting genesis verification after initialization")

@@ -19,6 +19,7 @@ package main
 
 import (
 	"fmt"
+	_ "net/http/pprof"
 	"os"
 	"slices"
 	"sort"

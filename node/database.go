@@ -90,7 +90,7 @@ func openKeyValueDatabase(o openOptions) (ethdb.Database, error) {
 		return newLevelDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly)
 	}
 	// No pre-existing database, no user-requested one either. Default to Pebble.
-	log.Info("Defaulting to pebble as the backing database")
+	log.Info("Defaulting to pebble as the backing database", "cache", o.Cache, "handles", o.Handles, "ephemeral", o.Ephemeral)
 	return newPebbleDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly, o.Ephemeral)
 }
 
