@@ -249,11 +249,6 @@ func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus b
 		allocMap[addr] = &types.StateAccount{}
 	}
 
-	scheme, err := rawdb.ParseStateScheme("", triedb.Disk())
-	if err != nil {
-		return common.Hash{}, common.Hash{}, err
-	}
-
 	dbWorker, _ := errgroup.WithContext(context.Background())
 	dbWorker.SetLimit(1)
 
@@ -308,7 +303,7 @@ func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus b
 				}
 
 				for path, n := range nodes.Nodes {
-					rawdb.WriteTrieNode(batch, nodes.Owner, []byte(path), n.Hash, n.Blob, scheme)
+					rawdb.WriteTrieNode(batch, nodes.Owner, []byte(path), n.Hash, n.Blob, triedb.Scheme())
 					if batch.ValueSize() > 1<<30 {
 						start := time.Now()
 						if err := batch.Write(); err != nil {
