@@ -11,7 +11,7 @@ geth --datadir=/mnt/ramdisk_op/op_geth_data verify-genesis --ignore-addresses=0x
 
 ~/go/bin/geth --datadir=/Volumes/RAMDisk/op_geth_data --gcmode=archive init --state.scheme=hash --db-cache=2 --db-handles=1000 --no-verify /Users/yangweitao/dev/okx/op-geth/random_genesis.json
 
-
+./build/bin/geth --datadir=/mnt/ramdisk_op/op_geth_data --gcmode=archive init --state.scheme=hash --no-verify /mnt/ramdisk_op/genesis.json
 
 diskutil erasevolume HFS+ "RAMDisk" $(hdiutil attach -nomount ram://67108864)
 

@@ -269,7 +269,7 @@ func (d *Database) Close() error {
 		"non_level0_compactions", d.nonLevel0Comp.Load(),
 		"total_compactions", d.level0Comp.Load()+d.nonLevel0Comp.Load(),
 		"write_delays", d.writeDelayCount.Load(),
-		"write_throughput_mb_s", d.diskWriteMeter.Snapshot().Rate1()/1024/1024,
+		"write_throughput_mb_s", d.diskWriteMeter.Snapshot().RateMean(),
 		"compaction_read_mb", d.compReadMeter.Snapshot().Count()/1024/1024,
 		"compaction_write_mb", d.compWriteMeter.Snapshot().Count()/1024/1024,
 		"compaction_ratio", float64(d.compWriteMeter.Snapshot().Count())/float64(d.compReadMeter.Snapshot().Count()))
