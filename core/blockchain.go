@@ -1898,14 +1898,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		}
 		trieDiffNodes, trieBufNodes, _ := bc.triedb.Size()
 		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead)
-
-		// Export insertStats snapshot into LogStatistics for this block
-		ls := metrics.GetLogStatistics()
-		ls.CumulativeValue(metrics.TrieDiffNodes, int64(trieDiffNodes))
-		ls.CumulativeValue(metrics.TrieBufNodes, int64(trieBufNodes))
-		ls.CumulativeValue(metrics.SnapDiffItems, int64(snapDiffItems))
-		ls.CumulativeValue(metrics.SnapBufItems, int64(snapBufItems))
-		_ = ls.SummaryCheckpoint()
+		_ = metrics.GetLogStatistics().SummaryCheckpoint()
 		// Print confirmation that a future fork is scheduled, but not yet active.
 		bc.logForkReadiness(block)
 
@@ -2079,7 +2072,6 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	ls.CumulativeTiming(metrics.StorageCommitMs, statedb.StorageCommits)
 	ls.CumulativeTiming(metrics.SnapshotCommitMs, statedb.SnapshotCommits)
 	ls.CumulativeTiming(metrics.TrieDBCommitMs, statedb.TrieDBCommits)
-	ls.CumulativeTiming(metrics.BlockWriteAdjustedMs, time.Since(wstart)-max(statedb.AccountCommits, statedb.StorageCommits)-statedb.SnapshotCommits-statedb.TrieDBCommits)
 	ls.CumulativeTiming(metrics.TotalBuildMs, time.Since(start))
 	ls.CumulativeTiming(metrics.ExecuteMs, proctime)
 	ls.CumulativeTiming(metrics.ValidateMs, vtime-(triehash+trieUpdate))

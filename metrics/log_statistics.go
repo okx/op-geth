@@ -156,22 +156,13 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 	// Current block values
 	tx := l.counters[TxCounter]
 	gasUsed := l.counters[GasUsedCounter]
-	invalidTx := l.counters[InvalidTxCounter]
-	gasOverTx := l.counters[GasOverTxCounter]
 
 	exec := l.durations[ExecuteMs]
 	validate := l.durations[ValidateMs]
 	xvalidate := l.durations[CrossValidateMs]
 	writeBlk := l.durations[WriteBlockMs]
-	writeBlkAdj := l.durations[BlockWriteAdjustedMs]
 	evmPure := l.durations[EvmExecPureMs]
 	valPure := l.durations[ValidationPureMs]
-
-	trieDiff := l.counters[TrieDiffNodes]
-	trieBuf := l.counters[TrieBufNodes]
-	snapDiff := l.counters[SnapDiffItems]
-	snapBuf := l.counters[SnapBufItems]
-
 	accRead := l.durations[AccountReadMs]
 	storRead := l.durations[StorageReadMs]
 	accUpdate := l.durations[AccountUpdateMs]
@@ -186,16 +177,15 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 	l.mu.RUnlock()
 
 	line := fmt.Sprintf(
-		"Block<%d>, Txs<%d>, BlockTime<%s> { Exec { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] }, Write { writeBlock[%s], writeAdjusted[%s] }, Trie<diff:%d, buf:%d>, Snap<diff:%d, buf:%d>, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }, GasUsed<%d>, GasOverTx<%d>, InvalidTx<%d>",
+		"Block<%d>, Txs<%d> GasUsed<%d>, BlockTime<%s> { Exec { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] }, Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
 		block,
 		tx,
+		gasUsed,
 		common.PrettyDuration(blockDuration),
 		common.PrettyDuration(exec), common.PrettyDuration(validate), common.PrettyDuration(xvalidate), common.PrettyDuration(evmPure), common.PrettyDuration(valPure),
-		common.PrettyDuration(writeBlk), common.PrettyDuration(writeBlkAdj),
-		trieDiff, trieBuf, snapDiff, snapBuf,
+		common.PrettyDuration(writeBlk),
 		common.PrettyDuration(accRead), common.PrettyDuration(storRead), common.PrettyDuration(accUpdate), common.PrettyDuration(storUpdate), common.PrettyDuration(accHash), common.PrettyDuration(trieHash), common.PrettyDuration(trieUpd),
 		common.PrettyDuration(accCommit), common.PrettyDuration(storCommit), common.PrettyDuration(snapCommit), common.PrettyDuration(triedbCommit),
-		gasUsed, gasOverTx, invalidTx,
 	)
 	log.Info(line)
 
