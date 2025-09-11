@@ -386,7 +386,7 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 		}
 	}
 
-	receipt, err := miner.applyTransaction(env, tx)
+	receipt, err := miner.applyTransaction_okx(env, tx)
 	if err != nil {
 		return err
 	}
@@ -409,7 +409,7 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 	if env.blobs+len(sc.Blobs) > maxBlobs {
 		return errors.New("max data blobs reached")
 	}
-	receipt, err := miner.applyTransaction(env, tx)
+	receipt, err := miner.applyTransaction_okx(env, tx)
 	if err != nil {
 		return err
 	}
