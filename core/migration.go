@@ -308,6 +308,7 @@ func verifySMT(migrationPath string, alloc, ignoredAlloc, overridedAlloc *types.
 
 	// TODO: Implement SMT verification logic
 	// Should consider both ga and ignoredAlloc
+	// dbAlloc = merge(overrideAlloc to alloc), ignoredAlloc)
 
 	log.Info("verifySMT called", "migrationPath", migrationPath, "accounts", len(*alloc))
 	return nil
