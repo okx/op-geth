@@ -355,7 +355,6 @@ helps reduce storage requirements for nodes that don't need full historical data
 // initGenesis will initialise the given JSON format genesis file and writes it as
 // the zero'd block (i.e. genesis) or will fail hard if it can't succeed.
 func initGenesis(ctx *cli.Context) error {
-	initStart := time.Now()
 	if ctx.Args().Len() != 1 {
 		utils.Fatalf("need genesis.json file as the only argument")
 	}
@@ -405,7 +404,6 @@ func initGenesis(ctx *cli.Context) error {
 
 	cache := ctx.Int("db-cache")
 	handles := ctx.Int("db-handles")
-	startAll := time.Now()
 	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", cache, handles, ctx.String(utils.AncientFlag.Name), "", false)
 	if err != nil {
 		utils.Fatalf("Failed to open database: %v", err)
