@@ -72,8 +72,11 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		RollupDisableTxPoolGossip                 bool
 		RollupDisableTxPoolAdmission              bool
 		RollupHaltOnIncompatibleProtocolVersion   string
-		InteropMessageRPC                         string `toml:",omitempty"`
-		InteropMempoolFiltering                   bool   `toml:",omitempty"`
+		InteropMessageRPC                         string        `toml:",omitempty"`
+		InteropMempoolFiltering                   bool          `toml:",omitempty"`
+		MigrationBlock                            *uint64       `toml:",omitempty"`
+		PPRPCUrl                                  string        `toml:",omitempty"`
+		PPRPCTimeout                              time.Duration `toml:",omitempty"`
 	}
 	var enc Config
 	enc.Genesis = c.Genesis
@@ -133,6 +136,9 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.RollupHaltOnIncompatibleProtocolVersion = c.RollupHaltOnIncompatibleProtocolVersion
 	enc.InteropMessageRPC = c.InteropMessageRPC
 	enc.InteropMempoolFiltering = c.InteropMempoolFiltering
+	enc.MigrationBlock = c.MigrationBlock
+	enc.PPRPCUrl = c.PPRPCUrl
+	enc.PPRPCTimeout = c.PPRPCTimeout
 	return &enc, nil
 }
 
@@ -194,8 +200,11 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		RollupDisableTxPoolGossip                 *bool
 		RollupDisableTxPoolAdmission              *bool
 		RollupHaltOnIncompatibleProtocolVersion   *string
-		InteropMessageRPC                         *string `toml:",omitempty"`
-		InteropMempoolFiltering                   *bool   `toml:",omitempty"`
+		InteropMessageRPC                         *string        `toml:",omitempty"`
+		InteropMempoolFiltering                   *bool          `toml:",omitempty"`
+		MigrationBlock                            *uint64        `toml:",omitempty"`
+		PPRPCUrl                                  *string        `toml:",omitempty"`
+		PPRPCTimeout                              *time.Duration `toml:",omitempty"`
 	}
 	var dec Config
 	if err := unmarshal(&dec); err != nil {
@@ -371,6 +380,15 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.InteropMempoolFiltering != nil {
 		c.InteropMempoolFiltering = *dec.InteropMempoolFiltering
+	}
+	if dec.MigrationBlock != nil {
+		c.MigrationBlock = dec.MigrationBlock
+	}
+	if dec.PPRPCUrl != nil {
+		c.PPRPCUrl = *dec.PPRPCUrl
+	}
+	if dec.PPRPCTimeout != nil {
+		c.PPRPCTimeout = *dec.PPRPCTimeout
 	}
 	return nil
 }
