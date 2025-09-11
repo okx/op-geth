@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // TraceLogEntry represents a single trace log entry
@@ -52,7 +54,10 @@ func InitTraceLogger(enabled bool, logPath string) {
 		}
 
 		if enabled {
-			globalLogger.initFile()
+			if err := globalLogger.initFile(); err != nil {
+				log.Error("Failed to initialize trace logger", "error", err)
+				globalLogger.enabled = false
+			}
 		}
 	})
 }
