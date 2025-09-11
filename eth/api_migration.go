@@ -225,18 +225,31 @@ func (api *MigrationFilterAPI) GetLogs(ctx context.Context, crit filters.FilterC
 
 	// 3. begin is earlier than migration block and end is later than migration block
 	if begin < int64(api.config.MigrationBlock) && end >= int64(api.config.MigrationBlock) {
-		crit.ToBlock = big.NewInt(int64(api.config.MigrationBlock))
-		var result []*types.Log
-		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getLogs", crit)
-		if err != nil || result == nil {
+		// Query Erigon for logs up to migration block
+		erigonCrit := crit
+		erigonCrit.ToBlock = big.NewInt(int64(api.config.MigrationBlock) - 1)
+		var erigonLogs []*types.Log
+		err := api.config.ErigonClient.CallContext(ctx, &erigonLogs, "eth_getLogs", erigonCrit)
+		if err != nil {
 			return nil, err
 		}
 
-		localResult, err := api.FilterAPI.GetLogs(ctx, crit)
-		if err != nil || localResult == nil {
+		// Query local for logs from migration block onwards
+		localCrit := crit
+		localCrit.FromBlock = big.NewInt(int64(api.config.MigrationBlock))
+		localLogs, err := api.FilterAPI.GetLogs(ctx, localCrit)
+		if err != nil {
 			return nil, err
 		}
-		return append(result, localResult...), nil
+
+		// Combine results
+		if erigonLogs == nil {
+			erigonLogs = []*types.Log{}
+		}
+		if localLogs == nil {
+			localLogs = []*types.Log{}
+		}
+		return append(erigonLogs, localLogs...), nil
 	}
 
 	return api.FilterAPI.GetLogs(ctx, crit)
