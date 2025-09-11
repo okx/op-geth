@@ -21,12 +21,14 @@ import (
 	"math/big"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -42,6 +44,42 @@ var (
 	DefaultMinSuggestedPriorityFee = big.NewInt(1e6 * params.Wei) // 0.001 gwei, for Optimism fee suggestion
 )
 
+// XLayer gas price types
+const (
+	DefaultType  = "default"  // Default gas price from config
+	FollowerType = "follower" // Calculate gas price based on L1 gas price
+	FixedType    = "fixed"    // Fixed gas price in USDT
+)
+
+// XLayerConfig is the X Layer gas price config
+type XLayerConfig struct {
+	Type         string        `toml:",omitempty"`
+	UpdatePeriod time.Duration `toml:",omitempty"`
+	Factor       float64       `toml:",omitempty"`
+	KafkaURL     string        `toml:",omitempty"`
+	Topic        string        `toml:",omitempty"`
+	GroupID      string        `toml:",omitempty"`
+	Username     string        `toml:",omitempty"`
+	Password     string        `toml:",omitempty"`
+	RootCAPath   string        `toml:",omitempty"`
+	L1CoinId     int           `toml:",omitempty"`
+	L2CoinId     int           `toml:",omitempty"`
+	// DefaultL1CoinPrice is the L1 token's coin price
+	DefaultL1CoinPrice float64 `toml:",omitempty"`
+	// DefaultL2CoinPrice is the native token's coin price
+	DefaultL2CoinPrice float64 `toml:",omitempty"`
+	GasPriceUsdt       float64 `toml:",omitempty"`
+
+	CongestionThreshold int `toml:",omitempty"`
+
+	// Default is the default gas price for X Layer
+	Default *big.Int `toml:",omitempty"`
+}
+
+var (
+	DefaultXLayerPrice = big.NewInt(1 * params.GWei)
+)
+
 type Config struct {
 	Blocks           int
 	Percentile       int
@@ -51,6 +89,9 @@ type Config struct {
 	IgnorePrice      *big.Int `toml:",omitempty"`
 
 	MinSuggestedPriorityFee *big.Int `toml:",omitempty"` // for Optimism fee suggestion
+
+	// For X Layer
+	XLayer XLayerConfig
 }
 
 // OracleBackend includes all necessary background APIs for oracle.
@@ -246,6 +287,7 @@ func (oracle *Oracle) SuggestTipCap(ctx context.Context) (*big.Int, error) {
 	if price.Cmp(oracle.maxPrice) > 0 {
 		price = new(big.Int).Set(oracle.maxPrice)
 	}
+
 	oracle.cacheLock.Lock()
 	oracle.lastHead = headHash
 	oracle.lastPrice = price

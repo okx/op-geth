@@ -68,6 +68,15 @@ func NewEthereumAPI(b Backend) *EthereumAPI {
 
 // GasPrice returns a suggestion for a gas price for legacy transactions.
 func (api *EthereumAPI) GasPrice(ctx context.Context) (*hexutil.Big, error) {
+
+	// For XLayer
+	if api.b.XLayerGpricer() != nil && api.b.XLayerGpricer().GetConfig().XLayer.Type != "" {
+		gasPrice, err := api.gasPriceXL(ctx)
+		log.Debug("XLayer gas price is enabled, use XLayer gas price", "gasPrice", gasPrice.String())
+		return (*hexutil.Big)(gasPrice), err
+	}
+
+	// Original logic for non-XLayer
 	tipcap, err := api.b.SuggestGasTipCap(ctx)
 	if err != nil {
 		return nil, err
@@ -80,6 +89,29 @@ func (api *EthereumAPI) GasPrice(ctx context.Context) (*hexutil.Big, error) {
 
 // MaxPriorityFeePerGas returns a suggestion for a gas tip cap for dynamic fee transactions.
 func (api *EthereumAPI) MaxPriorityFeePerGas(ctx context.Context) (*hexutil.Big, error) {
+
+	// For XLayer
+	if api.b.XLayerGpricer() != nil && api.b.XLayerGpricer().GetConfig().XLayer.Type != "" {
+		// get gasPrice from XLayer
+		gasPrice, err := api.gasPriceXL(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		// sub baseFee
+		tipcap := new(big.Int).Set(gasPrice)
+		head := api.b.CurrentHeader()
+		if head.BaseFee != nil {
+			tipcap = tipcap.Sub(tipcap, head.BaseFee)
+			if tipcap.Cmp(big.NewInt(0)) < 0 {
+				tipcap = big.NewInt(0)
+			}
+		}
+
+		log.Debug("XLayer gas price is enabled, use XLayer gas price", "gasPrice", gasPrice.String(), "baseFee", head.BaseFee.String(), "tipcap", tipcap.String())
+		return (*hexutil.Big)(tipcap), err
+	}
+
 	tipcap, err := api.b.SuggestGasTipCap(ctx)
 	if err != nil {
 		return nil, err
@@ -2124,4 +2156,10 @@ func checkTxFee(gasPrice *big.Int, gas uint64, cap float64) error {
 // CheckTxFee exports a helper function used to check whether the fee is reasonable
 func CheckTxFee(gasPrice *big.Int, gas uint64, cap float64) error {
 	return checkTxFee(gasPrice, gas, cap)
+}
+
+// gasPriceXL handles gas price for XLayer
+func (api *EthereumAPI) gasPriceXL(ctx context.Context) (*big.Int, error) {
+	gasResult := api.b.XLayerGpricer().GetGasCache().GetLatest()
+	return gasResult, nil
 }
