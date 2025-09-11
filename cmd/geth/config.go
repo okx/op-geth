@@ -252,6 +252,8 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		})
 	}
 
+	// If migration is not configured, configure log filter RPC API.
+	// We will add filter RPC API if migration is configured, see eth/backend.go#APIs
 	if cfg.Eth.MigrationBlock == nil || cfg.Eth.PPRPCUrl == "" {
 		// Configure log filter RPC API.
 		filterSystem := utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
@@ -260,7 +262,6 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 			utils.RegisterGraphQLService(stack, backend, filterSystem, &cfg.Node)
 		}
 	}
-
 	// Add the Ethereum Stats daemon if requested.
 	if cfg.Ethstats.URL != "" {
 		utils.RegisterEthStatsService(stack, backend, cfg.Ethstats.URL)
