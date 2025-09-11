@@ -3,7 +3,9 @@ package eth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -13,6 +15,10 @@ import (
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/rpc"
+)
+
+var (
+	errInvalidBlockRange = errors.New("invalid block range params")
 )
 
 // MigrationConfig holds the configuration for RPC migration
@@ -193,19 +199,46 @@ func NewMigrationFilterAPI(original *filters.FilterAPI, config *MigrationConfig)
 }
 
 func (api *MigrationFilterAPI) GetLogs(ctx context.Context, crit filters.FilterCriteria) ([]*types.Log, error) {
-	// begin := rpc.LatestBlockNumber.Int64()
-	// if crit.FromBlock != nil {
-	// 	begin = crit.FromBlock.Int64()
-	// }
-	// end := rpc.LatestBlockNumber.Int64()
-	// if crit.ToBlock != nil {
-	// 	end = crit.ToBlock.Int64()
-	// }
-	// if api.config != nil && api.config.shouldProxy(uint64(crit.ToBlock.Int64())) {
-	// 	var result []*types.Log
-	// 	err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getLogs", crit)
-	// 	return result, err
-	// }
+	begin := rpc.LatestBlockNumber.Int64()
+	if crit.FromBlock != nil {
+		begin = crit.FromBlock.Int64()
+	}
+	end := rpc.LatestBlockNumber.Int64()
+	if crit.ToBlock != nil {
+		end = crit.ToBlock.Int64()
+	}
+	if begin > 0 && end > 0 && begin > end {
+		return nil, errInvalidBlockRange
+	}
+
+	// 1. begin and end are both earlier than migration block
+	if begin < int64(api.config.MigrationBlock) && end < int64(api.config.MigrationBlock) {
+		var result []*types.Log
+		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getLogs", crit)
+		return result, err
+	}
+
+	// 2. begin and end are both later than migration block
+	if begin >= int64(api.config.MigrationBlock) && end >= int64(api.config.MigrationBlock) {
+		return api.FilterAPI.GetLogs(ctx, crit)
+	}
+
+	// 3. begin is earlier than migration block and end is later than migration block
+	if begin < int64(api.config.MigrationBlock) && end >= int64(api.config.MigrationBlock) {
+		crit.ToBlock = big.NewInt(int64(api.config.MigrationBlock))
+		var result []*types.Log
+		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getLogs", crit)
+		if err != nil || result == nil {
+			return nil, err
+		}
+
+		localResult, err := api.FilterAPI.GetLogs(ctx, crit)
+		if err != nil || localResult == nil {
+			return nil, err
+		}
+		return append(result, localResult...), nil
+	}
+
 	return api.FilterAPI.GetLogs(ctx, crit)
 }
 
