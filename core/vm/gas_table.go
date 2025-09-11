@@ -288,7 +288,7 @@ var (
 )
 
 func gasCreate2(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
-	gas, err := memoryGasCost(mem, memorySize)
+	memGas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
 		return 0, err
 	}
@@ -299,9 +299,13 @@ func gasCreate2(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memoryS
 	if wordGas, overflow = math.SafeMul(toWordSize(wordGas), params.Keccak256WordGas); overflow {
 		return 0, ErrGasUintOverflow
 	}
-	if gas, overflow = math.SafeAdd(gas, wordGas); overflow {
+	gas, overflow := math.SafeAdd(memGas, wordGas)
+	if overflow {
 		return 0, ErrGasUintOverflow
 	}
+
+	fmt.Printf("gasCreate2: gas=%d, memGas=%d\n", gas, memGas)
+
 	return gas, nil
 }
 
@@ -325,7 +329,7 @@ func gasCreateEip3860(evm *EVM, contract *Contract, stack *Stack, mem *Memory, m
 	return gas, nil
 }
 func gasCreate2Eip3860(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
-	gas, err := memoryGasCost(mem, memorySize)
+	memGas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
 		return 0, err
 	}
@@ -338,9 +342,13 @@ func gasCreate2Eip3860(evm *EVM, contract *Contract, stack *Stack, mem *Memory, 
 	}
 	// Since size <= params.MaxInitCodeSize, these multiplication cannot overflow
 	moreGas := (params.InitCodeWordGas + params.Keccak256WordGas) * ((size + 31) / 32)
-	if gas, overflow = math.SafeAdd(gas, moreGas); overflow {
+	gas, overflow := math.SafeAdd(memGas, moreGas)
+	if overflow {
 		return 0, ErrGasUintOverflow
 	}
+
+	fmt.Printf("gasCreate2Eip3860: gas=%d, memGas=%d\n", gas, memGas)
+
 	return gas, nil
 }
 
