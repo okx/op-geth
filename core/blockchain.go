@@ -47,6 +47,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/internal/syncx"
 	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
@@ -1950,6 +1951,20 @@ type blockProcessingResult struct {
 // processBlock executes and validates the given block. If there was no error
 // it writes the block and associated state to database.
 func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, start time.Time, setHead bool) (_ *blockProcessingResult, blockEndErr error) {
+	blockHash := block.Hash().Hex()
+	blockHeight := block.NumberU64()
+
+	// Log block insertion start
+	monitor.LogTransactionStart(
+		blockHash,
+		monitor.ServiceNameBlockchain,
+		monitor.StepBlockchainInsert.ID,
+		monitor.StepBlockchainInsert.Key,
+		blockHeight,
+		0, // block type
+		"", "", "", 0,
+	)
+
 	if bc.logger != nil && bc.logger.OnBlockStart != nil {
 		bc.logger.OnBlockStart(tracing.BlockEvent{
 			Block:     block,
@@ -1967,6 +1982,9 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	pstart := time.Now()
 	res, err := bc.processor.Process(block, statedb, bc.vmConfig)
 	if err != nil {
+		monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainInsert.ID,
+			monitor.StepBlockchainInsert.Key, blockHeight, blockHash, block.Time(),
+			0, "failed", err.Error(), 0)
 		bc.reportBlock(block, res, err)
 		return nil, err
 	}
@@ -1974,6 +1992,9 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 
 	vstart := time.Now()
 	if err := bc.validator.ValidateState(block, statedb, res, false); err != nil {
+		monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainValidate.ID,
+			monitor.StepBlockchainValidate.Key, blockHeight, blockHash, block.Time(),
+			0, "failed", err.Error(), 0)
 		bc.reportBlock(block, res, err)
 		return nil, err
 	}
@@ -2050,6 +2071,11 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 
 	blockWriteTimer.Update(time.Since(wstart) - max(statedb.AccountCommits, statedb.StorageCommits) /* concurrent */ - statedb.SnapshotCommits - statedb.TrieDBCommits)
 	blockInsertTimer.UpdateSince(start)
+
+	// Log successful block finalization
+	monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainFinalize.ID,
+		monitor.StepBlockchainFinalize.Key, blockHeight, blockHash, block.Time(),
+		0, "finalized", "", res.GasUsed)
 
 	return &blockProcessingResult{usedGas: res.GasUsed, procTime: proctime, status: status}, nil
 }

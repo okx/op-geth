@@ -11,6 +11,11 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
+const (
+	// DepositTxType is the transaction type for deposit transactions (system transactions)
+	DepositTxType = 0x7E
+)
+
 // TraceLogEntry represents a single trace log entry
 type TraceLogEntry struct {
 	Timestamp       int64  `json:"timestamp"`
@@ -90,6 +95,11 @@ func LogTrace(txHash, serviceName string, processID uint64, processWord string,
 	status string, errMsg string, gasUsed uint64, gasPrice, from, to, value string, nonce uint64) {
 
 	if globalLogger == nil || !globalLogger.enabled {
+		return
+	}
+
+	// Filter out deposit transactions (system transactions)
+	if txType == DepositTxType {
 		return
 	}
 
