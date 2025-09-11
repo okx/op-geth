@@ -180,7 +180,7 @@ func (s *XLayerScheduler) updateDynamicGP(ctx context.Context) {
 	}
 
 	s.gpricer.GetGasCache().SetLatest(gasResult)
-	log.Info(fmt.Sprintf("Updated gas price: %s", rgp.String()))
+	log.Info(fmt.Sprintf("Updated gas price: %s", gasResult.String()))
 
 }
 

@@ -198,6 +198,7 @@ func (rp *KafkaProcessor) Update(data []byte) error {
 func (rp *KafkaProcessor) updateL2CoinPrice(price float64) {
 	rp.rwLock.Lock()
 	defer rp.rwLock.Unlock()
+	log.Debug("updateL2CoinPrice", "price", price)
 	rp.l2Price = price
 }
 
@@ -208,14 +209,17 @@ func (rp *KafkaProcessor) updateL1L2CoinPrice(prices map[int]float64) {
 	rp.rwLock.Lock()
 	defer rp.rwLock.Unlock()
 	if v, ok := prices[rp.l1CoinId]; ok {
+		log.Debug("updateL1L2CoinPrice", "l1Price", v)
 		rp.tmpPrices.l1Price = v
 		rp.tmpPrices.l1Update = true
 	}
 	if v, ok := prices[rp.l2CoinId]; ok {
+		log.Debug("updateL1L2CoinPrice", "l2Price", v)
 		rp.tmpPrices.l2Price = v
 		rp.tmpPrices.l2Update = true
 	}
 	if rp.tmpPrices.l1Update && rp.tmpPrices.l2Update {
+		log.Debug("updateL1L2CoinPrice", "l1Price", rp.tmpPrices.l1Price, "l2Price", rp.tmpPrices.l2Price)
 		rp.l1Price = rp.tmpPrices.l1Price
 		rp.l2Price = rp.tmpPrices.l2Price
 		rp.tmpPrices.l1Update = false

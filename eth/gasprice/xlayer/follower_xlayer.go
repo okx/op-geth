@@ -44,6 +44,7 @@ func (f *FollowerGasPrice) UpdateGasPriceAvg(l1GasPrice *big.Int) {
 
 	// Get L1 and L2 coin prices
 	l1CoinPrice, l2CoinPrice := f.kafkaPrc.GetL1L2CoinPrice()
+	log.Debug("UpdateGasPriceAvg", "l1CoinPrice", l1CoinPrice, "l2CoinPrice", l2CoinPrice)
 	if l1CoinPrice < minUSDTPrice {
 		log.Warn("update gas price average failed, the L1 native coin price is too small")
 		return
