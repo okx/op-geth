@@ -194,6 +194,11 @@ type Config struct {
 
 	InteropMessageRPC       string `toml:",omitempty"`
 	InteropMempoolFiltering bool   `toml:",omitempty"`
+
+	// Migration configuration for routing to xlayer-erigon
+	MigrationBlock *uint64       `toml:",omitempty"` // Block height threshold for migration routing
+	PPRPCUrl       string        `toml:",omitempty"` // XLayer-Erigon RPC endpoint URL
+	PPRPCTimeout   time.Duration `toml:",omitempty"` // Timeout for PP RPC calls (default: 10s)
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain config.
