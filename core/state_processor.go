@@ -193,7 +193,11 @@ func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, 
 		innerTxs = afterApplyTransaction(evm, result.Failed())
 	}
 
-	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce), innerTxs, nil
+	// For X Layer, realtime
+	receipt = MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce)
+	statedb.SendTxInfoToRealtimeChannel(evm.Context.Time, tx, receipt, nil, result.Entries)
+
+	return receipt, innerTxs, nil
 }
 
 // MakeReceipt generates the receipt object for a transaction given its execution result.

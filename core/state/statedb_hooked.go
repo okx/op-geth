@@ -276,3 +276,8 @@ func (s *hookedStateDB) Finalise(deleteEmptyObjects bool) {
 		}
 	}
 }
+
+// For X Layer, realtime
+func (s *hookedStateDB) GenerateEntriesSinceSnapshot(revid int) Entries {
+	return s.inner.GenerateEntriesSinceSnapshot(revid)
+}

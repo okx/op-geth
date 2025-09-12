@@ -290,6 +290,8 @@ func init() {
 		consoleFlags,
 		debug.Flags,
 		metricsFlags,
+		// For X Layer
+		utils.XLayerFlags,
 	)
 	flags.AutoEnvVars(app.Flags, "GETH")
 

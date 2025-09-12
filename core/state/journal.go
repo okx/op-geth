@@ -23,7 +23,11 @@ import (
 	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
+	libcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 	"github.com/holiman/uint256"
 )
 
@@ -43,6 +47,9 @@ type journalEntry interface {
 
 	// copy returns a deep-copied journal entry.
 	copy() journalEntry
+
+	// For X Layer, realtime. Collect transactional changeset
+	collectChangeset(*realtimeTypes.Changeset)
 }
 
 // journal contains the list of state modifications applied since the last state
@@ -164,12 +171,13 @@ func (j *journal) destruct(addr common.Address) {
 	j.append(selfDestructChange{account: addr})
 }
 
-func (j *journal) storageChange(addr common.Address, key, prev, origin common.Hash) {
+func (j *journal) storageChange(addr common.Address, key, prev, origin, post common.Hash) {
 	j.append(storageChange{
 		account:   addr,
 		key:       key,
 		prevvalue: prev,
 		origvalue: origin,
+		postvalue: post,
 	})
 }
 
@@ -185,24 +193,29 @@ func (j *journal) refundChange(previous uint64) {
 	j.append(refundChange{prev: previous})
 }
 
-func (j *journal) balanceChange(addr common.Address, previous *uint256.Int) {
+func (j *journal) balanceChange(addr common.Address, previous *uint256.Int, post *uint256.Int) {
 	j.append(balanceChange{
 		account: addr,
 		prev:    previous.Clone(),
+		post:    post.Clone(),
 	})
 }
 
-func (j *journal) setCode(address common.Address, prevCode []byte) {
+func (j *journal) setCode(address common.Address, prevCode, postCode []byte, prevHash, postHash libcommon.Hash) {
 	j.append(codeChange{
 		account:  address,
 		prevCode: prevCode,
+		postCode: postCode,
+		prevHash: prevHash,
+		postHash: postHash,
 	})
 }
 
-func (j *journal) nonceChange(address common.Address, prev uint64) {
+func (j *journal) nonceChange(address common.Address, prev, post uint64) {
 	j.append(nonceChange{
 		account: address,
 		prev:    prev,
+		post:    post,
 	})
 }
 
@@ -247,20 +260,30 @@ type (
 	balanceChange struct {
 		account common.Address
 		prev    *uint256.Int
+		// For X Layer, realtime
+		post *uint256.Int
 	}
 	nonceChange struct {
 		account common.Address
 		prev    uint64
+		// For X Layer, realtime
+		post uint64
 	}
 	storageChange struct {
 		account   common.Address
 		key       common.Hash
 		prevvalue common.Hash
 		origvalue common.Hash
+		// For X Layer, realtime
+		postvalue common.Hash
 	}
 	codeChange struct {
 		account  common.Address
 		prevCode []byte
+		// For X Layer, realtime
+		postCode []byte
+		prevHash libcommon.Hash
+		postHash libcommon.Hash
 	}
 
 	// Changes to other state values.
@@ -304,6 +327,16 @@ func (ch createObjectChange) copy() journalEntry {
 	}
 }
 
+// For X Layer, realtime
+func (ch createObjectChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	delete(cs.DeletedAccounts, ch.account)
+	cs.BalanceChanges[ch.account] = uint256.NewInt(0)
+	cs.NonceChanges[ch.account] = 0
+	cs.CodeHashChanges[ch.account] = types.EmptyCodeHash
+	cs.StorageChanges[ch.account] = make(map[libcommon.Hash]libcommon.Hash)
+	log.Debug(fmt.Sprintf("[Realtime] createObjectChange: %v", ch.account))
+}
+
 func (ch createContractChange) revert(s *StateDB) {
 	s.getStateObject(ch.account).newContract = false
 }
@@ -316,6 +349,10 @@ func (ch createContractChange) copy() journalEntry {
 	return createContractChange{
 		account: ch.account,
 	}
+}
+
+// For X Layer, realtime
+func (ch createContractChange) collectChangeset(cs *realtimeTypes.Changeset) {
 }
 
 func (ch selfDestructChange) revert(s *StateDB) {
@@ -335,6 +372,21 @@ func (ch selfDestructChange) copy() journalEntry {
 	}
 }
 
+// For X Layer, realtime
+func (ch selfDestructChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	if _, exists := cs.DeletedAccounts[ch.account]; exists {
+		return
+	}
+
+	cs.DeletedAccounts[ch.account] = struct{}{}
+
+	delete(cs.BalanceChanges, ch.account)
+	delete(cs.NonceChanges, ch.account)
+	delete(cs.CodeHashChanges, ch.account)
+	delete(cs.StorageChanges, ch.account)
+	log.Debug(fmt.Sprintf("[Realtime] selfdestructChange: %v", ch.account))
+}
+
 var ripemd = common.HexToAddress("0000000000000000000000000000000000000003")
 
 func (ch touchChange) revert(s *StateDB) {
@@ -350,6 +402,10 @@ func (ch touchChange) copy() journalEntry {
 	}
 }
 
+// For X Layer, realtime
+func (ch touchChange) collectChangeset(cs *realtimeTypes.Changeset) {
+}
+
 func (ch balanceChange) revert(s *StateDB) {
 	s.getStateObject(ch.account).setBalance(ch.prev)
 }
@@ -362,7 +418,14 @@ func (ch balanceChange) copy() journalEntry {
 	return balanceChange{
 		account: ch.account,
 		prev:    new(uint256.Int).Set(ch.prev),
+		post:    new(uint256.Int).Set(ch.post),
 	}
+}
+
+// For X Layer, realtime
+func (ch balanceChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	cs.BalanceChanges[ch.account] = ch.post
+	log.Debug(fmt.Sprintf("[Realtime] balanceChange: %v -> %v", ch.account, *cs.BalanceChanges[ch.account]))
 }
 
 func (ch nonceChange) revert(s *StateDB) {
@@ -377,7 +440,14 @@ func (ch nonceChange) copy() journalEntry {
 	return nonceChange{
 		account: ch.account,
 		prev:    ch.prev,
+		post:    ch.post,
 	}
+}
+
+// For X Layer, realtime
+func (ch nonceChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	cs.NonceChanges[ch.account] = ch.post
+	log.Debug(fmt.Sprintf("[Realtime] nonceChange: %v -> %v", ch.account, ch.post))
 }
 
 func (ch codeChange) revert(s *StateDB) {
@@ -392,7 +462,19 @@ func (ch codeChange) copy() journalEntry {
 	return codeChange{
 		account:  ch.account,
 		prevCode: ch.prevCode,
+		postCode: ch.postCode,
+		prevHash: ch.prevHash,
+		postHash: ch.postHash,
 	}
+}
+
+// For X Layer, realtime
+func (ch codeChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	cs.CodeHashChanges[ch.account] = ch.postHash
+	if ch.postHash != types.EmptyCodeHash {
+		cs.CodeChanges[ch.postHash] = ch.postCode
+	}
+	log.Debug(fmt.Sprintf("[Realtime] codeChange: %v -> %v", ch.account, ch.postHash))
 }
 
 func (ch storageChange) revert(s *StateDB) {
@@ -408,7 +490,17 @@ func (ch storageChange) copy() journalEntry {
 		account:   ch.account,
 		key:       ch.key,
 		prevvalue: ch.prevvalue,
+		origvalue: ch.origvalue,
+		postvalue: ch.postvalue,
 	}
+}
+
+func (ch storageChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	if _, ok := cs.StorageChanges[ch.account]; !ok {
+		cs.StorageChanges[ch.account] = make(map[libcommon.Hash]libcommon.Hash)
+	}
+	cs.StorageChanges[ch.account][ch.key] = ch.postvalue
+	log.Debug(fmt.Sprintf("[Realtime] storageChange: %v -> %v -> %v", ch.account, ch.key, cs.StorageChanges[ch.account][ch.key]))
 }
 
 func (ch transientStorageChange) revert(s *StateDB) {
@@ -427,6 +519,10 @@ func (ch transientStorageChange) copy() journalEntry {
 	}
 }
 
+// For X Layer, realtime
+func (ch transientStorageChange) collectChangeset(cs *realtimeTypes.Changeset) {
+}
+
 func (ch refundChange) revert(s *StateDB) {
 	s.refund = ch.prev
 }
@@ -439,6 +535,10 @@ func (ch refundChange) copy() journalEntry {
 	return refundChange{
 		prev: ch.prev,
 	}
+}
+
+// For X Layer, realtime
+func (ch refundChange) collectChangeset(cs *realtimeTypes.Changeset) {
 }
 
 func (ch addLogChange) revert(s *StateDB) {
@@ -459,6 +559,10 @@ func (ch addLogChange) copy() journalEntry {
 	return addLogChange{
 		txhash: ch.txhash,
 	}
+}
+
+// For X Layer, realtime
+func (ch addLogChange) collectChangeset(cs *realtimeTypes.Changeset) {
 }
 
 func (ch accessListAddAccountChange) revert(s *StateDB) {
@@ -484,6 +588,10 @@ func (ch accessListAddAccountChange) copy() journalEntry {
 	}
 }
 
+// For X Layer, realtime
+func (ch accessListAddAccountChange) collectChangeset(cs *realtimeTypes.Changeset) {
+}
+
 func (ch accessListAddSlotChange) revert(s *StateDB) {
 	s.accessList.DeleteSlot(ch.address, ch.slot)
 }
@@ -497,4 +605,8 @@ func (ch accessListAddSlotChange) copy() journalEntry {
 		address: ch.address,
 		slot:    ch.slot,
 	}
+}
+
+// For X Layer, realtime
+func (ch accessListAddSlotChange) collectChangeset(cs *realtimeTypes.Changeset) {
 }

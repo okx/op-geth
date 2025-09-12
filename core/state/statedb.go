@@ -157,6 +157,9 @@ type StateDB struct {
 
 	// singlethreaded avoids creation of additional threads when set to true for compatibility with cannon.
 	singlethreaded bool
+
+	// For X Layer, realtime
+	txInfoChan chan TxInfo
 }
 
 // New creates a new state from a given trie.
@@ -182,6 +185,7 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 		journal:              newJournal(),
 		accessList:           newAccessList(),
 		transientStorage:     newTransientStorage(),
+		txInfoChan:           nil,
 	}
 	if db.TrieDB().IsVerkle() {
 		sdb.accessEvents = NewAccessEvents(db.PointCache())

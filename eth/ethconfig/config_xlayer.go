@@ -1,10 +1,32 @@
 package ethconfig
 
-import "github.com/ethereum/go-ethereum/common"
+import (
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/realtime"
+	"github.com/ethereum/go-ethereum/realtime/kafka"
+)
+
+var DefaultXLayerConfig = XLayerConfig{
+	IsSequencer: false,
+	Realtime: realtime.RealtimeConfig{
+		Enable:               false,
+		EnableSubscribe:      false,
+		CacheHeightThreshold: 10,
+		Kafka:                kafka.KafkaConfig{},
+		CacheDumpPath:        "",
+	},
+	OkPay: OkPayConfig{
+		PriorityEnable:        false,
+		SenderAccountsList:    []common.Address{},
+		BlockPriorityTxsLimit: 0,
+	},
+}
 
 // XLayerConfig is the X Layer config used on the eth backend
 type XLayerConfig struct {
-	OkPay OkPayConfig `toml:",omitempty"`
+	IsSequencer bool                    `toml:",omitempty"`
+	Realtime    realtime.RealtimeConfig `toml:",omitempty"`
+	OkPay       OkPayConfig             `toml:",omitempty"`
 }
 
 type OkPayConfig struct {
