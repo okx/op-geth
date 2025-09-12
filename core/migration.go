@@ -156,39 +156,44 @@ func decodeAccountData(enc []byte) (*types.Account, error) {
 	return account, nil
 }
 
-func mergeConflictAccount(addr common.Address, destAccount, genesisAccount *types.Account) {
+func mergeConflictAccount(addr common.Address, dbAccount, genesisAccount *types.Account) types.Account {
+
+	var destAccount types.Account
 	switch addr {
 	// TODO: implement conflict cases here:
 	// case params.WithdrawalQueueAddress:
-	// 	dbAccount.Balance = genesisAccount.Balance
-	// 	dbAccount.Nonce = genesisAccount.Nonce
-	// 	dbAccount.Code = genesisAccount.Code
-	// 	dbAccount.Storage = genesisAccount.Storage
+	// 	destAccount.Balance = genesisAccount.Balance
+	// 	destAccount.Nonce = genesisAccount.Nonce
+	// 	destAccount.Code = genesisAccount.Code
+	// 	destAccount.Storage = genesisAccount.Storage
 	default:
 		destAccount.Balance = genesisAccount.Balance
 		destAccount.Nonce = genesisAccount.Nonce
 		destAccount.Code = genesisAccount.Code
 		destAccount.Storage = genesisAccount.Storage
 	}
+
+	return destAccount
 }
 
-func mergeGenesisAlloc(dbAlloc, genesisAlloc *types.GenesisAlloc) (types.GenesisAlloc, error) {
+func mergeGenesisAlloc(destAlloc, genesisAlloc *types.GenesisAlloc) (types.GenesisAlloc, error) {
 	overridedAlloc := make(types.GenesisAlloc)
 	for addr, account := range *genesisAlloc {
-		if dbAccount, exists := (*dbAlloc)[addr]; exists {
+		if dbAccount, exists := (*destAlloc)[addr]; exists {
 			overridedAlloc[addr] = types.Account{
 				Balance: dbAccount.Balance,
 				Nonce:   dbAccount.Nonce,
 				Code:    dbAccount.Code,
 				Storage: dbAccount.Storage,
 			}
-			mergeConflictAccount(addr, &dbAccount, &account)
+			destAccount := mergeConflictAccount(addr, &dbAccount, &account)
+			(*destAlloc)[addr] = destAccount
 		} else {
 			if account.Balance == nil {
 				account.Balance = big.NewInt(0)
 			}
 
-			(*dbAlloc)[addr] = account
+			(*destAlloc)[addr] = account
 		}
 	}
 
