@@ -181,7 +181,7 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 	if memTableSize >= maxMemTableSize {
 		memTableSize = maxMemTableSize - 1
 	}
-	log.Info("memTableSize", "size", memTableSize, "maxMemTableSize", maxMemTableSize)
+
 	db := &Database{
 		fn:           file,
 		log:          logger,
@@ -210,7 +210,7 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 		// Here use all available CPUs for faster compaction.
 		MaxConcurrentCompactions: runtime.NumCPU,
 
-		//L0CompactionThreshold: 8,
+		L0CompactionThreshold: 8,
 
 		// Per-level options. Options for at least one level must be specified. The
 		// options for the last level are used for all subsequent levels.
@@ -235,6 +235,8 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 	// Disable seek compaction explicitly. Check https://github.com/ethereum/go-ethereum/pull/20130
 	// for more details.
 	opt.Experimental.ReadSamplingMultiplier = -1
+
+	log.Info("memTableSize", "size", memTableSize, "maxMemTableSize", maxMemTableSize, "L0CompactionThreshold", opt.L0CompactionThreshold)
 
 	// Open the db and recover any potential corruptions
 	innerDB, err := pebble.Open(file, opt)
