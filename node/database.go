@@ -23,13 +23,14 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/ethdb/pebble"
+	"github.com/ethereum/go-ethereum/ethdb/rocksdb"
 	"github.com/ethereum/go-ethereum/log"
 )
 
 // openOptions contains the options to apply when opening a database.
 // OBS: If AncientsDirectory is empty, it indicates that no freezer is to be used.
 type openOptions struct {
-	Type              string // "leveldb" | "pebble"
+	Type              string // "leveldb" | "pebble" | "rocksdb"
 	Directory         string // the datadir
 	AncientsDirectory string // the ancients-dir
 	Namespace         string // the namespace for database relevant metrics
@@ -43,7 +44,7 @@ type openOptions struct {
 	Ephemeral bool
 }
 
-// openDatabase opens both a disk-based key-value database such as leveldb or pebble, but also
+// openDatabase opens both a disk-based key-value database such as leveldb, pebble, or rocksdb, but also
 // integrates it with a freezer database -- if the AncientDir option has been
 // set on the provided OpenOptions.
 // The passed o.AncientDir indicates the path of root ancient directory where
@@ -64,7 +65,7 @@ func openDatabase(o openOptions) (ethdb.Database, error) {
 	return frdb, nil
 }
 
-// openKeyValueDatabase opens a disk-based key-value database, e.g. leveldb or pebble.
+// openKeyValueDatabase opens a disk-based key-value database, e.g. leveldb, pebble, or rocksdb.
 //
 //	                      type == null          type != null
 //	                   +----------------------------------------
@@ -72,7 +73,7 @@ func openDatabase(o openOptions) (ethdb.Database, error) {
 //	db is existent     |  from db         |  specified type (if compatible)
 func openKeyValueDatabase(o openOptions) (ethdb.Database, error) {
 	// Reject any unsupported database type
-	if len(o.Type) != 0 && o.Type != rawdb.DBLeveldb && o.Type != rawdb.DBPebble {
+	if len(o.Type) != 0 && o.Type != rawdb.DBLeveldb && o.Type != rawdb.DBPebble && o.Type != rawdb.DBRocksdb {
 		return nil, fmt.Errorf("unknown db.engine %v", o.Type)
 	}
 	// Retrieve any pre-existing database's type and use that or the requested one
@@ -84,6 +85,10 @@ func openKeyValueDatabase(o openOptions) (ethdb.Database, error) {
 	if o.Type == rawdb.DBPebble || existingDb == rawdb.DBPebble {
 		log.Info("Using pebble as the backing database")
 		return newPebbleDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly, o.Ephemeral)
+	}
+	if o.Type == rawdb.DBRocksdb || existingDb == rawdb.DBRocksdb {
+		log.Info("Using rocksdb as the backing database")
+		return newRocksDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly)
 	}
 	if o.Type == rawdb.DBLeveldb || existingDb == rawdb.DBLeveldb {
 		log.Info("Using leveldb as the backing database")
@@ -112,5 +117,16 @@ func newPebbleDBDatabase(file string, cache int, handles int, namespace string, 
 	if err != nil {
 		return nil, err
 	}
+	return rawdb.NewDatabase(db), nil
+}
+
+// newRocksDBDatabase creates a persistent key-value database without a freezer
+// moving immutable chain segments into cold storage.
+func newRocksDBDatabase(file string, cache int, handles int, namespace string, readonly bool) (ethdb.Database, error) {
+	db, err := rocksdb.New(file, cache, handles, namespace, readonly)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("Using RocksDB as the backing database")
 	return rawdb.NewDatabase(db), nil
 }

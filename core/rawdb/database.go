@@ -309,6 +309,7 @@ func NewMemoryDatabase() ethdb.Database {
 const (
 	DBPebble  = "pebble"
 	DBLeveldb = "leveldb"
+	DBRocksdb = "rocksdb"
 )
 
 // PreexistingDatabase checks the given data directory whether a database is already
@@ -318,12 +319,21 @@ func PreexistingDatabase(path string) string {
 	if _, err := os.Stat(filepath.Join(path, "CURRENT")); err != nil {
 		return "" // No pre-existing db
 	}
+	// Check for Pebble database (has OPTIONS files)
 	if matches, err := filepath.Glob(filepath.Join(path, "OPTIONS*")); len(matches) > 0 || err != nil {
 		if err != nil {
 			panic(err) // only possible if the pattern is malformed
 		}
 		return DBPebble
 	}
+	// Check for RocksDB database (has *.sst files but no OPTIONS files)
+	if matches, err := filepath.Glob(filepath.Join(path, "*.sst")); len(matches) > 0 || err != nil {
+		if err != nil {
+			panic(err) // only possible if the pattern is malformed
+		}
+		return DBRocksdb
+	}
+	// Default to LevelDB (CURRENT file exists but no OPTIONS or SST files)
 	return DBLeveldb
 }
 
