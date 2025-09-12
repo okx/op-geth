@@ -185,6 +185,10 @@ var (
 		utils.BeaconGenesisTimeFlag,
 		utils.BeaconCheckpointFlag,
 		utils.BeaconCheckpointFileFlag,
+		// For X Layer
+		utils.OkPayPriorityEnableFlag,
+		utils.OkPaySenderAccountsList,
+		utils.OkPayBlockPriorityTxsLimit,
 	}, utils.NetworkFlags, utils.DatabaseFlags)
 
 	rpcFlags = []cli.Flag{
