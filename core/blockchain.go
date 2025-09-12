@@ -999,7 +999,19 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Ha
 			// removed in the hc.SetHead function.
 			rawdb.DeleteBody(db, hash, num)
 			rawdb.DeleteReceipts(db, hash, num)
+
+			// For X Layer
+			// Delete inner transactions for this block during SetHead rollback
+			if block := bc.GetBlock(hash, num); block != nil {
+				txCount := len(block.Transactions())
+				if err := rawdb.DeleteBlockInnerTxs(db, num, txCount); err != nil {
+					log.Error("Failed to delete inner transactions during SetHead rollback",
+						"block", num, "hash", hash, "err", err)
+					// Continue with rollback even if inner tx deletion fails
+				}
+			}
 		}
+
 		// Todo(rjl493456442) txlookup, log index, etc
 	}
 	// If SetHead was only called as a chain reparation method, try to skip
@@ -1513,18 +1525,31 @@ func (bc *BlockChain) writeKnownBlock(block *types.Block) error {
 
 // writeBlockWithState writes block, metadata and corresponding state data to the
 // database.
-func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, statedb *state.StateDB) error {
+func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, statedb *state.StateDB, sortedInnerTxs [][]*types.InnerTx) error {
 	if !bc.HasHeader(block.ParentHash(), block.NumberU64()-1) {
 		return consensus.ErrUnknownAncestor
 	}
 	// Irrelevant of the canonical status, write the block itself to the database.
 	//
-	// Note all the components of block(hash->number map, header, body, receipts)
+	// Note all the components of block(hash->number map, header, body, receipts, innerTxs)
 	// should be written atomically. BlockBatch is used for containing all components.
 	blockBatch := bc.db.NewBatch()
 	rawdb.WriteBlock(blockBatch, block)
 	rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
 	rawdb.WritePreimages(blockBatch, statedb.Preimages())
+
+	// For X Layer
+	// Write inner transactions for each transaction in the block
+	for i, txInnerTxs := range sortedInnerTxs {
+		if len(txInnerTxs) > 0 {
+			if err := rawdb.WriteInnerTxs(blockBatch, block.NumberU64(), uint32(i), txInnerTxs); err != nil {
+				log.Error("Failed to write inner transactions to batch",
+					"block", block.NumberU64(), "tx", i, "count", len(txInnerTxs), "err", err)
+				// Continue processing even if inner tx storage fails
+			}
+		}
+	}
+
 	if err := blockBatch.Write(); err != nil {
 		log.Crit("Failed to write block into disk", "err", err)
 	}
@@ -1595,8 +1620,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 
 // writeBlockAndSetHead is the internal implementation of WriteBlockAndSetHead.
 // This function expects the chain mutex to be held.
-func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
-	if err := bc.writeBlockWithState(block, receipts, state); err != nil {
+func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool, innerTxs [][]*types.InnerTx) (status WriteStatus, err error) {
+	if err := bc.writeBlockWithState(block, receipts, state, innerTxs); err != nil {
 		return NonStatTy, err
 	}
 	currentBlock := bc.CurrentBlock()
@@ -2035,9 +2060,9 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	)
 	if !setHead {
 		// Don't set the head, only insert the block
-		err = bc.writeBlockWithState(block, res.Receipts, statedb)
+		err = bc.writeBlockWithState(block, res.Receipts, statedb, res.InnerTxs)
 	} else {
-		status, err = bc.writeBlockAndSetHead(block, res.Receipts, res.Logs, statedb, false)
+		status, err = bc.writeBlockAndSetHead(block, res.Receipts, res.Logs, statedb, false, res.InnerTxs)
 	}
 	if err != nil {
 		return nil, err
@@ -2320,6 +2345,8 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Header) error 
 	var (
 		deletedTxs []common.Hash
 		rebirthTxs []common.Hash
+		// For X Layer - collect deleted blocks for batch inner tx deletion
+		deletedBlocks []*types.Block
 
 		deletedLogs []*types.Log
 		rebirthLogs []*types.Log
@@ -2356,6 +2383,9 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Header) error 
 		for _, tx := range block.Transactions() {
 			deletedTxs = append(deletedTxs, tx.Hash())
 		}
+
+		// For X Layer
+		deletedBlocks = append(deletedBlocks, block)
 		// Collect deleted logs and emit them for new integrations
 		if logs := bc.collectLogs(block, true); len(logs) > 0 {
 			// Emit revertals latest first, older then
@@ -2394,6 +2424,12 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Header) error 
 	for _, tx := range types.HashDifference(deletedTxs, rebirthTxs) {
 		rawdb.DeleteTxLookupEntry(batch, tx)
 	}
+
+	// For X Layer - delete inner transactions for all deleted blocks
+	for _, block := range deletedBlocks {
+		rawdb.DeleteBlockInnerTxsBatch(batch, block.Number().Uint64(), len(block.Transactions()))
+	}
+
 	// Delete all hash markers that are not part of the new canonical chain.
 	// Because the reorg function does not handle new chain head, all hash
 	// markers greater than or equal to new chain head should be deleted.

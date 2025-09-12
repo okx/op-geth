@@ -133,6 +133,9 @@ type EVM struct {
 	// jumpDests is the aggregated result of JUMPDEST analysis made through
 	// the life cycle of EVM.
 	jumpDests map[common.Hash]bitvec
+
+	// For X Layer
+	innerTxMeta *InnerTxMeta
 }
 
 // NewEVM constructs an EVM instance with the supplied block context, state
@@ -147,6 +150,13 @@ func NewEVM(blockCtx BlockContext, statedb StateDB, chainConfig *params.ChainCon
 		chainConfig: chainConfig,
 		chainRules:  chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Random != nil, blockCtx.Time),
 		jumpDests:   make(map[common.Hash]bitvec),
+
+		// For X Layer
+		innerTxMeta: &InnerTxMeta{
+			lastDepth: 0,
+			indexMap:  map[int]int{0: 0},
+			InnerTxs:  make([]*types.InnerTx, 0),
+		},
 	}
 	evm.precompiles = activePrecompiledContracts(evm.chainRules)
 	evm.interpreter = NewEVMInterpreter(evm)
@@ -167,6 +177,14 @@ func (evm *EVM) SetTxContext(txCtx TxContext) {
 		txCtx.AccessEvents = state.NewAccessEvents(evm.StateDB.PointCache())
 	}
 	evm.TxContext = txCtx
+
+	// For X Layer
+	evm.innerTxMeta = &InnerTxMeta{
+		index:     0,
+		lastDepth: 0,
+		indexMap:  map[int]int{0: 0},
+		InnerTxs:  make([]*types.InnerTx, 0),
+	}
 }
 
 // Cancel cancels any running EVM operation. This may be called concurrently and

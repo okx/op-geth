@@ -211,6 +211,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	var (
 		vmConfig = vm.Config{
 			EnablePreimageRecording: config.EnablePreimageRecording,
+
+			// For X Layer
+			EnableInnerTxs: config.EnableInnerTx,
 		}
 		cacheConfig = &core.CacheConfig{
 			TrieCleanLimit:      config.TrieCleanCache,
@@ -358,6 +361,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 
 	eth.dropper = newDropper(eth.p2pServer.MaxDialedConns(), eth.p2pServer.MaxInboundConns())
+
+	// For X Layer
+	config.Miner.OkPayPriorityEnable = config.XLayer.OkPay.PriorityEnable
+	config.Miner.OkPaySenderAccounts = config.XLayer.OkPay.SenderAccountsList
+	config.Miner.OkPayBlockPriorityTxsLimit = config.XLayer.OkPay.BlockPriorityTxsLimit
 
 	eth.miner = miner.New(eth, config.Miner, eth.engine)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))

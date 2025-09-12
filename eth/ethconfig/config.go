@@ -144,6 +144,10 @@ type Config struct {
 	// Enables tracking of SHA3 preimages in the VM
 	EnablePreimageRecording bool
 
+	// For X Layer
+	// Enables inner transaction capture and storage
+	EnableInnerTx bool
+
 	// Enables VM tracing
 	VMTrace           string
 	VMTraceJsonConfig string
@@ -199,6 +203,8 @@ type Config struct {
 	MigrationBlock *uint64       `toml:",omitempty"` // Block height threshold for migration routing
 	PPRPCUrl       string        `toml:",omitempty"` // XLayer-Erigon RPC endpoint URL
 	PPRPCTimeout   time.Duration `toml:",omitempty"` // Timeout for PP RPC calls (default: 10s)
+	// For X Layer
+	XLayer XLayerConfig `toml:",omitempty"`
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain config.
