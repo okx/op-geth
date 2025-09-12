@@ -127,8 +127,19 @@ func (api *MigrationBlockChainAPI) GetStorageAt(ctx context.Context, address com
 		}
 	}
 
-	// For hash-based queries or recent blocks, use local
-	return api.BlockChainAPI.GetStorageAt(ctx, address, hexKey, blockNrOrHash)
+	// For hash-based queries or recent blocks, try local first, if not found attempt to proxy to erigon
+	result, err := api.BlockChainAPI.GetStorageAt(ctx, address, hexKey, blockNrOrHash)
+	if err == nil && result != nil {
+		return result, nil
+	}
+
+	if api.config != nil && api.config.ErigonClient != nil {
+		var remoteResult hexutil.Bytes
+		err := api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getStorageAt", address, hexKey, blockNrOrHash)
+		return remoteResult, err
+	}
+
+	return result, err
 }
 
 // MigrationTransactionAPI wraps the standard TransactionAPI to add migration routing
