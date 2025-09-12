@@ -48,6 +48,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		BlobPool                                  blobpool.Config
 		GPO                                       gasprice.Config
 		EnablePreimageRecording                   bool
+		EnableInnerTx                             bool
 		VMTrace                                   string
 		VMTraceJsonConfig                         string
 		RPCGasCap                                 uint64
@@ -107,6 +108,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.BlobPool = c.BlobPool
 	enc.GPO = c.GPO
 	enc.EnablePreimageRecording = c.EnablePreimageRecording
+	enc.EnableInnerTx = c.EnableInnerTx
 	enc.VMTrace = c.VMTrace
 	enc.VMTraceJsonConfig = c.VMTraceJsonConfig
 	enc.RPCGasCap = c.RPCGasCap
@@ -170,6 +172,7 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		BlobPool                                  *blobpool.Config
 		GPO                                       *gasprice.Config
 		EnablePreimageRecording                   *bool
+		EnableInnerTx                             *bool
 		VMTrace                                   *string
 		VMTraceJsonConfig                         *string
 		RPCGasCap                                 *uint64
@@ -293,6 +296,9 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.EnablePreimageRecording != nil {
 		c.EnablePreimageRecording = *dec.EnablePreimageRecording
+	}
+	if dec.EnableInnerTx != nil {
+		c.EnableInnerTx = *dec.EnableInnerTx
 	}
 	if dec.VMTrace != nil {
 		c.VMTrace = *dec.VMTrace
