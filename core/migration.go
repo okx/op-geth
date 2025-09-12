@@ -20,11 +20,15 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"runtime"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -32,17 +36,18 @@ import (
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
+	erigonlog "github.com/ledgerwatch/log/v3"
 	"github.com/urfave/cli/v2"
 )
 
 // MigrationConfig represents configuration for state migration
 type MigrationConfig struct {
-	// MigrationPath is the path to the mdbx database for state migration
-	MigrationPath string
+	// ChainDataPath is the path to the mdbx database for state migration
+	ChainDataPath string
 	// IgnoreAddresses is a set of addresses to ignore during migration
 	IgnoreAddresses map[common.Address]struct{}
-	// MigrationSMTPath is the path to the SMT database for migration
-	MigrationSMTPath string
+	// SMTDataPath is the path to the SMT database for migration
+	SMTDataPath string
 	// IgnoreSMTVerify indicates whether to ignore SMT verification during migration
 	IgnoreSMTVerify bool
 }
@@ -201,14 +206,15 @@ func mergeGenesisAlloc(destAlloc, genesisAlloc *types.GenesisAlloc) (types.Genes
 }
 
 // ScanDB scans the mdbx database and returns the ignored genesis alloc
-func ScanDB(migrationPath string, genesis *Genesis, ignoreAddresses map[common.Address]struct{}) (types.GenesisAlloc, types.GenesisAlloc, error) {
+func ScanDB(migrationPath string, genesis *Genesis, ignoreAddresses map[common.Address]struct{}) (types.GenesisAlloc, types.GenesisAlloc, types.GenesisAlloc, error) {
 	start := time.Now()
 	log.Info("Starting ScanDB", "path", migrationPath)
 
 	// Open database with proper error handling
-	db, err := mdbx.Open(context.Background(), migrationPath, nil, true)
+	opts := mdbx.NewMDBX(erigonlog.New()).Path(migrationPath)
+	db, err := opts.Open(context.Background())
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open migration database: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to open migration database: %w", err)
 	}
 	defer db.Close()
 
@@ -296,34 +302,475 @@ func ScanDB(migrationPath string, genesis *Genesis, ignoreAddresses map[common.A
 			return nil
 		})
 	}); err != nil {
-		return nil, nil, fmt.Errorf("failed to scan migration database: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to scan migration database: %w", err)
 	}
 
 	overridedAlloc, _ := mergeGenesisAlloc(&dbAlloc, ga)
 
 	// Update genesis.Alloc
+	oldGenesisAlloc := genesis.Alloc
 	genesis.Alloc = dbAlloc
 	log.Info("ScanDB completed", "ignored_accounts", len(ignoredAlloc), "overrided_accounts", len(overridedAlloc), "genesis_accounts", len(*ga), "elapsed", time.Since(start))
 
-	return ignoredAlloc, overridedAlloc, nil
+	return ignoredAlloc, overridedAlloc, oldGenesisAlloc, nil
+}
+
+func getSmtBatchRootHashOrigin(chainDataPath, smtDataPath string) (*big.Int, error) {
+	// Choose database path: use smtDataPath if not empty, otherwise use chainDataPath
+	dbPath := smtDataPath
+	if dbPath == "" {
+		if chainDataPath == "" {
+			return nil, fmt.Errorf("both chaindata and smt-db-path are empty")
+		}
+		dbPath = chainDataPath
+	}
+
+	ctx := context.Background()
+
+	// Open database
+	opts := mdbx.NewMDBX(erigonlog.New()).Path(dbPath)
+	db, err := opts.Open(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database %s: %w", dbPath, err)
+	}
+	defer db.Close()
+
+	// Begin read transaction
+	tx, err := db.BeginRo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Get lastRoot from SMT stats table
+	lastRootData, err := tx.GetOne("HermezSmtStats", []byte("lastRoot"))
+	if err != nil {
+		return big.NewInt(0), nil // Return zero if table doesn't exist
+	}
+
+	if lastRootData == nil {
+		return big.NewInt(0), nil // Return zero if no data found
+	}
+
+	// Convert hex string to big.Int using hexutil
+	lastRootStr := string(lastRootData)
+	lastRoot, err := hexutil.DecodeBig(lastRootStr)
+	if err != nil {
+		return big.NewInt(0), nil // Return zero if conversion fails
+	}
+
+	return lastRoot, nil
+}
+
+func TinyScalarToArrayUint64(scalar uint64) [8]uint64 {
+	var result [8]uint64
+
+	result[0] = scalar & 0xFFFFFFFF
+	result[1] = (scalar >> 32) & 0xFFFFFFFF
+
+	return result
+}
+
+type NodeKV struct {
+	Key       NodeKey
+	Value     [8]uint64
+	leafHash  [4]uint64
+	level     int // [0, 255]
+	path      []int
+	shortPath [4]uint64 // Store 256 bits using 4 uint64s
+}
+
+func (nv *NodeKV) ToHexString() string {
+	// Convert [8]uint64 to big.Int
+	valueBig := new(big.Int)
+	for i := 0; i < 8; i++ {
+		valueBig.Lsh(valueBig, 64)
+		valueBig.Add(valueBig, new(big.Int).SetUint64(nv.Value[i]))
+	}
+	return fmt.Sprintf("Key: %x, Value: %x", nv.Key.ToBigInt().Text(16), valueBig.Text(16))
+}
+
+func calculateLevels(nodeKvs []*NodeKV, startLevel int) {
+	if len(nodeKvs) <= 1 || startLevel > 255 {
+		return
+	}
+
+	// Find the position that split the tree into two subtrees.
+	splitIndex := sort.Search(len(nodeKvs), func(i int) bool {
+		return nodeKvs[i].Key.GetPath()[startLevel] == 1
+	})
+
+	if splitIndex == 0 {
+		// All nodes belong to the right subtree
+		calculateLevels(nodeKvs, startLevel+1)
+	} else if splitIndex == len(nodeKvs) {
+		// All nodes belong to the left subtree
+		calculateLevels(nodeKvs, startLevel+1)
+	} else {
+		// Both left subtree and right subtree have node(s)
+		for i := range nodeKvs {
+			nodeKvs[i].level = startLevel + 1
+		}
+
+		// Enable concurrent processing only when data size is large enough
+		if len(nodeKvs) > 10000 {
+			var wg sync.WaitGroup
+			wg.Add(2)
+
+			// Process left subtree concurrently
+			go func() {
+				defer wg.Done()
+				calculateLevels(nodeKvs[:splitIndex], startLevel+1)
+			}()
+
+			// Process right subtree concurrently
+			go func() {
+				defer wg.Done()
+				calculateLevels(nodeKvs[splitIndex:], startLevel+1)
+			}()
+
+			wg.Wait()
+		} else {
+			// Process sequentially when data size is small
+			calculateLevels(nodeKvs[:splitIndex], startLevel+1)
+			calculateLevels(nodeKvs[splitIndex:], startLevel+1)
+		}
+	}
+}
+
+func KeyContractStorageHack(ethaddr [8]uint64, storageKey string) NodeKey {
+	storageKeyBig := ConvertHexToBigInt(storageKey)
+	storageKeyArr := ScalarToArrayUint64(storageKeyBig)
+	hk0 := HashByPointers(&storageKeyArr, &BranchCapacity)
+	var key1 = [8]uint64{ethaddr[0], ethaddr[1], ethaddr[2], ethaddr[3], ethaddr[4], ethaddr[5], uint64(SC_STORAGE), uint64(0)}
+	return *HashByPointers(&key1, hk0)
+}
+
+func calculateRoot(nodeKVs []*NodeKV, start, end, level int) [4]uint64 {
+	if start >= end {
+		return [4]uint64{0, 0, 0, 0} // Return zero hash for empty node
+	}
+
+	if start+1 == end {
+		return nodeKVs[start].leafHash // Return leaf hash for single node
+	}
+
+	// Find the split point
+	splitIndex := sort.Search(end-start, func(i int) bool {
+		return nodeKVs[start+i].path[level] == 1
+	}) + start
+
+	// Calculate hashes for left and right subtrees
+	var leftHash, rightHash [4]uint64
+	if end-start > 10000 {
+		var wg sync.WaitGroup
+
+		if splitIndex > start {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				leftHash = calculateRoot(nodeKVs, start, splitIndex, level+1)
+			}()
+		}
+
+		if splitIndex < end {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				rightHash = calculateRoot(nodeKVs, splitIndex, end, level+1)
+			}()
+		}
+
+		wg.Wait()
+	} else {
+		if splitIndex > start {
+			leftHash = calculateRoot(nodeKVs, start, splitIndex, level+1)
+		}
+		if splitIndex < end {
+			rightHash = calculateRoot(nodeKVs, splitIndex, end, level+1)
+		}
+	}
+
+	// Calculate hash for current node
+	return *HashByPointers(
+		&[8]uint64{
+			leftHash[0], leftHash[1], leftHash[2], leftHash[3],
+			rightHash[0], rightHash[1], rightHash[2], rightHash[3],
+		},
+		&BranchCapacity,
+	)
+}
+
+func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
+	nodeKvs := make([]*NodeKV, 0)
+	start1 := time.Now()
+
+	// Get all addresses and process them in chunks
+	addrs := make([]common.Address, 0, len(alloc))
+	for addr := range alloc {
+		addrs = append(addrs, addr)
+	}
+	fmt.Println("addrs:", len(addrs))
+
+	numWorkers := runtime.NumCPU()
+	fmt.Println("numWorkers:", numWorkers)
+	chunkSize := (len(addrs) + numWorkers - 1) / numWorkers
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for i := 0; i < len(addrs); i += chunkSize {
+		end := i + chunkSize
+		if end > len(addrs) {
+			end = len(addrs)
+		}
+
+		wg.Add(1)
+		go func(addrSlice []common.Address) {
+			defer wg.Done()
+			localKvs := make([]*NodeKV, 0, len(addrSlice)*2+2)
+
+			for _, addr := range addrSlice {
+				acc := alloc[addr]
+				addrStr := addr.Hex()
+
+				// Process balance
+				if acc.Balance != nil && acc.Balance.Sign() > 0 {
+					balanceKey := KeyEthAddrBalance(addrStr)
+					balanceValue := ScalarToArrayUint64(acc.Balance)
+					localKvs = append(localKvs, &NodeKV{
+						Key:   balanceKey,
+						Value: balanceValue,
+					})
+				}
+
+				// Process nonce
+				if acc.Nonce > 0 {
+					nonceKey := KeyEthAddrNonce(addrStr)
+					nonceBig := new(big.Int).SetUint64(acc.Nonce)
+					nonceValue := ScalarToArrayUint64(nonceBig)
+					localKvs = append(localKvs, &NodeKV{
+						Key:   nonceKey,
+						Value: nonceValue,
+					})
+				}
+
+				// Process code
+				if len(acc.Code) > 0 {
+					keyContractCode := KeyContractCode(addrStr)
+					keyContractLength := KeyContractLength(addrStr)
+					bi := HashContractBytecodeBigInt(common.Bytes2Hex(acc.Code))
+					localKvs = append(localKvs, &NodeKV{
+						Key:   keyContractCode,
+						Value: ScalarToArrayUint64(bi),
+					})
+					localKvs = append(localKvs, &NodeKV{
+						Key:   keyContractLength,
+						Value: TinyScalarToArrayUint64(uint64(len(acc.Code))),
+					})
+				}
+
+				// Process storage
+				if len(acc.Storage) > 50000 {
+					// Convert storage to slice for parallel processing
+					storageKeys := make([]common.Hash, 0, len(acc.Storage))
+					for k := range acc.Storage {
+						storageKeys = append(storageKeys, k)
+					}
+
+					// Calculate chunk size for each worker
+					numStorageWorkers := runtime.NumCPU()
+					storageChunkSize := (len(storageKeys) + numStorageWorkers - 1) / numStorageWorkers
+
+					var storageWg sync.WaitGroup
+					var storageMu sync.Mutex
+					addrBig := addr.Big()
+					addrArr := ScalarToArrayUint64(addrBig)
+
+					// Process storage concurrently
+					for i := 0; i < len(storageKeys); i += storageChunkSize {
+						end := i + storageChunkSize
+						if end > len(storageKeys) {
+							end = len(storageKeys)
+						}
+
+						storageWg.Add(1)
+						go func(keys []common.Hash) {
+							defer storageWg.Done()
+							localStorageKvs := make([]*NodeKV, 0, len(keys))
+
+							for _, k := range keys {
+								v := acc.Storage[k]
+								storageBig := v.Big()
+								storageValue := ScalarToArrayUint64(storageBig)
+								storageKey := KeyContractStorageHack(addrArr, k.Hex())
+								localStorageKvs = append(localStorageKvs, &NodeKV{
+									Key:   storageKey,
+									Value: storageValue,
+								})
+							}
+
+							storageMu.Lock()
+							localKvs = append(localKvs, localStorageKvs...)
+							storageMu.Unlock()
+						}(storageKeys[i:end])
+					}
+
+					storageWg.Wait()
+				} else {
+					// Process storage sequentially when size is small
+					addrBig := addr.Big()
+					addrArr := ScalarToArrayUint64(addrBig)
+					for k, v := range acc.Storage {
+						storageBig := v.Big()
+						storageValue := ScalarToArrayUint64(storageBig)
+						storageKey := KeyContractStorageHack(addrArr, k.Hex())
+						localKvs = append(localKvs, &NodeKV{
+							Key:   storageKey,
+							Value: storageValue,
+						})
+					}
+				}
+			}
+
+			// Calculate path and shortPath
+			for i := range localKvs {
+				localKvs[i].path = localKvs[i].Key.GetPath()
+				// Convert path to shortPath
+				for j := 0; j < 256; j++ {
+					if localKvs[i].path[j] == 1 {
+						// Set corresponding bit to 1
+						// j=0 should map to highest bit, so use 63-(j%64)
+						blockIdx := j / 64      // Determine which uint64
+						bitPos := 63 - (j % 64) // Position in this uint64, starting from highest bit
+						localKvs[i].shortPath[blockIdx] |= uint64(1) << uint64(bitPos)
+					}
+				}
+			}
+
+			// Merge results
+			mu.Lock()
+			nodeKvs = append(nodeKvs, localKvs...)
+			mu.Unlock()
+		}(addrs[i:end])
+	}
+
+	wg.Wait()
+	fmt.Println("prepare elapsed:", time.Since(start1))
+
+	start11 := time.Now()
+	slices.SortFunc(nodeKvs, func(a, b *NodeKV) int {
+		// Directly compare uint64 arrays
+		for i := 0; i < 4; i++ {
+			if a.shortPath[i] < b.shortPath[i] {
+				return -1
+			}
+			if a.shortPath[i] > b.shortPath[i] {
+				return 1
+			}
+		}
+		return 0
+	})
+	fmt.Println("sorting nodes elapsed:", time.Since(start11))
+
+	start2 := time.Now()
+	calculateLevels(nodeKvs, 0)
+	fmt.Println("calculate level elapsed:", time.Since(start2))
+
+	start3 := time.Now()
+	// 2. Calculate leaf node hashes concurrently
+	chunkSize = (len(nodeKvs) + numWorkers - 1) / numWorkers
+
+	for i := 0; i < len(nodeKvs); i += chunkSize {
+		end := i + chunkSize
+		if end > len(nodeKvs) {
+			end = len(nodeKvs)
+		}
+
+		wg.Add(1)
+		go func(start, end int) {
+			defer wg.Done()
+			for i := start; i < end; i++ {
+				// value hash
+				valueHash := HashByPointers(
+					&nodeKvs[i].Value,
+					&BranchCapacity,
+				)
+
+				// leaf hash
+				remainingKey := RemoveKeyBits(nodeKvs[i].Key, nodeKvs[i].level)
+				nodeKvs[i].leafHash = *HashByPointers(
+					&[8]uint64{
+						remainingKey[0], remainingKey[1], remainingKey[2], remainingKey[3],
+						valueHash[0], valueHash[1], valueHash[2], valueHash[3],
+					},
+					&LeafCapacity,
+				)
+			}
+		}(i, end)
+	}
+	wg.Wait()
+	fmt.Println("calculate leaf hash elapsed:", time.Since(start3))
+
+	start4 := time.Now()
+	root := NodeKey(calculateRoot(nodeKvs, 0, len(nodeKvs), 0))
+	fmt.Println("calculate root hash elapsed:", time.Since(start4))
+
+	return root.ToBigInt(), nil
 }
 
 // verifySMT verifies the SMT (Sparse Merkle Tree) data
-func verifySMT(migrationPath string, alloc, ignoredAlloc, overridedAlloc *types.GenesisAlloc) error {
+func verifySMT(chainDataPath string, smtDataPath string, alloc, ignoredAlloc, overridedAlloc, oldGenesisAlloc *types.GenesisAlloc) error {
+	log.Info("verifySMT called", "chainDataPath", chainDataPath, "smtDataPath", smtDataPath, "accounts", len(*alloc))
+	smtBatchRootHashOrigin, err := getSmtBatchRootHashOrigin(chainDataPath, smtDataPath)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("*** smtBatchRootHashOrigin: %x\n", smtBatchRootHashOrigin)
 
-	// TODO: Implement SMT verification logic
-	// Should consider both ga and ignoredAlloc
-	// dbAlloc = merge(overrideAlloc to alloc), ignoredAlloc)
+	// Merge all allocations into one
+	mergedAlloc := make(types.GenesisAlloc)
 
-	log.Info("verifySMT called", "migrationPath", migrationPath, "accounts", len(*alloc))
+	// First, add all accounts from alloc
+	for addr, acc := range *alloc {
+		mergedAlloc[addr] = acc
+	}
+
+	// remove oldGenesisAlloc
+	for addr := range *oldGenesisAlloc {
+		delete(mergedAlloc, addr)
+	}
+
+	// Then, add overridedAlloc
+	for addr, acc := range *overridedAlloc {
+		mergedAlloc[addr] = acc
+	}
+
+	// Finally, add ignoredAlloc
+	for addr, acc := range *ignoredAlloc {
+		mergedAlloc[addr] = acc
+	}
+
+	smtBatchRootHashRebuild, err := calcSmtRoot(mergedAlloc)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("*** smtBatchRootHashRebuild: %x\n", smtBatchRootHashRebuild)
+
+	if smtBatchRootHashOrigin != nil {
+		if smtBatchRootHashOrigin.Text(16) == smtBatchRootHashRebuild.Text(16) {
+			fmt.Println("Batch check: Pass")
+		} else {
+			fmt.Println("Batch check: Failed")
+		}
+	}
 	return nil
 }
 
 // SetupGenesisBlockWithMigrationData sets up the genesis block with migration data
 func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.Database, genesis *Genesis, overrides *ChainOverrides, ctx *cli.Context) (*params.ChainConfig, common.Hash, *params.ConfigCompatError, error) {
 	// Get migration path from CLI context
-	migrationPath := ctx.String("chaindata")
-	if migrationPath == "" {
+	chainDataPath := ctx.String("chaindata")
+	if chainDataPath == "" {
 		return nil, common.Hash{}, nil, fmt.Errorf("migration path is required")
 	}
 
@@ -346,19 +793,19 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 
 	// Create migration config
 	migrationConfig := &MigrationConfig{
-		MigrationPath:    migrationPath,
-		IgnoreAddresses:  ignoreAddresses,
-		MigrationSMTPath: ctx.String("smt-db-path"),
-		IgnoreSMTVerify:  ctx.Bool("ignore-smt-verify"),
+		ChainDataPath:   chainDataPath,
+		IgnoreAddresses: ignoreAddresses,
+		SMTDataPath:     ctx.String("smt-db-path"),
+		IgnoreSMTVerify: ctx.Bool("ignore-smt-verify"),
 	}
 
 	// isStandaloneDb
-	isStandaloneDb := migrationConfig.MigrationSMTPath != ""
+	isStandaloneDb := migrationConfig.SMTDataPath != ""
 	kv.InitStandaloneSMT(isStandaloneDb)
 
 	// Scan migration database and update genesis.Alloc
 	log.Info("Scanning migration database to update genesis alloc")
-	ignoredAlloc, overridedAlloc, err := ScanDB(migrationConfig.MigrationPath, genesis, ignoreAddresses) // genesis.Alloc will be updated
+	ignoredAlloc, overridedAlloc, oldGenesisAlloc, err := ScanDB(migrationConfig.ChainDataPath, genesis, ignoreAddresses) // genesis.Alloc will be updated
 	if err != nil {
 		return nil, common.Hash{}, nil, fmt.Errorf("failed to scan migration database: %w", err)
 	}
@@ -371,11 +818,14 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 	var cfg *params.ChainConfig
 
 	// Start verifySMT in parallel
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		smtErr = verifySMT(migrationConfig.MigrationPath, &genesis.Alloc, &ignoredAlloc, &overridedAlloc)
-	}()
+	if !migrationConfig.IgnoreSMTVerify {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			smtErr = verifySMT(migrationConfig.ChainDataPath, migrationConfig.SMTDataPath, &genesis.Alloc, &ignoredAlloc, &overridedAlloc, &oldGenesisAlloc)
+		}()
+	}
+
 	// Start SetupGenesisBlockWithOverride
 	wg.Add(1)
 	go func() {
