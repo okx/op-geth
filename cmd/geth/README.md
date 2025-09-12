@@ -11,12 +11,12 @@ geth --datadir=/mnt/ramdisk_op/op_geth_data verify-genesis --ignore-addresses=0x
 
 ~/go/bin/geth --datadir=/Volumes/RAMDisk/op_geth_data --gcmode=archive init --state.scheme=hash --db-cache=2048 --db-handles=1000 --no-verify /Users/yangweitao/dev/okx/op-geth/random_genesis.json
 
-./build/bin/geth --datadir=/tmp/op_geth_data --gcmode=archive migrate --state.scheme=hash -db-handles=1000 /mnt/ramdisk_op/genesis.json
+./build/bin/geth --datadir=/tmp/op_geth_data --gcmode=archive migrate --state.scheme=hash --chaindata= -db-handles=1000 op-genesis.json
+
 
 diskutil erasevolume HFS+ "RAMDisk" $(hdiutil attach -nomount ram://67108864)
 
 
-export PEBBLE_CACHE=2048
-export PEBBLE_MEMTABLE_SIZE=128
-export PEBBLE_COMPRESSION=none
-geth init genesis.json
+./build/bin/geth --datadir=/tmp/op_geth_data --gcmode=archive migrate --state.scheme=hash --ignore-smt-verify --no-verify --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=/mnt/ramdisk_op/xlayer_chaindata/ op-genesis.json
+
+./build/bin/geth --datadir=/tmp/op_geth_data --gcmode=archive migrate --state.scheme=hash --ignore-smt-verify --no-verify --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=/data/xlayer_uploads/rpc-bak0820/chaindata/ op-genesis.json
