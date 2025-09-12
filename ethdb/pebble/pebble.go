@@ -208,7 +208,7 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 		// Here use all available CPUs for faster compaction.
 		MaxConcurrentCompactions: runtime.NumCPU,
 
-		L0CompactionThreshold: 8,
+		//L0CompactionThreshold: 8,
 
 		// Per-level options. Options for at least one level must be specified. The
 		// options for the last level are used for all subsequent levels.
