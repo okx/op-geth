@@ -81,37 +81,30 @@ func GetLogStatistics() Statistics {
 }
 
 type statisticsInstance struct {
-	mu        sync.RWMutex
 	durations map[LogTag]time.Duration // per-block durations
 	counters  map[LogTag]int64         // per-block counters
 	tags      map[LogTag]string
 }
 
 func (l *statisticsInstance) CumulativeCounting(tag LogTag) {
-	l.mu.Lock()
 	if l.counters == nil {
 		l.counters = make(map[LogTag]int64)
 	}
 	l.counters[tag]++
-	l.mu.Unlock()
 }
 
 func (l *statisticsInstance) CumulativeValue(tag LogTag, value int64) {
-	l.mu.Lock()
 	if l.counters == nil {
 		l.counters = make(map[LogTag]int64)
 	}
 	l.counters[tag] += value
-	l.mu.Unlock()
 }
 
 func (l *statisticsInstance) CumulativeTiming(tag LogTag, duration time.Duration) {
-	l.mu.Lock()
 	if l.durations == nil {
 		l.durations = make(map[LogTag]time.Duration)
 	}
 	l.durations[tag] += duration
-	l.mu.Unlock()
 }
 
 func (l *statisticsInstance) CumulativeMicroTiming(tag LogTag, duration time.Duration) {
@@ -119,37 +112,28 @@ func (l *statisticsInstance) CumulativeMicroTiming(tag LogTag, duration time.Dur
 }
 
 func (l *statisticsInstance) SetTag(tag LogTag, value string) {
-	l.mu.Lock()
 	if l.tags == nil {
 		l.tags = make(map[LogTag]string)
 	}
 	l.tags[tag] = value
-	l.mu.Unlock()
 }
 
 func (l *statisticsInstance) GetTag(tag LogTag) string {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
 	return l.tags[tag]
 }
 
 func (l *statisticsInstance) GetStatistics(tag LogTag) int64 {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
 	return l.counters[tag]
 }
 
 func (l *statisticsInstance) ResetStatistics() {
-	l.mu.Lock()
 	l.durations = make(map[LogTag]time.Duration)
 	l.counters = make(map[LogTag]int64)
 	l.tags = make(map[LogTag]string)
-	l.mu.Unlock()
 }
 
 // SummaryCheckpoint computes per-block stats and logs a single-line summary.
 func (l *statisticsInstance) SummaryCheckpoint() string {
-	l.mu.RLock()
 	block := l.counters[BlockNumberTag]
 	blockDuration := l.durations[TotalBuildMs]
 
@@ -174,7 +158,6 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 	storCommit := l.durations[StorageCommitMs]
 	snapCommit := l.durations[SnapshotCommitMs]
 	triedbCommit := l.durations[TrieDBCommitMs]
-	l.mu.RUnlock()
 
 	line := fmt.Sprintf(
 		"Block<%d>, Txs<%d> GasUsed<%d>, BlockTime<%s> { Exec { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] }, Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
