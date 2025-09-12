@@ -201,7 +201,7 @@ func ScanDB(migrationPath string, genesis *Genesis, ignoreAddresses map[common.A
 	log.Info("Starting ScanDB", "path", migrationPath)
 
 	// Open database with proper error handling
-	db, err := mdbx.Open(migrationPath, nil, true)
+	db, err := mdbx.Open(context.Background(), migrationPath, nil, true)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open migration database: %w", err)
 	}
@@ -346,6 +346,10 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 		MigrationSMTPath: ctx.String("smt-db-path"),
 		IgnoreSMTVerify:  ctx.Bool("ignore-smt-verify"),
 	}
+
+	// isStandaloneDb
+	isStandaloneDb := migrationConfig.MigrationSMTPath != ""
+	kv.InitStandaloneSMT(isStandaloneDb)
 
 	// Scan migration database and update genesis.Alloc
 	log.Info("Scanning migration database to update genesis alloc")
