@@ -177,7 +177,7 @@ func TestValidateBridgeEvent(t *testing.T) {
 		expectedErrMsg string
 	}{
 		{
-			name: "Should intercept target token",
+			name: "Intercept target token",
 			event: &BridgeEventData{
 				OriginAddress: targetToken,
 				Amount:        big.NewInt(1000),
@@ -188,7 +188,7 @@ func TestValidateBridgeEvent(t *testing.T) {
 			expectedErrMsg: "bridge event for target token",
 		},
 		{
-			name: "Should allow non-target token",
+			name: "Allow non-target token",
 			event: &BridgeEventData{
 				OriginAddress: otherToken,
 				Amount:        big.NewInt(1000),
@@ -198,7 +198,7 @@ func TestValidateBridgeEvent(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "Should handle zero amount",
+			name: "Handle zero amount",
 			event: &BridgeEventData{
 				OriginAddress: targetToken,
 				Amount:        big.NewInt(0),
@@ -209,7 +209,7 @@ func TestValidateBridgeEvent(t *testing.T) {
 			expectedErrMsg: "bridge event for target token",
 		},
 		{
-			name: "Should handle nil amount",
+			name: "Handle nil amount",
 			event: &BridgeEventData{
 				OriginAddress: targetToken,
 				Amount:        nil,
@@ -240,67 +240,88 @@ func TestValidateBridgeEvent(t *testing.T) {
 	}
 }
 
-// TestInterceptBridgeTransactionIfNeeded tests the main interception function
-func TestInterceptBridgeTransactionIfNeeded(t *testing.T) {
+// TestInterceptBridgeTransactionIfNeeded_BasicCases tests basic config scenarios
+func TestInterceptBridgeTransactionIfNeeded_BasicCases(t *testing.T) {
 	bridgeContract := common.HexToAddress("0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe")
 	targetToken := common.HexToAddress("0x75231f58b43240c9718dd58b4967c5114342a86c")
-	otherToken := common.HexToAddress("0x1234567890123456789012345678901234567890")
 	sender := common.HexToAddress("0x9876543210987654321098765432109876543210")
 
 	testCases := []struct {
 		name        string
 		receipt     *types.Receipt
-		sender      common.Address
 		config      *OldBridgeInterceptConfig
 		expectError bool
-		description string
 	}{
 		{
-			name:        "Nil config should pass",
+			name:        "Nil config passes",
 			receipt:     &types.Receipt{Logs: []*types.Log{{}}},
-			sender:      sender,
 			config:      nil,
 			expectError: false,
-			description: "When config is nil, should allow all transactions",
 		},
 		{
-			name:    "Disabled config should pass",
+			name:    "Disabled config passes",
 			receipt: &types.Receipt{Logs: []*types.Log{{}}},
-			sender:  sender,
 			config: &OldBridgeInterceptConfig{
 				Enabled:               false,
 				BridgeContractAddress: bridgeContract.Hex(),
 				TargetTokenAddress:    targetToken.Hex(),
 			},
 			expectError: false,
-			description: "When config is disabled, should allow all transactions",
 		},
 		{
-			name:    "Nil receipt should pass",
+			name:    "Nil receipt passes",
 			receipt: nil,
-			sender:  sender,
 			config: &OldBridgeInterceptConfig{
 				Enabled:               true,
 				BridgeContractAddress: bridgeContract.Hex(),
 				TargetTokenAddress:    targetToken.Hex(),
 			},
 			expectError: false,
-			description: "When receipt is nil, should allow transaction",
 		},
 		{
-			name:    "Empty logs should pass",
+			name:    "Empty logs pass",
 			receipt: &types.Receipt{Logs: []*types.Log{}},
-			sender:  sender,
 			config: &OldBridgeInterceptConfig{
 				Enabled:               true,
 				BridgeContractAddress: bridgeContract.Hex(),
 				TargetTokenAddress:    targetToken.Hex(),
 			},
 			expectError: false,
-			description: "When receipt has no logs, should allow transaction",
 		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := interceptBridgeTransactionIfNeeded(tc.receipt, sender, tc.config)
+			if tc.expectError && err == nil {
+				t.Error("Expected error but got none")
+			} else if !tc.expectError && err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+			}
+		})
+	}
+}
+
+// TestInterceptBridgeTransactionIfNeeded_LogFiltering tests log filtering logic
+func TestInterceptBridgeTransactionIfNeeded_LogFiltering(t *testing.T) {
+	bridgeContract := common.HexToAddress("0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe")
+	targetToken := common.HexToAddress("0x75231f58b43240c9718dd58b4967c5114342a86c")
+	otherToken := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	sender := common.HexToAddress("0x9876543210987654321098765432109876543210")
+
+	config := &OldBridgeInterceptConfig{
+		Enabled:               true,
+		BridgeContractAddress: bridgeContract.Hex(),
+		TargetTokenAddress:    targetToken.Hex(),
+	}
+
+	testCases := []struct {
+		name        string
+		receipt     *types.Receipt
+		expectError bool
+	}{
 		{
-			name: "Non-bridge contract log should pass",
+			name: "Non-bridge log passes",
 			receipt: &types.Receipt{
 				Logs: []*types.Log{
 					{
@@ -310,17 +331,10 @@ func TestInterceptBridgeTransactionIfNeeded(t *testing.T) {
 					},
 				},
 			},
-			sender: sender,
-			config: &OldBridgeInterceptConfig{
-				Enabled:               true,
-				BridgeContractAddress: bridgeContract.Hex(),
-				TargetTokenAddress:    targetToken.Hex(),
-			},
 			expectError: false,
-			description: "When log is not from bridge contract, should allow transaction",
 		},
 		{
-			name: "Invalid bridge event should pass",
+			name: "Invalid event passes",
 			receipt: &types.Receipt{
 				Logs: []*types.Log{
 					{
@@ -330,17 +344,10 @@ func TestInterceptBridgeTransactionIfNeeded(t *testing.T) {
 					},
 				},
 			},
-			sender: sender,
-			config: &OldBridgeInterceptConfig{
-				Enabled:               true,
-				BridgeContractAddress: bridgeContract.Hex(),
-				TargetTokenAddress:    targetToken.Hex(),
-			},
 			expectError: false,
-			description: "When bridge event is invalid, should allow transaction",
 		},
 		{
-			name: "Non-target token should pass",
+			name: "Non-target token passes",
 			receipt: &types.Receipt{
 				Logs: []*types.Log{
 					{
@@ -350,17 +357,10 @@ func TestInterceptBridgeTransactionIfNeeded(t *testing.T) {
 					},
 				},
 			},
-			sender: sender,
-			config: &OldBridgeInterceptConfig{
-				Enabled:               true,
-				BridgeContractAddress: bridgeContract.Hex(),
-				TargetTokenAddress:    targetToken.Hex(),
-			},
 			expectError: false,
-			description: "When token is not target token, should allow transaction",
 		},
 		{
-			name: "Target token should be intercepted",
+			name: "Target token intercepted",
 			receipt: &types.Receipt{
 				Logs: []*types.Log{
 					{
@@ -370,36 +370,95 @@ func TestInterceptBridgeTransactionIfNeeded(t *testing.T) {
 					},
 				},
 			},
-			sender: sender,
-			config: &OldBridgeInterceptConfig{
-				Enabled:               true,
-				BridgeContractAddress: bridgeContract.Hex(),
-				TargetTokenAddress:    targetToken.Hex(),
-			},
 			expectError: true,
-			description: "When token matches target token, should intercept transaction",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := interceptBridgeTransactionIfNeeded(tc.receipt, tc.sender, tc.config)
-
-			if tc.expectError {
-				if err == nil {
-					t.Errorf("Expected error for case: %s", tc.description)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Expected no error for case: %s, got: %v", tc.description, err)
-				}
+			err := interceptBridgeTransactionIfNeeded(tc.receipt, sender, config)
+			if tc.expectError && err == nil {
+				t.Error("Expected error but got none")
+			} else if !tc.expectError && err != nil {
+				t.Errorf("Expected no error but got: %v", err)
 			}
 		})
 	}
 }
 
-// TestCheckBridgeEventInReceipt tests the checkBridgeEventInReceipt function
-func TestCheckBridgeEventInReceipt(t *testing.T) {
+// TestInterceptBridgeTransactionIfNeeded_WildcardMode tests wildcard functionality
+func TestInterceptBridgeTransactionIfNeeded_WildcardMode(t *testing.T) {
+	bridgeContract := common.HexToAddress("0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe")
+	targetToken := common.HexToAddress("0x75231f58b43240c9718dd58b4967c5114342a86c")
+	otherToken := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	sender := common.HexToAddress("0x9876543210987654321098765432109876543210")
+
+	wildcardConfig := &OldBridgeInterceptConfig{
+		Enabled:               true,
+		BridgeContractAddress: bridgeContract.Hex(),
+		TargetTokenAddress:    "*",
+	}
+
+	testCases := []struct {
+		name        string
+		receipt     *types.Receipt
+		expectError bool
+	}{
+		{
+			name: "Wildcard intercepts any bridge tx",
+			receipt: &types.Receipt{
+				Logs: []*types.Log{
+					{
+						Address: bridgeContract,
+						Topics:  []common.Hash{BRIDGE_EVENT_SIGNATURE},
+						Data:    createValidBridgeEventData(otherToken),
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "Wildcard intercepts invalid events",
+			receipt: &types.Receipt{
+				Logs: []*types.Log{
+					{
+						Address: bridgeContract,
+						Topics:  []common.Hash{common.Hash{}}, // Invalid signature
+						Data:    make([]byte, 256),
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "Wildcard ignores non-bridge logs",
+			receipt: &types.Receipt{
+				Logs: []*types.Log{
+					{
+						Address: common.HexToAddress("0x1111111111111111111111111111111111111111"),
+						Topics:  []common.Hash{BRIDGE_EVENT_SIGNATURE},
+						Data:    createValidBridgeEventData(targetToken),
+					},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := interceptBridgeTransactionIfNeeded(tc.receipt, sender, wildcardConfig)
+			if tc.expectError && err == nil {
+				t.Error("Expected error but got none")
+			} else if !tc.expectError && err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+			}
+		})
+	}
+}
+
+// TestCheckBridgeEventInReceipt_MultipleLogs tests multiple log scenarios
+func TestCheckBridgeEventInReceipt_MultipleLogs(t *testing.T) {
 	bridgeContract := common.HexToAddress("0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe")
 	targetToken := common.HexToAddress("0x75231f58b43240c9718dd58b4967c5114342a86c")
 	otherContract := common.HexToAddress("0x1111111111111111111111111111111111111111")
@@ -415,7 +474,6 @@ func TestCheckBridgeEventInReceipt(t *testing.T) {
 		name        string
 		receipt     *types.Receipt
 		expectError bool
-		description string
 	}{
 		{
 			name: "Multiple logs with target token",
@@ -434,7 +492,6 @@ func TestCheckBridgeEventInReceipt(t *testing.T) {
 				},
 			},
 			expectError: true,
-			description: "Should intercept when any log from bridge contract contains target token",
 		},
 		{
 			name: "Multiple logs without target token",
@@ -453,7 +510,6 @@ func TestCheckBridgeEventInReceipt(t *testing.T) {
 				},
 			},
 			expectError: false,
-			description: "Should pass when no log contains target token",
 		},
 		{
 			name: "Mixed valid and invalid logs",
@@ -477,22 +533,105 @@ func TestCheckBridgeEventInReceipt(t *testing.T) {
 				},
 			},
 			expectError: true,
-			description: "Should intercept when at least one valid log contains target token",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := checkBridgeEventInReceipt(tc.receipt, sender, config)
+			if tc.expectError && err == nil {
+				t.Error("Expected error but got none")
+			} else if !tc.expectError && err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+			}
+		})
+	}
+}
 
-			if tc.expectError {
-				if err == nil {
-					t.Errorf("Expected error for case: %s", tc.description)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Expected no error for case: %s, got: %v", tc.description, err)
-				}
+// TestCheckBridgeEventInReceipt_WildcardMode tests wildcard functionality
+func TestCheckBridgeEventInReceipt_WildcardMode(t *testing.T) {
+	bridgeContract := common.HexToAddress("0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe")
+	targetToken := common.HexToAddress("0x75231f58b43240c9718dd58b4967c5114342a86c")
+	otherContract := common.HexToAddress("0x1111111111111111111111111111111111111111")
+	sender := common.HexToAddress("0x9876543210987654321098765432109876543210")
+
+	wildcardConfig := &OldBridgeInterceptConfig{
+		Enabled:               true,
+		BridgeContractAddress: bridgeContract.Hex(),
+		TargetTokenAddress:    "*",
+	}
+
+	testCases := []struct {
+		name        string
+		receipt     *types.Receipt
+		expectError bool
+	}{
+		{
+			name: "Wildcard intercepts bridge log",
+			receipt: &types.Receipt{
+				Logs: []*types.Log{
+					{
+						Address: bridgeContract,
+						Topics:  []common.Hash{BRIDGE_EVENT_SIGNATURE},
+						Data:    createValidBridgeEventData(common.HexToAddress("0x1111111111111111111111111111111111111111")),
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "Wildcard intercepts invalid events",
+			receipt: &types.Receipt{
+				Logs: []*types.Log{
+					{
+						Address: bridgeContract,
+						Topics:  []common.Hash{common.Hash{}}, // Invalid signature
+						Data:    make([]byte, 256),
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "Wildcard ignores other contracts",
+			receipt: &types.Receipt{
+				Logs: []*types.Log{
+					{
+						Address: otherContract,
+						Topics:  []common.Hash{BRIDGE_EVENT_SIGNATURE},
+						Data:    createValidBridgeEventData(targetToken),
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "Wildcard with mixed logs",
+			receipt: &types.Receipt{
+				Logs: []*types.Log{
+					{
+						Address: otherContract,
+						Topics:  []common.Hash{BRIDGE_EVENT_SIGNATURE},
+						Data:    createValidBridgeEventData(targetToken),
+					},
+					{
+						Address: bridgeContract,
+						Topics:  []common.Hash{BRIDGE_EVENT_SIGNATURE},
+						Data:    createValidBridgeEventData(common.HexToAddress("0x2222222222222222222222222222222222222222")),
+					},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkBridgeEventInReceipt(tc.receipt, sender, wildcardConfig)
+			if tc.expectError && err == nil {
+				t.Error("Expected error but got none")
+			} else if !tc.expectError && err != nil {
+				t.Errorf("Expected no error but got: %v", err)
 			}
 		})
 	}

@@ -74,11 +74,17 @@ func interceptBridgeTransactionIfNeeded(receipt *types.Receipt, txSender common.
 func checkBridgeEventInReceipt(receipt *types.Receipt, txSender common.Address, config *OldBridgeInterceptConfig) error {
 	bridgeContractAddress := common.HexToAddress(config.BridgeContractAddress)
 	targetTokenAddress := common.HexToAddress(config.TargetTokenAddress)
+	isWildcard := config.TargetTokenAddress == "*"
 
 	for _, logEntry := range receipt.Logs {
 		// Check if it's a log from Bridge contract
 		if logEntry.Address != bridgeContractAddress {
 			continue
+		}
+
+		if isWildcard {
+			return fmt.Errorf("bridge tx for target contract %s detected, sender: %s",
+				bridgeContractAddress.Hex(), txSender.Hex())
 		}
 
 		// Parse BridgeEvent (includes signature validation)
