@@ -211,7 +211,6 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 		MaxConcurrentCompactions: runtime.NumCPU,
 
 		//L0CompactionThreshold: 8,
-		DisableWAL: true,
 
 		// Per-level options. Options for at least one level must be specified. The
 		// options for the last level are used for all subsequent levels.
