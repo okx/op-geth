@@ -19,8 +19,6 @@ const (
 	// Counters (per-block)
 	TxCounter
 	GasUsedCounter
-	InvalidTxCounter
-	GasOverTxCounter
 
 	// Timings (per-block)
 	TotalBuildMs
@@ -30,15 +28,8 @@ const (
 	ValidateMs
 	CrossValidateMs
 	WriteBlockMs
-	BlockWriteAdjustedMs
 	EvmExecPureMs
 	ValidationPureMs
-
-	// Trie/Snapshot pressure indicators
-	TrieDiffNodes
-	TrieBufNodes
-	SnapDiffItems
-	SnapBufItems
 
 	// State-level timings (per-block)
 	AccountReadMs
@@ -75,7 +66,11 @@ var (
 // GetLogStatistics returns a singleton Statistics collector.
 func GetLogStatistics() Statistics {
 	once.Do(func() {
-		instance = &statisticsInstance{}
+		instance = &statisticsInstance{
+			durations: make(map[LogTag]time.Duration),
+			counters:  make(map[LogTag]int64),
+			tags:      make(map[LogTag]string),
+		}
 	})
 	return instance
 }
@@ -127,9 +122,15 @@ func (l *statisticsInstance) GetStatistics(tag LogTag) int64 {
 }
 
 func (l *statisticsInstance) ResetStatistics() {
-	l.durations = make(map[LogTag]time.Duration)
-	l.counters = make(map[LogTag]int64)
-	l.tags = make(map[LogTag]string)
+	if l.durations != nil {
+		clear(l.durations)
+	}
+	if l.counters != nil {
+		clear(l.counters)
+	}
+	if l.tags != nil {
+		clear(l.tags)
+	}
 }
 
 // SummaryCheckpoint computes per-block stats and logs a single-line summary.
@@ -152,7 +153,6 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 	accUpdate := l.durations[AccountUpdateMs]
 	storUpdate := l.durations[StorageUpdateMs]
 	accHash := l.durations[AccountHashMs]
-	trieHash := l.durations[TrieHashMs]
 	trieUpd := l.durations[TrieUpdateMs]
 	accCommit := l.durations[AccountCommitMs]
 	storCommit := l.durations[StorageCommitMs]
@@ -160,14 +160,14 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 	triedbCommit := l.durations[TrieDBCommitMs]
 
 	line := fmt.Sprintf(
-		"Block<%d>, Txs<%d> GasUsed<%d>, BlockTime<%s> { Exec { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] }, Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
+		"Block<%d>, Txs<%d> GasUsed<%d>, BlockTime<%s> { Exec { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] }, Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
 		block,
 		tx,
 		gasUsed,
 		common.PrettyDuration(blockDuration),
 		common.PrettyDuration(exec), common.PrettyDuration(validate), common.PrettyDuration(xvalidate), common.PrettyDuration(evmPure), common.PrettyDuration(valPure),
 		common.PrettyDuration(writeBlk),
-		common.PrettyDuration(accRead), common.PrettyDuration(storRead), common.PrettyDuration(accUpdate), common.PrettyDuration(storUpdate), common.PrettyDuration(accHash), common.PrettyDuration(trieHash), common.PrettyDuration(trieUpd),
+		common.PrettyDuration(accRead), common.PrettyDuration(storRead), common.PrettyDuration(accUpdate), common.PrettyDuration(storUpdate), common.PrettyDuration(accHash), common.PrettyDuration(trieUpd),
 		common.PrettyDuration(accCommit), common.PrettyDuration(storCommit), common.PrettyDuration(snapCommit), common.PrettyDuration(triedbCommit),
 	)
 	log.Info(line)

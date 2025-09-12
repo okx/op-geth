@@ -2062,7 +2062,6 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	ls.CumulativeTiming(metrics.AccountUpdateMs, statedb.AccountUpdates)
 	ls.CumulativeTiming(metrics.StorageUpdateMs, statedb.StorageUpdates)
 	ls.CumulativeTiming(metrics.AccountHashMs, statedb.AccountHashes)
-	ls.CumulativeTiming(metrics.TrieHashMs, statedb.AccountHashes)
 	ls.CumulativeTiming(metrics.TrieUpdateMs, statedb.AccountUpdates+statedb.StorageUpdates)
 	ls.CumulativeTiming(metrics.EvmExecPureMs, ptime-(statedb.AccountReads+statedb.StorageReads))
 	ls.CumulativeTiming(metrics.ValidationPureMs, vtime-(triehash+trieUpdate))
