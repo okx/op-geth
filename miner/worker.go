@@ -612,6 +612,70 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	prioPlainTxs, normalPlainTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingPlainTxs
 	prioBlobTxs, normalBlobTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingBlobTxs
 
+	// For X Layer
+	type okPayTx struct {
+		account common.Address
+		tx      *txpool.LazyTransaction
+	}
+
+	okPayTxs := make(map[common.Address][]*txpool.LazyTransaction)
+
+	sortedOkPayTxs := common.OrderedList[okPayTx]{}
+	sortedOkPayTxs.SetCompareFunc(func(a, b okPayTx) int {
+		if a.tx.Time.Before(b.tx.Time) {
+			return -1
+		}
+		if a.tx.Time.After(b.tx.Time) {
+			return 1
+		}
+		return 0
+	})
+
+	accounts := miner.config.OkPaySenderAccounts
+
+	// Skip the entire loop if OkPay priority feature is disabled
+	if miner.config.OkPayPriorityEnable && len(accounts) > 0 {
+		for _, account := range accounts {
+			if txs := normalPlainTxs[account]; len(txs) > 0 {
+				for _, tx := range txs {
+					sortedOkPayTxs.Add(okPayTx{account: account, tx: tx})
+				}
+				delete(normalPlainTxs, account)
+			}
+		}
+
+		if sortedOkPayTxs.Size() > 0 {
+			sortedOkPayTxs.Sort()
+			items := sortedOkPayTxs.Items()
+
+			limit := int(miner.config.OkPayBlockPriorityTxsLimit)
+			if len(items) > limit {
+				// Process priority transactions
+				for _, item := range items[:limit] {
+					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
+				}
+				// Put back unselected transactions
+				for _, item := range items[limit:] {
+					normalPlainTxs[item.account] = append(normalPlainTxs[item.account], item.tx)
+				}
+			} else {
+				// All transactions get priority
+				for _, item := range items {
+					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
+				}
+			}
+		}
+	}
+	// Process OkPay transactions first (highest priority)
+	if len(okPayTxs) > 0 {
+		okpayPlainTxs := newTransactionsByPriceAndNonce(env.signer, okPayTxs, env.header.BaseFee)
+		emptyBlobTxs := newTransactionsByPriceAndNonce(env.signer, nil, env.header.BaseFee)
+
+		if err := miner.commitTransactions(env, okpayPlainTxs, emptyBlobTxs, interrupt); err != nil {
+			return err
+		}
+	}
+
 	for _, account := range prio {
 		if txs := normalPlainTxs[account]; len(txs) > 0 {
 			delete(normalPlainTxs, account)
@@ -622,7 +686,8 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 			prioBlobTxs[account] = txs
 		}
 	}
-	// Fill the block with all available pending transactions.
+
+	// Fill the block with remaining available pending transactions.
 	if len(prioPlainTxs) > 0 || len(prioBlobTxs) > 0 {
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, prioPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, prioBlobTxs, env.header.BaseFee)
