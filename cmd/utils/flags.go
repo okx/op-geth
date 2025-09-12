@@ -2331,7 +2331,7 @@ func SplitTagsFlag(tagsFlag string) map[string]string {
 func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly bool) ethdb.Database {
 	var (
 		cache   = ctx.Int(CacheFlag.Name) * ctx.Int(CacheDatabaseFlag.Name) / 100
-		handles = MakeDatabaseHandles(ctx.Int(FDLimitFlag.Name))
+		handles = 16 // MakeDatabaseHandles(ctx.Int(FDLimitFlag.Name))
 		err     error
 		chainDb ethdb.Database
 	)
