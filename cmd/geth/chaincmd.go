@@ -143,6 +143,7 @@ It expects the genesis file as argument.`,
 			utils.CachePreimagesFlag,
 			utils.OverridePrague,
 			utils.OverrideVerkle,
+			utils.CacheFlag,
 			&cli.BoolFlag{
 				Name:  "no-verify",
 				Usage: "do not perform verification",
