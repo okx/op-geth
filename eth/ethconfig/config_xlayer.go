@@ -30,16 +30,12 @@ type OkPayConfig struct {
 type ApolloConfig struct {
 	// Enable Apollo service
 	Enabled bool `toml:",omitempty"`
+	// Apollo app ID
+	AppID string `toml:",omitempty"`
 	// Apollo server endpoint
 	IP string `toml:",omitempty"`
 	// Apollo cluster name
 	Cluster string `toml:",omitempty"`
 	// Apollo namespace
 	Namespace string `toml:",omitempty"`
-	// Apollo configuration refresh interval in seconds
-	RefreshInterval int `toml:",omitempty"`
-	// Apollo configuration cache size
-	CacheSize int `toml:",omitempty"`
-	// Apollo configuration timeout in seconds
-	Timeout int `toml:",omitempty"`
 }
