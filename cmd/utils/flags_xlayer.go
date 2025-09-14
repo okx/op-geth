@@ -94,6 +94,34 @@ var (
 		Usage: "Enable full transaction trace log",
 		Value: false,
 	}
+
+	// Apollo
+	ApolloEnabledFlag = &cli.BoolFlag{
+		Name:  "apollo.enabled",
+		Usage: "Enable Apollo configuration service",
+		Value: false,
+	}
+	ApolloAppIDFlag = &cli.StringFlag{
+		Name:  "apollo.app-id",
+		Usage: "Apollo app ID",
+		Value: "",
+	}
+	ApolloIPFlag = &cli.StringFlag{
+		Name:  "apollo.ip",
+		Usage: "Apollo IP",
+		Value: "",
+	}
+	ApolloClusterFlag = &cli.StringFlag{
+		Name:  "apollo.cluster",
+		Usage: "Apollo cluster name",
+		Value: "default",
+	}
+	ApolloNamespaceFlag = &cli.StringFlag{
+		Name:  "apollo.namespace",
+		Usage: "Apollo namespace",
+		Value: "application",
+	}
+
 	// XLayerFlags are the default flags for X Layer features
 	XLayerFlags = []cli.Flag{
 		OkPayPriorityEnableFlag,
@@ -108,6 +136,11 @@ var (
 		PPRPCTimeoutFlag,
 		TraceLogPath,
 		EnableTraceLog,
+		ApolloEnabledFlag,
+		ApolloAppIDFlag,
+		ApolloIPFlag,
+		ApolloClusterFlag,
+		ApolloNamespaceFlag,
 	}
 )
 
@@ -164,13 +197,35 @@ func setMigrationXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 }
 
-// SetOkPayXLayer is a public wrapper function to internally call setOkPayXLayer
+func setApolloXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(ApolloEnabledFlag.Name) {
+		cfg.XLayer.Apollo.Enabled = ctx.Bool(ApolloEnabledFlag.Name)
+	}
+	if !cfg.XLayer.Apollo.Enabled {
+		return
+	}
+	if ctx.IsSet(ApolloAppIDFlag.Name) {
+		cfg.XLayer.Apollo.AppID = ctx.String(ApolloAppIDFlag.Name)
+	}
+	if ctx.IsSet(ApolloIPFlag.Name) {
+		cfg.XLayer.Apollo.IP = ctx.String(ApolloIPFlag.Name)
+	}
+	if ctx.IsSet(ApolloClusterFlag.Name) {
+		cfg.XLayer.Apollo.Cluster = ctx.String(ApolloClusterFlag.Name)
+	}
+	if ctx.IsSet(ApolloNamespaceFlag.Name) {
+		cfg.XLayer.Apollo.Namespace = ctx.String(ApolloNamespaceFlag.Name)
+	}
+}
+
+// SetXLayerConfig is a public wrapper function to internally call all XLayer configuration functions
 func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setOkPayXLayer(ctx, cfg)
 	setXLayerIntercept(ctx, cfg)
 	setInnerTxXLayer(ctx, cfg)
 	setMigrationXLayer(ctx, cfg)
 	setMonitor(ctx, &cfg.Monitor)
+	setApolloXLayer(ctx, cfg)
 }
 
 // RegisterXlayerHybridFilterAPI adds the eth log filtering RPC API to the node.
@@ -199,4 +254,5 @@ func setMonitor(ctx *cli.Context, cfg *ethconfig.MonitorConfig) {
 	if ctx.IsSet(TraceLogPath.Name) {
 		cfg.TraceLogPath = ctx.String(TraceLogPath.Name)
 	}
+
 }
