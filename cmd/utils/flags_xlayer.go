@@ -3,25 +3,49 @@ package utils
 import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/urfave/cli/v2"
 )
 
 var (
 	// OkPay
 	OkPayPriorityEnableFlag = &cli.BoolFlag{
-		Name:  "okpay.priority-enable-flag",
-		Usage: "OkPay",
-		Value: false,
+		Name:     "okpay.priority-enable-flag",
+		Usage:    "OkPay",
+		Value:    false,
+		Category: flags.XLayerCategory,
 	}
 	OkPaySenderAccountsList = &cli.StringFlag{
-		Name:  "okpay.sender-accounts-list",
-		Usage: "List of OkPay sender accounts",
-		Value: "",
+		Name:     "okpay.sender-accounts-list",
+		Usage:    "List of OkPay sender accounts",
+		Value:    "",
+		Category: flags.XLayerCategory,
 	}
 	OkPayBlockPriorityTxsLimit = &cli.Uint64Flag{
-		Name:  "okpay.block-priority-txs-limit",
-		Usage: "Max number of OkPay txs that we will prioritize per block",
-		Value: 0,
+		Name:     "okpay.block-priority-txs-limit",
+		Usage:    "Max number of OkPay txs that we will prioritize per block",
+		Value:    0,
+		Category: flags.XLayerCategory,
+	}
+
+	// Xlayer Intercept feature
+	InterceptEnabled = &cli.BoolFlag{
+		Name:     "intercept.enabled",
+		Usage:    "Enable the intercept feature",
+		Value:    ethconfig.Defaults.Miner.InterceptConfig.Enabled,
+		Category: flags.XLayerCategory,
+	}
+	InterceptBridgeContractAddress = &cli.StringFlag{
+		Name:     "intercept.bridgeContractAddress",
+		Usage:    "The target bridge contract address to intercept",
+		Value:    ethconfig.Defaults.Miner.InterceptConfig.BridgeContractAddress,
+		Category: flags.XLayerCategory,
+	}
+	InterceptTargetTokenAddress = &cli.StringFlag{
+		Name:     "intercept.targetTokenAddress",
+		Usage:    "The target token address to intercept",
+		Value:    ethconfig.Defaults.Miner.InterceptConfig.TargetTokenAddress,
+		Category: flags.XLayerCategory,
 	}
 
 	// XLayerFlags are the default flags for X Layer features
@@ -29,6 +53,9 @@ var (
 		OkPayPriorityEnableFlag,
 		OkPaySenderAccountsList,
 		OkPayBlockPriorityTxsLimit,
+		InterceptEnabled,
+		InterceptBridgeContractAddress,
+		InterceptTargetTokenAddress,
 	}
 )
 
@@ -51,7 +78,20 @@ func setOkPayXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 }
 
+func setXLayerIntercept(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(InterceptEnabled.Name) {
+		cfg.Miner.InterceptConfig.Enabled = ctx.Bool(InterceptEnabled.Name)
+	}
+	if ctx.IsSet(InterceptBridgeContractAddress.Name) {
+		cfg.Miner.InterceptConfig.BridgeContractAddress = ctx.String(InterceptBridgeContractAddress.Name)
+	}
+	if ctx.IsSet(InterceptTargetTokenAddress.Name) {
+		cfg.Miner.InterceptConfig.TargetTokenAddress = ctx.String(InterceptTargetTokenAddress.Name)
+	}
+}
+
 // SetOkPayXLayer is a public wrapper function to internally call setOkPayXLayer
 func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setOkPayXLayer(ctx, cfg)
+	setXLayerIntercept(ctx, cfg)
 }

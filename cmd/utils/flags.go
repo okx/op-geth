@@ -597,24 +597,6 @@ var (
 		Usage:    "0x prefixed public address for the pending block producer (not used for actual block production)",
 		Category: flags.MinerCategory,
 	}
-	MinerInterceptConfigEnabledFlag = &cli.BoolFlag{
-		Name:     "miner.interceptConfig.enabled",
-		Usage:    "Enable the intercept feature",
-		Value:    ethconfig.Defaults.Miner.InterceptConfig.Enabled,
-		Category: flags.MinerCategory,
-	}
-	MinerInterceptConfigBridgeContractAddressFlag = &cli.StringFlag{
-		Name:     "miner.interceptConfig.bridgeContractAddress",
-		Usage:    "The target contract address to intercept",
-		Value:    ethconfig.Defaults.Miner.InterceptConfig.BridgeContractAddress,
-		Category: flags.MinerCategory,
-	}
-	MinerInterceptConfigTargetTokenAddressFlag = &cli.StringFlag{
-		Name:     "miner.interceptConfig.targetTokenAddress",
-		Usage:    "The target token address to intercept",
-		Value:    ethconfig.Defaults.Miner.InterceptConfig.TargetTokenAddress,
-		Category: flags.MinerCategory,
-	}
 
 	// Account settings
 	PasswordFileFlag = &cli.PathFlag{
@@ -1737,15 +1719,6 @@ func setMiner(ctx *cli.Context, cfg *miner.Config) {
 	}
 	if ctx.IsSet(RollupComputePendingBlock.Name) {
 		cfg.RollupComputePendingBlock = ctx.Bool(RollupComputePendingBlock.Name)
-	}
-	if ctx.IsSet(MinerInterceptConfigEnabledFlag.Name) {
-		cfg.InterceptConfig.Enabled = ctx.Bool(MinerInterceptConfigEnabledFlag.Name)
-	}
-	if ctx.IsSet(MinerInterceptConfigBridgeContractAddressFlag.Name) {
-		cfg.InterceptConfig.BridgeContractAddress = ctx.String(MinerInterceptConfigBridgeContractAddressFlag.Name)
-	}
-	if ctx.IsSet(MinerInterceptConfigTargetTokenAddressFlag.Name) {
-		cfg.InterceptConfig.TargetTokenAddress = ctx.String(MinerInterceptConfigTargetTokenAddressFlag.Name)
 	}
 }
 

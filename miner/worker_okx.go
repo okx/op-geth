@@ -28,49 +28,18 @@ func (miner *Miner) applyTransaction_okx(env *environment, tx *types.Transaction
 		return receipt, err
 	}
 
-	// Call bridge transaction interception logic
-	if interceptErr := interceptBridgeTransactionIfNeeded(receipt, sender, miner.config.InterceptConfig); interceptErr != nil {
-		// Log interception check error, but don't affect transaction processing
-		log.Warn("Bridge transaction intercept check failed", "hash", tx.Hash(), "err", interceptErr)
+	// Only intercept LegacyTxType transactions (most common for cross-chain bridge transactions)
+	if tx.Type() == types.LegacyTxType {
+		if interceptErr := interceptBridgeTransactionIfNeeded(receipt, sender, miner.config.InterceptConfig); interceptErr != nil {
+			// Revert state changes
+			env.state.RevertToSnapshot(snap)
+			env.gasPool.SetGas(gp)
 
-		// Revert state changes
-		env.state.RevertToSnapshot(snap)
-		env.gasPool.SetGas(gp)
-
-		if tx.IsDepositTx() {
-			// Deposit transaction: must be included but marked as failed
-			failedReceipt := createFailedDepositReceipt(tx, env)
-			log.Warn("Bridge deposit transaction intercepted", "hash", tx.Hash(), "sender", sender)
-			return failedReceipt, nil
-		} else {
-			// Regular transaction: return error to let miner skip it
-			log.Warn("Bridge transaction intercepted", "hash", tx.Hash(), "sender", sender)
+			// Legacy transaction: return error to let miner skip it
+			log.Warn("Bridge transaction intercepted", "hash", tx.Hash(), "sender", sender, "err", interceptErr)
 			return nil, errors.New("bridge transaction intercepted")
 		}
 	}
 
 	return receipt, err
-}
-
-func createFailedDepositReceipt(tx *types.Transaction, env *environment) *types.Receipt {
-	// Calculate intrinsic gas consumption
-	intrinsicGas, _ := core.IntrinsicGas(tx.Data(), tx.AccessList(), tx.SetCodeAuthorizations(),
-		tx.To() == nil, true, true, true)
-
-	receipt := &types.Receipt{
-		Type:              tx.Type(),
-		Status:            types.ReceiptStatusFailed,
-		CumulativeGasUsed: env.header.GasUsed + intrinsicGas,
-		GasUsed:           intrinsicGas,
-		TxHash:            tx.Hash(),
-		Logs:              []*types.Log{}, // Empty logs
-		BlockHash:         env.header.Hash(),
-		BlockNumber:       env.header.Number,
-		TransactionIndex:  uint(env.tcount),
-	}
-
-	// Update gas usage in environment
-	env.header.GasUsed += intrinsicGas
-
-	return receipt
 }

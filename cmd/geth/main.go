@@ -136,9 +136,6 @@ var (
 		utils.MinerRecommitIntervalFlag,
 		utils.MinerPendingFeeRecipientFlag,
 		utils.MinerNewPayloadTimeoutFlag, // deprecated
-		utils.MinerInterceptConfigEnabledFlag,
-		utils.MinerInterceptConfigBridgeContractAddressFlag,
-		utils.MinerInterceptConfigTargetTokenAddressFlag,
 		utils.NATFlag,
 		utils.NoDiscoverFlag,
 		utils.DiscoveryV4Flag,
@@ -185,11 +182,7 @@ var (
 		utils.BeaconGenesisTimeFlag,
 		utils.BeaconCheckpointFlag,
 		utils.BeaconCheckpointFileFlag,
-		// For X Layer
-		utils.OkPayPriorityEnableFlag,
-		utils.OkPaySenderAccountsList,
-		utils.OkPayBlockPriorityTxsLimit,
-	}, utils.NetworkFlags, utils.DatabaseFlags)
+	}, utils.NetworkFlags, utils.DatabaseFlags, utils.XLayerFlags)
 
 	rpcFlags = []cli.Flag{
 		utils.HTTPEnabledFlag,
