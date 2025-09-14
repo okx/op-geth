@@ -144,6 +144,10 @@ type Config struct {
 	// Enables tracking of SHA3 preimages in the VM
 	EnablePreimageRecording bool
 
+	// For X Layer
+	// Enables inner transaction capture and storage
+	EnableInnerTx bool
+
 	// Enables VM tracing
 	VMTrace           string
 	VMTraceJsonConfig string

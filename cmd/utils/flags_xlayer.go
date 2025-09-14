@@ -48,6 +48,14 @@ var (
 		Category: flags.XLayerCategory,
 	}
 
+	// InnerTx
+	InnerTxFlag = &cli.BoolFlag{
+		Name:     "innertx",
+		Usage:    "Enable inner transaction capture and storage (disabled by default)",
+		Value:    false,
+		Category: flags.XLayerCategory,
+	}
+
 	// XLayerFlags are the default flags for X Layer features
 	XLayerFlags = []cli.Flag{
 		OkPayPriorityEnableFlag,
@@ -56,6 +64,7 @@ var (
 		InterceptEnabled,
 		InterceptBridgeContractAddress,
 		InterceptTargetTokenAddress,
+		InnerTxFlag,
 	}
 )
 
@@ -90,8 +99,15 @@ func setXLayerIntercept(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 }
 
+func setInnerTxXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(InnerTxFlag.Name) {
+		cfg.EnableInnerTx = ctx.Bool(InnerTxFlag.Name)
+	}
+}
+
 // SetOkPayXLayer is a public wrapper function to internally call setOkPayXLayer
 func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setOkPayXLayer(ctx, cfg)
 	setXLayerIntercept(ctx, cfg)
+	setInnerTxXLayer(ctx, cfg)
 }
