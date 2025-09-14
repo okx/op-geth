@@ -4,7 +4,6 @@ import (
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/eth/xlayer/apollo"
 	"github.com/ethereum/go-ethereum/node"
-	"github.com/ethereum/go-ethereum/utils"
 )
 
 // addXLayerBackend adds the X Layer backend to the node
