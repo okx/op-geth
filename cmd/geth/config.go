@@ -242,6 +242,9 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	// Start metrics export if enabled
 	utils.SetupMetrics(&cfg.Metrics)
 
+	// Initialize X Layer backend
+	addXLayerBackend(stack, &cfg)
+
 	// Initialize monitoring system
 	monitor.InitTraceLogger(cfg.Eth.Monitor.EnableTraceLog, cfg.Eth.Monitor.TraceLogPath)
 

@@ -1,0 +1,30 @@
+package main
+
+import (
+	"github.com/ethereum/go-ethereum/cmd/utils"
+	"github.com/ethereum/go-ethereum/eth/xlayer/apollo"
+	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/utils"
+)
+
+// addXLayerBackend adds the X Layer backend to the node
+func addXLayerBackend(stack *node.Node, cfg *gethConfig) {
+	if stack == nil || cfg == nil {
+		utils.Fatalf("Stack or config is nil")
+	}
+
+	// Initialize Apollo configuration if enabled
+	if cfg.Eth.XLayer.Apollo.Enabled {
+		client, err := apollo.New(apollo.Config{
+			AppID:         cfg.Eth.XLayer.Apollo.AppID,
+			IP:            cfg.Eth.XLayer.Apollo.IP,
+			Cluster:       cfg.Eth.XLayer.Apollo.Cluster,
+			NamespaceName: cfg.Eth.XLayer.Apollo.Namespace,
+		})
+		if err != nil {
+			utils.Fatalf("Failed to initialize Apollo configuration: %v", err)
+		}
+		// Register cleanup function for Apollo
+		stack.RegisterLifecycle(client)
+	}
+}
