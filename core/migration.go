@@ -218,19 +218,20 @@ func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common
 	return migrateAlloc
 }
 
-// ScanDB scans the mdbx database and returns the dbAlloc
-func ScanDB(migrationPath string) (types.GenesisAlloc, error) {
-	start := time.Now()
-	log.Info("Starting ScanDB", "path", migrationPath)
-
-	// Open database with proper error handling
+func SetupDB(migrationPath string) (kv.RwDB, error) {
+	log.Info("Setup Erigon DB", "path", migrationPath)
 	opts := mdbx.NewMDBX(erigonlog.New()).Path(migrationPath)
 	db, err := opts.Open(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to open migration database: %w", err)
 	}
 	defer db.Close()
+	return db, nil
+}
 
+// ScanDB scans the mdbx database and returns the dbAlloc
+func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
+	start := time.Now()
 	dbAlloc := make(types.GenesisAlloc)
 
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
@@ -777,7 +778,12 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 
 	// Scan migration database
 	log.Info("Scanning migration database to get dbAlloc")
-	dbAlloc, err := ScanDB(migrationConfig.ChainDataPath)
+	db, err := SetupDB(migrationConfig.ChainDataPath)
+	if err != nil {
+		log.Error("Failed to setup mdbx database", "err", err)
+		return nil, common.Hash{}, nil, err
+	}
+	dbAlloc, err := ScanDB(db)
 	if err != nil {
 		return nil, common.Hash{}, nil, fmt.Errorf("failed to scan migration database: %w", err)
 	}
