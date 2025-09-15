@@ -181,32 +181,39 @@ func mergeConflictAccount(addr common.Address, dbAccount, genesisAccount *types.
 	return destAccount
 }
 
-func mergeGenesisAlloc(destAlloc, genesisAlloc *types.GenesisAlloc) (types.GenesisAlloc, error) {
-	overridedAlloc := make(types.GenesisAlloc)
-	for addr, account := range *genesisAlloc {
-		if dbAccount, exists := (*destAlloc)[addr]; exists {
-			overridedAlloc[addr] = types.Account{
-				Balance: dbAccount.Balance,
-				Nonce:   dbAccount.Nonce,
-				Code:    dbAccount.Code,
-				Storage: dbAccount.Storage,
-			}
-			destAccount := mergeConflictAccount(addr, &dbAccount, &account)
-			(*destAlloc)[addr] = destAccount
-		} else {
-			if account.Balance == nil {
-				account.Balance = big.NewInt(0)
-			}
+// generateMigrateAlloc filters out ignored addresses from dbAlloc, merges with genesisAlloc, and returns the final migrateAlloc
+func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common.Address]struct{}, genesisAlloc *types.GenesisAlloc) types.GenesisAlloc {
+	migrateAlloc := make(types.GenesisAlloc)
 
-			(*destAlloc)[addr] = account
+	// Remove ignored addresses from dbAlloc
+	for addr, account := range dbAlloc {
+		if _, exists := ignoreAddresses[addr]; !exists {
+			migrateAlloc[addr] = account
 		}
 	}
 
-	return overridedAlloc, nil
+	// Merge with genesisAlloc and handle conflicts
+	for addr, genesisAccount := range *genesisAlloc {
+		var destAccount types.Account
+		if dbAccount, exists := migrateAlloc[addr]; exists {
+			log.Warn("account state conflict found", "account", addr.Hex())
+			destAccount = mergeConflictAccount(addr, &dbAccount, &genesisAccount)
+		} else {
+			destAccount = genesisAccount
+		}
+
+		if destAccount.Balance == nil {
+			destAccount.Balance = big.NewInt(0) // Should set to zero if not set
+		}
+
+		migrateAlloc[addr] = destAccount
+	}
+
+	return migrateAlloc
 }
 
-// ScanDB scans the mdbx database and returns the ignored genesis alloc
-func ScanDB(migrationPath string, genesis *Genesis, ignoreAddresses map[common.Address]struct{}) (types.GenesisAlloc, types.GenesisAlloc, types.GenesisAlloc, error) {
+// ScanDB scans the mdbx database and returns the dbAlloc
+func ScanDB(migrationPath string) (types.GenesisAlloc, error) {
 	start := time.Now()
 	log.Info("Starting ScanDB", "path", migrationPath)
 
@@ -214,14 +221,11 @@ func ScanDB(migrationPath string, genesis *Genesis, ignoreAddresses map[common.A
 	opts := mdbx.NewMDBX(erigonlog.New()).Path(migrationPath)
 	db, err := opts.Open(context.Background())
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to open migration database: %w", err)
+		return nil, fmt.Errorf("failed to open migration database: %w", err)
 	}
 	defer db.Close()
 
-	ga := &genesis.Alloc
-
 	dbAlloc := make(types.GenesisAlloc)
-	ignoredAlloc := make(types.GenesisAlloc)
 
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
 		return tx.ForEach(PlainStateBucket, nil, func(k, v []byte) error {
@@ -229,11 +233,6 @@ func ScanDB(migrationPath string, genesis *Genesis, ignoreAddresses map[common.A
 			if len(k) == 20 {
 				addr := common.BytesToAddress(k)
 
-				// Fixme: if xlayer account balance or nonce conflict with target node(such as op-geth), currently we use op-geth
-				if _, exists := (*ga)[addr]; exists {
-					log.Warn("account state conflict found", "account", addr.Hex())
-					return nil
-				}
 				// Decode account data
 				genesisAccount, err := decodeAccountData(v)
 				if err != nil {
@@ -254,11 +253,7 @@ func ScanDB(migrationPath string, genesis *Genesis, ignoreAddresses map[common.A
 					}
 				}
 
-				if _, exists := ignoreAddresses[addr]; exists {
-					ignoredAlloc[addr] = *genesisAccount
-					return nil
-				}
-				// Update the original ga
+				// Write all accounts to dbAlloc (regardless of ignore status)
 				dbAlloc[addr] = *genesisAccount
 			}
 
@@ -268,22 +263,6 @@ func ScanDB(migrationPath string, genesis *Genesis, ignoreAddresses map[common.A
 
 				storageKey := common.BytesToHash(k[28:])
 				storageValue := common.BytesToHash(v)
-
-				if _, exists := ignoreAddresses[addr]; exists {
-					account, exists := ignoredAlloc[addr]
-					if !exists {
-						// Create new account if it doesn't exist
-						account = types.Account{
-							Balance: big.NewInt(0),
-							Storage: make(map[common.Hash]common.Hash),
-						}
-					} else if account.Storage == nil {
-						account.Storage = make(map[common.Hash]common.Hash)
-					}
-					account.Storage[storageKey] = storageValue
-					ignoredAlloc[addr] = account
-					return nil
-				}
 
 				if account, exists := dbAlloc[addr]; exists {
 					if account.Storage == nil {
@@ -302,17 +281,12 @@ func ScanDB(migrationPath string, genesis *Genesis, ignoreAddresses map[common.A
 			return nil
 		})
 	}); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to scan migration database: %w", err)
+		return nil, fmt.Errorf("failed to scan migration database: %w", err)
 	}
 
-	overridedAlloc, _ := mergeGenesisAlloc(&dbAlloc, ga)
+	log.Info("ScanDB completed", "total_accounts", len(dbAlloc), "elapsed", time.Since(start))
 
-	// Update genesis.Alloc
-	oldGenesisAlloc := genesis.Alloc
-	genesis.Alloc = dbAlloc
-	log.Info("ScanDB completed", "ignored_accounts", len(ignoredAlloc), "overrided_accounts", len(overridedAlloc), "genesis_accounts", len(*ga), "elapsed", time.Since(start))
-
-	return ignoredAlloc, overridedAlloc, oldGenesisAlloc, nil
+	return dbAlloc, nil
 }
 
 func getSmtBatchRootHashOrigin(chainDataPath, smtDataPath string) (*big.Int, error) {
@@ -510,7 +484,7 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 	for addr := range alloc {
 		addrs = append(addrs, addr)
 	}
-	fmt.Println("addrs:", len(addrs))
+	fmt.Println("calcSmtRoot total addrs:", len(addrs))
 
 	numWorkers := runtime.NumCPU()
 	fmt.Println("numWorkers:", numWorkers)
@@ -719,38 +693,16 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 }
 
 // verifySMT verifies the SMT (Sparse Merkle Tree) data
-func verifySMT(chainDataPath string, smtDataPath string, alloc, ignoredAlloc, overridedAlloc, oldGenesisAlloc *types.GenesisAlloc) error {
-	log.Info("verifySMT called", "chainDataPath", chainDataPath, "smtDataPath", smtDataPath, "accounts", len(*alloc))
+func verifySMT(chainDataPath string, smtDataPath string, dbAlloc *types.GenesisAlloc) error {
+	log.Info("verifySMT called", "chainDataPath", chainDataPath, "smtDataPath", smtDataPath, "accounts", len(*dbAlloc))
 	smtBatchRootHashOrigin, err := getSmtBatchRootHashOrigin(chainDataPath, smtDataPath)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("*** smtBatchRootHashOrigin: %x\n", smtBatchRootHashOrigin)
 
-	// Merge all allocations into one
-	mergedAlloc := make(types.GenesisAlloc)
-
-	// First, add all accounts from alloc
-	for addr, acc := range *alloc {
-		mergedAlloc[addr] = acc
-	}
-
-	// remove oldGenesisAlloc
-	for addr := range *oldGenesisAlloc {
-		delete(mergedAlloc, addr)
-	}
-
-	// Then, add overridedAlloc
-	for addr, acc := range *overridedAlloc {
-		mergedAlloc[addr] = acc
-	}
-
-	// Finally, add ignoredAlloc
-	for addr, acc := range *ignoredAlloc {
-		mergedAlloc[addr] = acc
-	}
-
-	smtBatchRootHashRebuild, err := calcSmtRoot(mergedAlloc)
+	// Use dbAlloc directly for SMT verification
+	smtBatchRootHashRebuild, err := calcSmtRoot(*dbAlloc)
 	if err != nil {
 		return err
 	}
@@ -803,9 +755,9 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 	isStandaloneDb := migrationConfig.SMTDataPath != ""
 	kv.InitStandaloneSMT(isStandaloneDb)
 
-	// Scan migration database and update genesis.Alloc
-	log.Info("Scanning migration database to update genesis alloc")
-	ignoredAlloc, overridedAlloc, oldGenesisAlloc, err := ScanDB(migrationConfig.ChainDataPath, genesis, ignoreAddresses) // genesis.Alloc will be updated
+	// Scan migration database
+	log.Info("Scanning migration database to get dbAlloc")
+	dbAlloc, err := ScanDB(migrationConfig.ChainDataPath)
 	if err != nil {
 		return nil, common.Hash{}, nil, fmt.Errorf("failed to scan migration database: %w", err)
 	}
@@ -822,9 +774,15 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			smtErr = verifySMT(migrationConfig.ChainDataPath, migrationConfig.SMTDataPath, &genesis.Alloc, &ignoredAlloc, &overridedAlloc, &oldGenesisAlloc)
+			smtErr = verifySMT(migrationConfig.ChainDataPath, migrationConfig.SMTDataPath, &dbAlloc)
 		}()
 	}
+
+	// Generate migrateAlloc by filtering out ignored addresses and merging with genesis.Alloc
+	migrateAlloc := generateMigrateAlloc(dbAlloc, ignoreAddresses, &genesis.Alloc)
+
+	// Update genesis.Alloc with the merged result
+	genesis.Alloc = migrateAlloc
 
 	// Start SetupGenesisBlockWithOverride
 	wg.Add(1)
@@ -842,7 +800,7 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 		return nil, common.Hash{}, nil, fmt.Errorf("failed to setup genesis block: %w", setupErr)
 	}
 
-	log.Info("Updated genesis alloc with migration data", "ignored_accounts", len(ignoredAlloc), "updated_accounts", len(genesis.Alloc))
+	log.Info("Updated genesis alloc with migration data", "total_accounts", len(dbAlloc), "migrate_accounts", len(migrateAlloc), "updated_accounts", len(genesis.Alloc))
 
 	return cfg, hash, compatErr, setupErr
 }
