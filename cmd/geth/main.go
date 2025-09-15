@@ -151,6 +151,7 @@ var (
 		utils.VMEnableDebugFlag,
 		utils.VMTraceFlag,
 		utils.VMTraceJsonConfigFlag,
+		utils.InnerTxFlag, // For X Layer
 		utils.NetworkIdFlag,
 		utils.EthStatsURLFlag,
 		utils.GpoBlocksFlag,
@@ -182,6 +183,10 @@ var (
 		utils.BeaconGenesisTimeFlag,
 		utils.BeaconCheckpointFlag,
 		utils.BeaconCheckpointFileFlag,
+		// For X Layer
+		utils.OkPayPriorityEnableFlag,
+		utils.OkPaySenderAccountsList,
+		utils.OkPayBlockPriorityTxsLimit,
 		// Monitor flags
 		&utils.TraceLogPath,
 		&utils.EnableTraceLog,
@@ -246,7 +251,6 @@ func init() {
 		// See chaincmd.go:
 		initCommand,
 		migrateCommand,
-		verifyGenesisCommand,
 		importCommand,
 		exportCommand,
 		importHistoryCommand,

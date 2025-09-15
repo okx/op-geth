@@ -25,7 +25,6 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -127,7 +126,6 @@ participating.
 
 It expects the genesis file as argument.`,
 	}
-
 	migrateCommand = &cli.Command{
 		Action:    migrateGenesis,
 		Name:      "migrate",
@@ -139,7 +137,7 @@ It expects the genesis file as argument.`,
 			utils.OverrideVerkle,
 			&cli.BoolFlag{
 				Name:  "no-verify",
-				Usage: "do not perform verification",
+				Usage: "do not perform state verification post migration",
 			},
 			&cli.StringFlag{
 				Name:     "chaindata",
@@ -177,29 +175,6 @@ specify the path to the migration database.
 
 Use --ignore-addresses to specify addresses to ignore during migration.
 Use --no-verify to skip verification after migration.`,
-	}
-
-	verifyGenesisCommand = &cli.Command{
-		Action:    verifyGenesis,
-		Name:      "verify-genesis",
-		Usage:     "Verify that the saved state in trie database is consistent with genesis.json",
-		ArgsUsage: "<genesisPath> [<accountAddress>]",
-		Flags: slices.Concat([]cli.Flag{
-			utils.CachePreimagesFlag,
-			&cli.StringFlag{
-				Name:  "ignore-addresses",
-				Usage: "Comma-separated list of addresses to ignore during verification",
-			},
-		}, utils.DatabaseFlags),
-		Description: `
-The verify-genesis command connects to the database and verifies that the saved state
-is consistent with the provided genesis.json file. It can verify all accounts or a
-specific account if an address is provided.
-
-Examples:
-  geth verify-genesis genesis.json
-  geth verify-genesis genesis.json 0x1234567890123456789012345678901234567890
-  geth verify-genesis genesis.json --ignore-addresses "0x4200000000000000000000000000000000000297,0x1234567890123456789012345678901234567890"`,
 	}
 	dumpGenesisCommand = &cli.Command{
 		Action:    dumpGenesis,
@@ -805,7 +780,7 @@ func pruneHistory(ctx *cli.Context) error {
 	return nil
 }
 
-func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis, ignoreAddresses map[common.Address]bool) error {
+func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	start := time.Now()
 
 	// Open the database
@@ -842,10 +817,6 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis, ignoreAddres
 	accountsToVerify := make([]common.Address, len(genesis.Alloc))
 
 	for addr, _ := range genesis.Alloc {
-		if ignoreAddresses != nil && ignoreAddresses[addr] {
-			log.Info("Skipping ignored address", "address", addr.Hex())
-			continue
-		}
 		accountsToVerify = append(accountsToVerify, addr)
 	}
 
@@ -939,52 +910,6 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis, ignoreAddres
 	return nil
 }
 
-// verifyGenesis verifies that the saved state in the trie database is consistent
-// with the provided genesis.json file.
-func verifyGenesis(ctx *cli.Context) error {
-	if ctx.Args().Len() < 1 {
-		utils.Fatalf("need genesis.json file as the first argument")
-	}
-	genesisPath := ctx.Args().First()
-	if len(genesisPath) == 0 {
-		utils.Fatalf("invalid path to genesis file")
-	}
-
-	// Parse ignore addresses
-	var ignoreAddresses map[common.Address]bool
-	if ctx.IsSet("ignore-addresses") {
-		ignoreList := ctx.String("ignore-addresses")
-		if ignoreList != "" {
-			ignoreAddresses = make(map[common.Address]bool)
-			addresses := strings.Split(ignoreList, ",")
-			for _, addrStr := range addresses {
-				addrStr = strings.TrimSpace(addrStr)
-				if addrStr != "" {
-					addr := common.HexToAddress(addrStr)
-					ignoreAddresses[addr] = true
-					log.Info("Ignoring address during verification", "address", addr.Hex())
-				}
-			}
-		}
-	} else {
-		log.Info("full verification", "path", genesisPath)
-	}
-
-	// Read and parse the genesis file
-	file, err := os.Open(genesisPath)
-	if err != nil {
-		utils.Fatalf("Failed to read genesis file: %v", err)
-	}
-	defer file.Close()
-
-	genesis := new(core.Genesis)
-	if err := json.NewDecoder(file).Decode(genesis); err != nil {
-		utils.Fatalf("invalid genesis file: %v", err)
-	}
-
-	return verifyGenesisInternal(ctx, genesis, ignoreAddresses)
-}
-
 // migrateGenesis will migrate state data and initialize a new genesis block
 func migrateGenesis(ctx *cli.Context) error {
 	if ctx.Args().Len() != 1 {
@@ -1048,24 +973,6 @@ func migrateGenesis(ctx *cli.Context) error {
 	if !ctx.Bool("no-verify") {
 		log.Info("Starting genesis verification after migration")
 
-		// Parse ignore addresses if provided
-		var ignoreAddresses map[common.Address]bool
-		if ctx.IsSet("ignore-addresses") {
-			ignoreList := ctx.String("ignore-addresses")
-			if ignoreList != "" {
-				ignoreAddresses = make(map[common.Address]bool)
-				addresses := strings.Split(ignoreList, ",")
-				for _, addrStr := range addresses {
-					addrStr = strings.TrimSpace(addrStr)
-					if addrStr != "" {
-						addr := common.HexToAddress(addrStr)
-						ignoreAddresses[addr] = true
-						log.Info("Ignoring address during verification", "address", addr.Hex())
-					}
-				}
-			}
-		}
-
 		if err := triedb.Close(); err != nil {
 			log.Warn("Failed to close trie database", "error", err)
 		}
@@ -1076,7 +983,7 @@ func migrateGenesis(ctx *cli.Context) error {
 			log.Warn("Failed to close node stack", "error", err)
 		}
 		verifyStart := time.Now()
-		if err := verifyGenesisInternal(ctx, genesis, ignoreAddresses); err != nil {
+		if err := verifyGenesisInternal(ctx, genesis); err != nil {
 			log.Error("Genesis verification failed", "error", err)
 			return err
 		}

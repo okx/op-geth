@@ -18,8 +18,10 @@ package vm
 
 import (
 	"math"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -677,7 +679,10 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	scope.Contract.UseGas(gas, interpreter.evm.Config.Tracer, tracing.GasChangeCallContractCreation)
 
+	innerTx, newIndex := beforeOp(interpreter, CREATE_TYP, scope.Contract.Address(), nil, nil, input, gas, value.ToBig())
 	res, addr, returnGas, suberr := interpreter.evm.Create(scope.Contract.Address(), input, gas, &value)
+	afterOp(interpreter, CREATE_TYP, gas-returnGas, newIndex, innerTx, &addr, suberr, res)
+
 	// Push item on the stack based on the returned error. If the ruleset is
 	// homestead we must check for CodeStoreOutOfGasError (homestead only
 	// rule) and treat as an error, if the ruleset is frontier we must
@@ -718,8 +723,11 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 	scope.Contract.UseGas(gas, interpreter.evm.Config.Tracer, tracing.GasChangeCallContractCreation2)
 	// reuse size int for stackvalue
 	stackvalue := size
+	innerTx, newIndex := beforeOp(interpreter, CREATE2_TYP, scope.Contract.Address(), nil, nil, input, gas, endowment.ToBig())
 	res, addr, returnGas, suberr := interpreter.evm.Create2(scope.Contract.Address(), input, gas,
 		&endowment, &salt)
+	afterOp(interpreter, CREATE2_TYP, gas-returnGas, newIndex, innerTx, &addr, suberr, res)
+
 	// Push item on the stack based on the returned error.
 	if suberr != nil {
 		stackvalue.Clear()
@@ -755,7 +763,10 @@ func opCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	if !value.IsZero() {
 		gas += params.CallStipend
 	}
+
+	innerTx, newIndex := beforeOp(interpreter, CALL_TYP, scope.Contract.Address(), &toAddr, nil, args, gas, value.ToBig())
 	ret, returnGas, err := interpreter.evm.Call(scope.Contract.Address(), toAddr, args, gas, &value)
+	afterOp(interpreter, CALL_TYP, gas-returnGas, newIndex, innerTx, nil, err, ret)
 
 	if err != nil {
 		temp.Clear()
@@ -789,7 +800,10 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 		gas += params.CallStipend
 	}
 
+	innerTx, newIndex := beforeOp(interpreter, CALLCODE_TYP, scope.Contract.Address(), &toAddr, &toAddr, args, gas, value.ToBig())
 	ret, returnGas, err := interpreter.evm.CallCode(scope.Contract.Address(), toAddr, args, gas, &value)
+	afterOp(interpreter, CALLCODE_TYP, gas-returnGas, newIndex, innerTx, nil, err, ret)
+
 	if err != nil {
 		temp.Clear()
 	} else {
@@ -818,7 +832,15 @@ func opDelegateCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	// Get arguments from the memory.
 	args := scope.Memory.GetPtr(inOffset.Uint64(), inSize.Uint64())
 
+	innerTx, newIndex := beforeOp(interpreter, DELEGATECALL_TYP, scope.Contract.Address(), &toAddr, nil, args, gas, big.NewInt(0))
 	ret, returnGas, err := interpreter.evm.DelegateCall(scope.Contract.Caller(), scope.Contract.Address(), toAddr, args, gas, scope.Contract.value)
+
+	// For X Layer
+	innerTx.TraceAddress = scope.Contract.Address().String()
+	innerTx.ValueWei = scope.Contract.value.ToBig().String()
+	innerTx.CallValueWei = hexutil.EncodeBig(scope.Contract.value.ToBig())
+	afterOp(interpreter, DELEGATECALL_TYP, gas-returnGas, newIndex, innerTx, nil, err, ret)
+
 	if err != nil {
 		temp.Clear()
 	} else {
@@ -846,8 +868,10 @@ func opStaticCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) 
 	toAddr := common.Address(addr.Bytes20())
 	// Get arguments from the memory.
 	args := scope.Memory.GetPtr(inOffset.Uint64(), inSize.Uint64())
-
+	innerTx, newIndex := beforeOp(interpreter, STATICCAL_TYP, scope.Contract.Address(), &toAddr, nil, args, gas, big.NewInt(0))
 	ret, returnGas, err := interpreter.evm.StaticCall(scope.Contract.Address(), toAddr, args, gas)
+	afterOp(interpreter, STATICCAL_TYP, gas-returnGas, newIndex, innerTx, nil, err, ret)
+
 	if err != nil {
 		temp.Clear()
 	} else {
@@ -893,8 +917,12 @@ func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	}
 	beneficiary := scope.Stack.pop()
 	balance := interpreter.evm.StateDB.GetBalance(scope.Contract.Address())
+	beneficiaryAddr := common.Address(beneficiary.Bytes20())
+	innerTx, newIndex := beforeOp(interpreter, SUICIDE_TYP, scope.Contract.Address(), &beneficiaryAddr, nil, nil, 0, balance.ToBig())
 	interpreter.evm.StateDB.AddBalance(beneficiary.Bytes20(), balance, tracing.BalanceIncreaseSelfdestruct)
 	interpreter.evm.StateDB.SelfDestruct(scope.Contract.Address())
+	afterOp(interpreter, SUICIDE_TYP, 0, newIndex, innerTx, nil, nil, nil)
+
 	if tracer := interpreter.evm.Config.Tracer; tracer != nil {
 		if tracer.OnEnter != nil {
 			tracer.OnEnter(interpreter.evm.depth, byte(SELFDESTRUCT), scope.Contract.Address(), beneficiary.Bytes20(), []byte{}, 0, balance.ToBig())
