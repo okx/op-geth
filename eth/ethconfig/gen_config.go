@@ -197,11 +197,8 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		RollupDisableTxPoolGossip                 *bool
 		RollupDisableTxPoolAdmission              *bool
 		RollupHaltOnIncompatibleProtocolVersion   *string
-		InteropMessageRPC                         *string        `toml:",omitempty"`
-		InteropMempoolFiltering                   *bool          `toml:",omitempty"`
-		MigrationBlock                            *uint64        `toml:",omitempty"`
-		PPRPCUrl                                  *string        `toml:",omitempty"`
-		PPRPCTimeout                              *time.Duration `toml:",omitempty"`
+		InteropMessageRPC                         *string `toml:",omitempty"`
+		InteropMempoolFiltering                   *bool   `toml:",omitempty"`
 	}
 	var dec Config
 	if err := unmarshal(&dec); err != nil {
