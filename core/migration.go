@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"os"
 	"runtime"
 	"slices"
 	"sort"
@@ -27,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -718,6 +720,21 @@ func verifySMT(chainDataPath string, smtDataPath string, dbAlloc *types.GenesisA
 	return nil
 }
 
+func dumpGenesis(genesis *Genesis, outputPath string) {
+	buf, err := sonic.MarshalIndent(genesis, "", "  ")
+	if err != nil {
+		log.Warn("Failed to marshal updated genesis", "error", err)
+	} else if outputPath != "" {
+		if err := os.WriteFile(outputPath, buf, 0666); err != nil {
+			log.Warn("Failed to write updated genesis to file", "path", outputPath, "error", err)
+		} else {
+			log.Info("Updated genesis written to file", "path", outputPath)
+		}
+	} else {
+		log.Info("Updated genesis not written to file, use --output-path to specify the output path")
+	}
+}
+
 // SetupGenesisBlockWithMigrationData sets up the genesis block with migration data
 func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.Database, genesis *Genesis, overrides *ChainOverrides, ctx *cli.Context) (*params.ChainConfig, common.Hash, *params.ConfigCompatError, error) {
 	// Get migration path from CLI context
@@ -783,6 +800,15 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 
 	// Update genesis.Alloc with the merged result
 	genesis.Alloc = migrateAlloc
+
+	if ctx.String("output") != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Start write genesis to file in parallel
+			dumpGenesis(genesis, ctx.String("output"))
+		}()
+	}
 
 	// Start SetupGenesisBlockWithOverride
 	wg.Add(1)
