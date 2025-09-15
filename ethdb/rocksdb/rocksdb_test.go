@@ -43,6 +43,16 @@ func TestRocksDBSuite(t *testing.T) {
 	})
 }
 
+func BenchmarkRocksDB(b *testing.B) {
+	dbtest.BenchDatabaseSuite(b, func() ethdb.KeyValueStore {
+		db, err := New(fmt.Sprintf("/tmp/bench-rocksdb-%d-%d", os.Getpid(), time.Now().UnixNano()), 16, 16, "", false)
+		if err != nil {
+			b.Fatal(err)
+		}
+		return db
+	})
+}
+
 func TestRocksDBBasic(t *testing.T) {
 	db, err := New(fmt.Sprintf("/tmp/test-rocksdb-basic-%d-%d", os.Getpid(), time.Now().UnixNano()), 16, 16, "", false)
 	if err != nil {
