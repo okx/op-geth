@@ -1,6 +1,11 @@
 package utils
 
 import (
+	"github.com/ethereum/go-ethereum/eth"
+	"github.com/ethereum/go-ethereum/eth/filters"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
+	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/rpc"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -114,4 +119,22 @@ func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setOkPayXLayer(ctx, cfg)
 	setInnerTxXLayer(ctx, cfg)
 	setMigrationXLayer(ctx, cfg)
+}
+
+// RegisterMigrationFilterAPI adds the eth log filtering RPC API to the node.
+func RegisterMigrationFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconfig.Config) *filters.FilterSystem {
+	filterSystem := filters.NewFilterSystem(backend, filters.Config{
+		LogCacheSize: ethcfg.FilterLogCacheSize,
+	})
+	migrationCfg, err := eth.NewMigrationConfig(ethcfg)
+	if err != nil {
+		panic(err)
+	}
+	originalFilterApi := filters.NewFilterAPI(filterSystem)
+	migrationFilterApi := rpc.API{
+		Namespace: "eth",
+		Service:   eth.NewMigrationFilterAPI(originalFilterApi, migrationCfg),
+	}
+	stack.RegisterAPIs([]rpc.API{migrationFilterApi})
+	return filterSystem
 }

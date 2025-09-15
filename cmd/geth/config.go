@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/eth/catalyst"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
@@ -256,15 +257,18 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		})
 	}
 
-	// If migration is not configured, configure log filter RPC API.
-	// We will add filter RPC API if migration is configured, see eth/backend.go#APIs
-	if cfg.Eth.MigrationBlock == nil || cfg.Eth.PPRPCUrl == "" {
-		// Configure log filter RPC API.
-		filterSystem := utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
-		// Configure GraphQL if requested.
-		if ctx.IsSet(utils.GraphQLEnabledFlag.Name) {
-			utils.RegisterGraphQLService(stack, backend, filterSystem, &cfg.Node)
-		}
+	// Configure log filter RPC API.
+	isMigrationConfigured := cfg.Eth.XLayer.RpcMigration.MigrationBlock != nil && cfg.Eth.XLayer.RpcMigration.PPRPCUrl != ""
+	var filterSystem *filters.FilterSystem
+	if isMigrationConfigured {
+		filterSystem = utils.RegisterMigrationFilterAPI(stack, backend, &cfg.Eth)
+	} else {
+		filterSystem = utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
+	}
+
+	// Configure GraphQL if requested.
+	if ctx.IsSet(utils.GraphQLEnabledFlag.Name) {
+		utils.RegisterGraphQLService(stack, backend, filterSystem, &cfg.Node)
 	}
 	// Add the Ethereum Stats daemon if requested.
 	if cfg.Ethstats.URL != "" {
