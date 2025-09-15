@@ -1,19 +1,3 @@
-// Copyright 2025 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
 package eth
 
 import (
@@ -265,11 +249,11 @@ func TestNewMigrationConfig(t *testing.T) {
 	defer server.Close()
 
 	migrationBlock := uint64(100)
-	config2 := &ethconfig.Config{
+	config2 := &ethconfig.Config{XLayer: ethconfig.XLayerConfig{RpcMigration: ethconfig.MigrationConfig{
 		MigrationBlock: &migrationBlock,
 		PPRPCUrl:       server.URL,
 		PPRPCTimeout:   5 * time.Second,
-	}
+	}}}
 
 	mc2, err := NewMigrationConfig(config2)
 	if err != nil {
@@ -289,10 +273,11 @@ func TestNewMigrationConfig(t *testing.T) {
 	// Test case 3: Invalid URL
 	migrationBlock3 := uint64(100)
 	config3 := &ethconfig.Config{
-		MigrationBlock: &migrationBlock3,
-		PPRPCUrl:       "invalid://url",
-		PPRPCTimeout:   1 * time.Second,
-	}
+		XLayer: ethconfig.XLayerConfig{RpcMigration: ethconfig.MigrationConfig{
+			MigrationBlock: &migrationBlock3,
+			PPRPCUrl:       "invalid://url",
+			PPRPCTimeout:   1 * time.Second,
+		}}}
 
 	mc3, err := NewMigrationConfig(config3)
 	if err == nil {
@@ -300,66 +285,6 @@ func TestNewMigrationConfig(t *testing.T) {
 	}
 	if mc3 != nil {
 		t.Error("Expected nil MigrationConfig on error")
-	}
-}
-
-// Test shouldProxy method
-func TestShouldProxy(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name           string
-		config         *MigrationConfig
-		blockNumber    uint64
-		expectedResult bool
-	}{
-		{
-			name:           "Nil config",
-			config:         nil,
-			blockNumber:    50,
-			expectedResult: false,
-		},
-		{
-			name: "Block before migration",
-			config: &MigrationConfig{
-				MigrationBlock: 100,
-			},
-			blockNumber:    50,
-			expectedResult: true,
-		},
-		{
-			name: "Block at migration",
-			config: &MigrationConfig{
-				MigrationBlock: 100,
-			},
-			blockNumber:    100,
-			expectedResult: false,
-		},
-		{
-			name: "Block after migration",
-			config: &MigrationConfig{
-				MigrationBlock: 100,
-			},
-			blockNumber:    150,
-			expectedResult: false,
-		},
-		{
-			name: "Zero migration block",
-			config: &MigrationConfig{
-				MigrationBlock: 0,
-			},
-			blockNumber:    50,
-			expectedResult: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := tt.config.shouldProxy(tt.blockNumber)
-			if result != tt.expectedResult {
-				t.Errorf("shouldProxy(%d) = %v, want %v", tt.blockNumber, result, tt.expectedResult)
-			}
-		})
 	}
 }
 

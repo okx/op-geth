@@ -73,11 +73,8 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		RollupDisableTxPoolGossip                 bool
 		RollupDisableTxPoolAdmission              bool
 		RollupHaltOnIncompatibleProtocolVersion   string
-		InteropMessageRPC                         string        `toml:",omitempty"`
-		InteropMempoolFiltering                   bool          `toml:",omitempty"`
-		MigrationBlock                            *uint64       `toml:",omitempty"`
-		PPRPCUrl                                  string        `toml:",omitempty"`
-		PPRPCTimeout                              time.Duration `toml:",omitempty"`
+		InteropMessageRPC                         string `toml:",omitempty"`
+		InteropMempoolFiltering                   bool   `toml:",omitempty"`
 	}
 	var enc Config
 	enc.Genesis = c.Genesis

@@ -29,11 +29,11 @@ type MigrationConfig struct {
 
 // NewMigrationConfig creates a new migration configuration
 func NewMigrationConfig(config *ethconfig.Config) (*MigrationConfig, error) {
-	if config.MigrationBlock == nil || config.PPRPCUrl == "" {
+	if config.XLayer.RpcMigration.MigrationBlock == nil || config.XLayer.RpcMigration.PPRPCUrl == "" {
 		return nil, nil // Migration not configured
 	}
 
-	timeout := config.PPRPCTimeout
+	timeout := config.XLayer.RpcMigration.PPRPCTimeout
 	if timeout == 0 {
 		timeout = 10 * time.Second
 	}
@@ -41,13 +41,13 @@ func NewMigrationConfig(config *ethconfig.Config) (*MigrationConfig, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	erigonClient, err := rpc.DialContext(ctx, config.PPRPCUrl)
+	erigonClient, err := rpc.DialContext(ctx, config.XLayer.RpcMigration.PPRPCUrl)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to erigon RPC: %w", err)
 	}
 
 	return &MigrationConfig{
-		MigrationBlock: *config.MigrationBlock,
+		MigrationBlock: *config.XLayer.RpcMigration.MigrationBlock,
 		ErigonClient:   erigonClient,
 	}, nil
 }
