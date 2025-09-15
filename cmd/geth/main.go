@@ -185,7 +185,6 @@ var (
 		// Monitor flags
 		&utils.TraceLogPath,
 		&utils.EnableTraceLog,
-		&utils.MonitorLogLevel,
 	}, utils.NetworkFlags, utils.DatabaseFlags)
 
 	rpcFlags = []cli.Flag{

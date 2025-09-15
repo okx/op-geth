@@ -17,10 +17,4 @@ var (
 		Usage: "Enable full transaction trace log",
 		Value: false,
 	}
-
-	MonitorLogLevel = cli.StringFlag{
-		Name:  "monitor.log-level",
-		Usage: "Log level for monitoring (debug, info, warn, error)",
-		Value: "info",
-	}
 )

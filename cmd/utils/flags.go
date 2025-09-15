@@ -2549,7 +2549,4 @@ func setMonitor(ctx *cli.Context, cfg *ethconfig.MonitorConfig) {
 	if ctx.IsSet(TraceLogPath.Name) {
 		cfg.TraceLogPath = ctx.String(TraceLogPath.Name)
 	}
-	if ctx.IsSet(MonitorLogLevel.Name) {
-		cfg.LogLevel = ctx.String(MonitorLogLevel.Name)
-	}
 }
