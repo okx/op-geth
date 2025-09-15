@@ -218,14 +218,30 @@ func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common
 	return migrateAlloc
 }
 
-func SetupDB(migrationPath string) (kv.RwDB, error) {
+// LoadErigonGenesisData load erigon db plainstate data
+func LoadErigonGenesisData(migrationPath string) (types.GenesisAlloc, error) {
+	// Scan migration database
+	log.Info("Scanning migration database to get dbAlloc")
+	db, err := setupDB(migrationPath)
+	if err != nil {
+		log.Error("Failed to setup mdbx database", "err", err)
+		return nil, err
+	}
+	defer db.Close()
+	dbAlloc, err := ScanDB(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan migration database: %w", err)
+	}
+	return dbAlloc, nil
+}
+
+func setupDB(migrationPath string) (kv.RwDB, error) {
 	log.Info("Setup Erigon DB", "path", migrationPath)
 	opts := mdbx.NewMDBX(erigonlog.New()).Path(migrationPath)
 	db, err := opts.Open(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to open migration database: %w", err)
 	}
-	defer db.Close()
 	return db, nil
 }
 
@@ -775,17 +791,10 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 	// isStandaloneDb
 	isStandaloneDb := migrationConfig.SMTDataPath != ""
 	kv.InitStandaloneSMT(isStandaloneDb)
-
-	// Scan migration database
-	log.Info("Scanning migration database to get dbAlloc")
-	db, err := SetupDB(migrationConfig.ChainDataPath)
+	dbAlloc, err := LoadErigonGenesisData(migrationConfig.ChainDataPath)
 	if err != nil {
-		log.Error("Failed to setup mdbx database", "err", err)
+		log.Error("Failed to load erigon genesis data", "error", err)
 		return nil, common.Hash{}, nil, err
-	}
-	dbAlloc, err := ScanDB(db)
-	if err != nil {
-		return nil, common.Hash{}, nil, fmt.Errorf("failed to scan migration database: %w", err)
 	}
 
 	// Start parallel processes
