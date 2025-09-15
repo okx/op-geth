@@ -22,6 +22,7 @@ package rocksdb
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -31,6 +32,12 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/linxGnu/grocksdb"
+)
+
+var (
+	// errRocksDBClosed is returned if a rocksdb database was already closed at the
+	// invocation of a data access operation.
+	errRocksDBClosed = errors.New("database closed")
 )
 
 const (
@@ -78,6 +85,9 @@ type Database struct {
 
 	quitLock sync.Mutex      // Mutex protecting the quit channel access
 	quitChan chan chan error // Quit channel to stop the metrics collection before closing the database
+
+	closeLock sync.RWMutex // Mutex protecting the closed flag
+	closed    bool         // Flag indicating if the database is closed
 
 	log log.Logger // Contextual logger tracking the database path
 }
@@ -192,9 +202,14 @@ func configureOptions(customizeFn func(*grocksdb.Options)) *grocksdb.Options {
 // Close stops the metrics collection, flushes any pending data to disk and closes
 // all io accesses to the underlying key-value store.
 func (db *Database) Close() error {
-	db.quitLock.Lock()
-	defer db.quitLock.Unlock()
+	db.closeLock.Lock()
+	defer db.closeLock.Unlock()
 
+	if db.closed {
+		return nil
+	}
+
+	db.quitLock.Lock()
 	if db.quitChan != nil {
 		errc := make(chan error)
 		db.quitChan <- errc
@@ -203,23 +218,35 @@ func (db *Database) Close() error {
 		}
 		db.quitChan = nil
 	}
+	db.quitLock.Unlock()
 
 	// Close options and database
 	if db.ro != nil {
 		db.ro.Destroy()
+		db.ro = nil
 	}
 	if db.wo != nil {
 		db.wo.Destroy()
+		db.wo = nil
 	}
 	if db.db != nil {
 		db.db.Close()
+		db.db = nil
 	}
 
+	db.closed = true
 	return nil
 }
 
 // Has retrieves if a key is present in the key-value store.
 func (db *Database) Has(key []byte) (bool, error) {
+	db.closeLock.RLock()
+	defer db.closeLock.RUnlock()
+
+	if db.closed {
+		return false, errRocksDBClosed
+	}
+
 	data, err := db.db.Get(db.ro, key)
 	if err != nil {
 		return false, err
@@ -230,6 +257,13 @@ func (db *Database) Has(key []byte) (bool, error) {
 
 // Get retrieves the given key if it's present in the key-value store.
 func (db *Database) Get(key []byte) ([]byte, error) {
+	db.closeLock.RLock()
+	defer db.closeLock.RUnlock()
+
+	if db.closed {
+		return nil, errRocksDBClosed
+	}
+
 	data, err := db.db.Get(db.ro, key)
 	if err != nil {
 		return nil, err
@@ -248,11 +282,25 @@ func (db *Database) Get(key []byte) ([]byte, error) {
 
 // Put inserts the given value into the key-value store.
 func (db *Database) Put(key []byte, value []byte) error {
+	db.closeLock.RLock()
+	defer db.closeLock.RUnlock()
+
+	if db.closed {
+		return errRocksDBClosed
+	}
+
 	return db.db.Put(db.wo, key, value)
 }
 
 // Delete removes the key from the key-value store.
 func (db *Database) Delete(key []byte) error {
+	db.closeLock.RLock()
+	defer db.closeLock.RUnlock()
+
+	if db.closed {
+		return errRocksDBClosed
+	}
+
 	return db.db.Delete(db.wo, key)
 }
 
@@ -285,9 +333,10 @@ func (db *Database) DeleteRange(start, end []byte) error {
 // database until a final write is called.
 func (db *Database) NewBatch() ethdb.Batch {
 	return &batch{
-		db: db.db,
-		wo: db.wo,
-		b:  grocksdb.NewWriteBatch(),
+		parent: db,
+		db:     db.db,
+		wo:     db.wo,
+		b:      grocksdb.NewWriteBatch(),
 	}
 }
 
@@ -296,9 +345,10 @@ func (db *Database) NewBatchWithSize(size int) ethdb.Batch {
 	// RocksDB WriteBatch doesn't have size pre-allocation in grocksdb
 	wb := grocksdb.NewWriteBatch()
 	return &batch{
-		db: db.db,
-		wo: db.wo,
-		b:  wb,
+		parent: db,
+		db:     db.db,
+		wo:     db.wo,
+		b:      wb,
 	}
 }
 
@@ -397,16 +447,39 @@ func (db *Database) meter(refresh time.Duration, namespace string) {
 // batch is a write-only rocksdb batch that commits changes to its host database
 // when Write is called. A batch cannot be used concurrently.
 type batch struct {
-	db   *grocksdb.DB
-	wo   *grocksdb.WriteOptions
-	b    *grocksdb.WriteBatch
-	size int
+	parent *Database // Reference to parent database for closed checks
+	db     *grocksdb.DB
+	wo     *grocksdb.WriteOptions
+	b      *grocksdb.WriteBatch
+	size   int
+
+	// Track operations for replay functionality
+	ops []batchOp
+}
+
+// batchOp represents an operation in the batch
+type batchOp struct {
+	opType int // 0 = Put, 1 = Delete
+	key    []byte
+	value  []byte
 }
 
 // Put inserts the given value into the batch for later committing.
 func (b *batch) Put(key, value []byte) error {
 	b.b.Put(key, value)
 	b.size += len(key) + len(value)
+
+	// Store operation for replay
+	keyCopy := make([]byte, len(key))
+	copy(keyCopy, key)
+	valueCopy := make([]byte, len(value))
+	copy(valueCopy, value)
+	b.ops = append(b.ops, batchOp{
+		opType: 0, // Put operation
+		key:    keyCopy,
+		value:  valueCopy,
+	})
+
 	return nil
 }
 
@@ -414,6 +487,16 @@ func (b *batch) Put(key, value []byte) error {
 func (b *batch) Delete(key []byte) error {
 	b.b.Delete(key)
 	b.size += len(key)
+
+	// Store operation for replay
+	keyCopy := make([]byte, len(key))
+	copy(keyCopy, key)
+	b.ops = append(b.ops, batchOp{
+		opType: 1, // Delete operation
+		key:    keyCopy,
+		value:  nil,
+	})
+
 	return nil
 }
 
@@ -424,6 +507,14 @@ func (b *batch) ValueSize() int {
 
 // Write flushes any accumulated data to disk.
 func (b *batch) Write() error {
+	// Check if the parent database is closed
+	b.parent.closeLock.RLock()
+	defer b.parent.closeLock.RUnlock()
+
+	if b.parent.closed {
+		return errRocksDBClosed
+	}
+
 	return b.db.Write(b.wo, b.b)
 }
 
@@ -431,13 +522,23 @@ func (b *batch) Write() error {
 func (b *batch) Reset() {
 	b.b.Clear()
 	b.size = 0
+	b.ops = b.ops[:0] // Clear operations slice but keep capacity
 }
 
 // Replay replays the batch contents.
 func (b *batch) Replay(w ethdb.KeyValueWriter) error {
-	// grocksdb doesn't expose WriteBatch iteration directly
-	// This is a limitation - batch replay is not fully supported
-	return fmt.Errorf("batch replay not fully supported with grocksdb - would require custom implementation")
+	for _, op := range b.ops {
+		if op.opType == 0 { // Put operation
+			if err := w.Put(op.key, op.value); err != nil {
+				return err
+			}
+		} else if op.opType == 1 { // Delete operation
+			if err := w.Delete(op.key); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // rocksdbIterator wraps the RocksDB iterator to implement the ethdb.Iterator interface
