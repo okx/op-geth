@@ -178,29 +178,6 @@ specify the path to the migration database.
 Use --ignore-addresses to specify addresses to ignore during migration.
 Use --no-verify to skip verification after migration.`,
 	}
-
-	verifyGenesisCommand = &cli.Command{
-		Action:    verifyGenesis,
-		Name:      "verify-genesis",
-		Usage:     "Verify that the saved state in trie database is consistent with genesis.json",
-		ArgsUsage: "<genesisPath> [<accountAddress>]",
-		Flags: slices.Concat([]cli.Flag{
-			utils.CachePreimagesFlag,
-			&cli.StringFlag{
-				Name:  "ignore-addresses",
-				Usage: "Comma-separated list of addresses to ignore during verification",
-			},
-		}, utils.DatabaseFlags),
-		Description: `
-The verify-genesis command connects to the database and verifies that the saved state
-is consistent with the provided genesis.json file. It can verify all accounts or a
-specific account if an address is provided.
-
-Examples:
-  geth verify-genesis genesis.json
-  geth verify-genesis genesis.json 0x1234567890123456789012345678901234567890
-  geth verify-genesis genesis.json --ignore-addresses "0x4200000000000000000000000000000000000297,0x1234567890123456789012345678901234567890"`,
-	}
 	dumpGenesisCommand = &cli.Command{
 		Action:    dumpGenesis,
 		Name:      "dumpgenesis",

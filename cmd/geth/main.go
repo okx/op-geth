@@ -248,7 +248,6 @@ func init() {
 		// See chaincmd.go:
 		initCommand,
 		migrateCommand,
-		verifyGenesisCommand,
 		importCommand,
 		exportCommand,
 		importHistoryCommand,
