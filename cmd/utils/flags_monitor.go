@@ -6,13 +6,13 @@ import (
 
 var (
 	// Transaction monitoring flags
-	TraceLogPath = cli.StringFlag{
+	TraceLogPath = &cli.StringFlag{
 		Name:  "monitor.trace-log-path",
 		Usage: "Path of trace.log for transaction monitoring",
 		Value: "/var/log/op-geth/trace.log",
 	}
 
-	EnableTraceLog = cli.BoolFlag{
+	EnableTraceLog = &cli.BoolFlag{
 		Name:  "monitor.enable-trace-log",
 		Usage: "Enable full transaction trace log",
 		Value: false,

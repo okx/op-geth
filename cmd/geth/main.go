@@ -188,8 +188,8 @@ var (
 		utils.OkPaySenderAccountsList,
 		utils.OkPayBlockPriorityTxsLimit,
 		// Monitor flags
-		&utils.TraceLogPath,
-		&utils.EnableTraceLog,
+		utils.TraceLogPath,
+		utils.EnableTraceLog,
 	}, utils.NetworkFlags, utils.DatabaseFlags)
 
 	rpcFlags = []cli.Flag{
