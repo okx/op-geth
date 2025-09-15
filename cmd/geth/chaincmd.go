@@ -127,57 +127,6 @@ participating.
 
 It expects the genesis file as argument.`,
 	}
-
-	migrateCommand = &cli.Command{
-		Action:    migrateGenesis,
-		Name:      "migrate",
-		Usage:     "Migrate state data and initialize a new genesis block",
-		ArgsUsage: "<genesisPath>",
-		Flags: slices.Concat([]cli.Flag{
-			utils.CachePreimagesFlag,
-			utils.OverridePrague,
-			utils.OverrideVerkle,
-			&cli.BoolFlag{
-				Name:  "no-verify",
-				Usage: "do not perform verification",
-			},
-			&cli.StringFlag{
-				Name:     "chaindata",
-				Usage:    "Path to mdbx database for state migration",
-				Category: flags.EthCategory,
-			},
-			&cli.StringFlag{
-				Name:     "output",
-				Usage:    "Path to write genesis.json (default: no file is written)",
-				Category: flags.EthCategory,
-			},
-			&cli.StringFlag{
-				Name:     "ignore-addresses",
-				Usage:    "Comma-separated list of addresses to ignore during migration (e.g., 0x123...,0x456...)",
-				Category: flags.EthCategory,
-			},
-			&cli.StringFlag{
-				Name:     "smt-db-path",
-				Usage:    "Path to SMT database for migration",
-				Category: flags.EthCategory,
-			},
-			&cli.BoolFlag{
-				Name:     "ignore-smt-verify",
-				Usage:    "Ignore SMT verification during migration",
-				Category: flags.EthCategory,
-			},
-		}, utils.DatabaseFlags),
-		Description: `
-The migrate command migrates state data from a migration database and initializes 
-a new genesis block. This command is specifically designed for state migration 
-scenarios where you need to transfer account states from one database to another.
-
-It expects the genesis file as argument and requires --chaindata to 
-specify the path to the migration database.
-
-Use --ignore-addresses to specify addresses to ignore during migration.
-Use --no-verify to skip verification after migration.`,
-	}
 	migrateCommand = &cli.Command{
 		Action:    migrateGenesis,
 		Name:      "migrate",
