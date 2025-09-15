@@ -169,6 +169,34 @@ var (
 		Category: flags.EthCategory,
 	}
 
+	// Migration flag
+	MigrationChaindataFlag = &cli.StringFlag{
+		Name:     "migration-chaindata",
+		Usage:    "Path to mdbx database for state migration during genesis initialization",
+		Category: flags.EthCategory,
+	}
+
+	// Ignore addresses flag
+	IgnoreAddressesFlag = &cli.StringFlag{
+		Name:     "ignore-addresses",
+		Usage:    "Comma-separated list of addresses to ignore during migration (e.g., 0x123...,0x456...)",
+		Category: flags.EthCategory,
+	}
+
+	// Migration SMT database path flag
+	MigrationSMTPathFlag = &cli.StringFlag{
+		Name:     "migration-smt-db-path",
+		Usage:    "Path to SMT database for migration during genesis initialization",
+		Category: flags.EthCategory,
+	}
+
+	// Ignore SMT verification flag
+	IgnoreSMTVerifyFlag = &cli.BoolFlag{
+		Name:     "migration-ignore-smt-verify",
+		Usage:    "Ignore SMT verification during migration",
+		Category: flags.EthCategory,
+	}
+
 	// Dev mode
 	DeveloperFlag = &cli.BoolFlag{
 		Name:     "dev",
