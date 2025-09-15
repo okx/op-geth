@@ -185,6 +185,7 @@ func mergeConflictAccount(addr common.Address, dbAccount, genesisAccount *types.
 
 // generateMigrateAlloc filters out ignored addresses from dbAlloc, merges with genesisAlloc, and returns the final migrateAlloc
 func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common.Address]struct{}, genesisAlloc *types.GenesisAlloc) types.GenesisAlloc {
+	start := time.Now()
 	migrateAlloc := make(types.GenesisAlloc)
 
 	// Remove ignored addresses from dbAlloc
@@ -193,7 +194,9 @@ func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common
 			migrateAlloc[addr] = account
 		}
 	}
+	log.Info("generateMigrateAlloc remove ignored addresses elapsed:", "elapsed", time.Since(start))
 
+	start = time.Now()
 	// Merge with genesisAlloc and handle conflicts
 	for addr, genesisAccount := range *genesisAlloc {
 		var destAccount types.Account
@@ -210,6 +213,7 @@ func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common
 
 		migrateAlloc[addr] = destAccount
 	}
+	log.Info("generateMigrateAlloc merge with genesisAlloc elapsed:", "elapsed", time.Since(start))
 
 	return migrateAlloc
 }
@@ -486,10 +490,9 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 	for addr := range alloc {
 		addrs = append(addrs, addr)
 	}
-	fmt.Println("calcSmtRoot total addrs:", len(addrs))
 
 	numWorkers := runtime.NumCPU()
-	fmt.Println("numWorkers:", numWorkers)
+	log.Info("calcSmtRoot total addrs:", "total_addrs", len(addrs), "num_workers", numWorkers)
 	chunkSize := (len(addrs) + numWorkers - 1) / numWorkers
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -631,7 +634,7 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 	}
 
 	wg.Wait()
-	fmt.Println("prepare elapsed:", time.Since(start1))
+	log.Info("prepare elapsed:", "elapsed", time.Since(start1))
 
 	start11 := time.Now()
 	slices.SortFunc(nodeKvs, func(a, b *NodeKV) int {
@@ -646,11 +649,11 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 		}
 		return 0
 	})
-	fmt.Println("sorting nodes elapsed:", time.Since(start11))
+	log.Info("sorting nodes elapsed:", "elapsed", time.Since(start11))
 
 	start2 := time.Now()
 	calculateLevels(nodeKvs, 0)
-	fmt.Println("calculate level elapsed:", time.Since(start2))
+	log.Info("calculate level elapsed:", "elapsed", time.Since(start2))
 
 	start3 := time.Now()
 	// 2. Calculate leaf node hashes concurrently
@@ -685,11 +688,11 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 		}(i, end)
 	}
 	wg.Wait()
-	fmt.Println("calculate leaf hash elapsed:", time.Since(start3))
+	log.Info("calculate leaf hash elapsed:", "elapsed", time.Since(start3))
 
 	start4 := time.Now()
 	root := NodeKey(calculateRoot(nodeKvs, 0, len(nodeKvs), 0))
-	fmt.Println("calculate root hash elapsed:", time.Since(start4))
+	log.Info("calculate root hash elapsed:", "elapsed", time.Since(start4))
 
 	return root.ToBigInt(), nil
 }
@@ -701,20 +704,20 @@ func verifySMT(chainDataPath string, smtDataPath string, dbAlloc *types.GenesisA
 	if err != nil {
 		return err
 	}
-	fmt.Printf("*** smtBatchRootHashOrigin: %x\n", smtBatchRootHashOrigin)
+	log.Info("getSmtBatchRootHashOrigin", "smtBatchRootHashOrigin", smtBatchRootHashOrigin)
 
 	// Use dbAlloc directly for SMT verification
 	smtBatchRootHashRebuild, err := calcSmtRoot(*dbAlloc)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("*** smtBatchRootHashRebuild: %x\n", smtBatchRootHashRebuild)
+	log.Info("verifySMT", "smtBatchRootHashOrigin", smtBatchRootHashOrigin, "smtBatchRootHashRebuild", smtBatchRootHashRebuild)
 
 	if smtBatchRootHashOrigin != nil {
 		if smtBatchRootHashOrigin.Text(16) == smtBatchRootHashRebuild.Text(16) {
-			fmt.Println("Batch check: Pass")
+			log.Info("Batch check: Pass")
 		} else {
-			fmt.Println("Batch check: Failed")
+			log.Error("Batch check: Failed")
 		}
 	}
 	return nil
@@ -779,14 +782,11 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 		return nil, common.Hash{}, nil, fmt.Errorf("failed to scan migration database: %w", err)
 	}
 
+	// Start parallel processes
 	var wg sync.WaitGroup
 	var smtErr error
-	var setupErr error
-	var hash common.Hash
-	var compatErr *params.ConfigCompatError
-	var cfg *params.ChainConfig
 
-	// Start verifySMT in parallel
+	// 1. Start verifySMT in parallel
 	if !migrationConfig.IgnoreSMTVerify {
 		wg.Add(1)
 		go func() {
@@ -795,27 +795,31 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 		}()
 	}
 
-	// Generate migrateAlloc by filtering out ignored addresses and merging with genesis.Alloc
+	// 2. Generate migrateAlloc by filtering out ignored addresses and merging with genesis.Alloc
 	migrateAlloc := generateMigrateAlloc(dbAlloc, ignoreAddresses, &genesis.Alloc)
-
 	// Update genesis.Alloc with the merged result
 	genesis.Alloc = migrateAlloc
 
+	// 3. Dump genesis to file in parallel if needed
 	if ctx.String("output") != "" {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// Start write genesis to file in parallel
 			dumpGenesis(genesis, ctx.String("output"))
 		}()
 	}
 
-	// Start SetupGenesisBlockWithOverride
+	// 4. Start SetupGenesisBlockWithOverride in parallel
+	var setupErr error
+	var hash common.Hash
+	var compatErr *params.ConfigCompatError
+	var cfg *params.ChainConfig
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		cfg, hash, compatErr, setupErr = SetupGenesisBlockWithOverride(chaindb, triedb, genesis, overrides)
 	}()
+
 	// Wait for both goroutines to complete
 	wg.Wait()
 	// Check for errors
