@@ -378,7 +378,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, config.GPO, config.Miner.GasPrice)
 
 	// Set up migration configuration if configured
-	if config.MigrationBlock != nil && config.PPRPCUrl != "" {
+	if config.XLayer.RpcMigration.MigrationBlock != nil && config.XLayer.RpcMigration.PPRPCUrl != "" {
 		migrationConfig, err := NewMigrationConfig(config)
 		if err != nil {
 			log.Error("Failed to create migration configuration", "error", err)
@@ -387,8 +387,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		if migrationConfig != nil {
 			eth.migrationConfig = migrationConfig
 			log.Info("Migration routing enabled",
-				"migrationBlock", *config.MigrationBlock,
-				"ppUrl", config.PPRPCUrl)
+				"migrationBlock", *config.XLayer.RpcMigration.MigrationBlock,
+				"ppUrl", config.XLayer.RpcMigration.PPRPCUrl)
 		}
 	}
 

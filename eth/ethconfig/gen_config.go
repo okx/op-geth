@@ -138,9 +138,6 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.RollupHaltOnIncompatibleProtocolVersion = c.RollupHaltOnIncompatibleProtocolVersion
 	enc.InteropMessageRPC = c.InteropMessageRPC
 	enc.InteropMempoolFiltering = c.InteropMempoolFiltering
-	enc.MigrationBlock = c.MigrationBlock
-	enc.PPRPCUrl = c.PPRPCUrl
-	enc.PPRPCTimeout = c.PPRPCTimeout
 	return &enc, nil
 }
 
@@ -386,15 +383,6 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.InteropMempoolFiltering != nil {
 		c.InteropMempoolFiltering = *dec.InteropMempoolFiltering
-	}
-	if dec.MigrationBlock != nil {
-		c.MigrationBlock = dec.MigrationBlock
-	}
-	if dec.PPRPCUrl != nil {
-		c.PPRPCUrl = *dec.PPRPCUrl
-	}
-	if dec.PPRPCTimeout != nil {
-		c.PPRPCTimeout = *dec.PPRPCTimeout
 	}
 	return nil
 }

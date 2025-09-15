@@ -38,6 +38,7 @@ const (
 	MiscCategory       = "MISC"
 	TestingCategory    = "TESTING"
 	DeprecatedCategory = "ALIASED (deprecated)"
+	XLayerCategory     = "X LAYER RELATED"
 )
 
 func init() {
