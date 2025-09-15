@@ -118,14 +118,6 @@ var (
 			utils.CachePreimagesFlag,
 			utils.OverridePrague,
 			utils.OverrideVerkle,
-			&cli.BoolFlag{
-				Name:  "no-verify",
-				Usage: "do not perform verification",
-			},
-			&cli.StringFlag{
-				Name:  "ignore-addresses",
-				Usage: "Comma-separated list of addresses to ignore during verification",
-			},
 		}, utils.DatabaseFlags),
 		Description: `
 The init command initializes a new genesis block and definition for the network.
@@ -137,29 +129,6 @@ It expects the genesis file as argument.
 If --no-verify is provided, the command will skip verify
 the genesis state after initialization. Use --ignore-addresses to specify
 addresses to skip during verification.`,
-	}
-
-	verifyGenesisCommand = &cli.Command{
-		Action:    verifyGenesis,
-		Name:      "verify-genesis",
-		Usage:     "Verify that the saved state in trie database is consistent with genesis.json",
-		ArgsUsage: "<genesisPath> [<accountAddress>]",
-		Flags: slices.Concat([]cli.Flag{
-			utils.CachePreimagesFlag,
-			&cli.StringFlag{
-				Name:  "ignore-addresses",
-				Usage: "Comma-separated list of addresses to ignore during verification",
-			},
-		}, utils.DatabaseFlags),
-		Description: `
-The verify-genesis command connects to the database and verifies that the saved state
-is consistent with the provided genesis.json file. It can verify all accounts or a
-specific account if an address is provided.
-
-Examples:
-  geth verify-genesis genesis.json
-  geth verify-genesis genesis.json 0x1234567890123456789012345678901234567890
-  geth verify-genesis genesis.json --ignore-addresses "0x4200000000000000000000000000000000000297,0x1234567890123456789012345678901234567890"`,
 	}
 	dumpGenesisCommand = &cli.Command{
 		Action:    dumpGenesis,
@@ -356,45 +325,6 @@ func initGenesis(ctx *cli.Context) error {
 		utils.Fatalf("Failed to write chain config: %v", compatErr)
 	}
 	log.Info("Successfully wrote genesis state", "database", "chaindata", "hash", hash, "elapsed", time.Since(initStart))
-
-	// Check if verification is requested
-	if !ctx.Bool("no-verify") {
-		log.Info("Starting genesis verification after initialization")
-
-		// Parse ignore addresses if provided
-		var ignoreAddresses map[common.Address]bool
-		if ctx.IsSet("ignore-addresses") {
-			ignoreList := ctx.String("ignore-addresses")
-			if ignoreList != "" {
-				ignoreAddresses = make(map[common.Address]bool)
-				addresses := strings.Split(ignoreList, ",")
-				for _, addrStr := range addresses {
-					addrStr = strings.TrimSpace(addrStr)
-					if addrStr != "" {
-						addr := common.HexToAddress(addrStr)
-						ignoreAddresses[addr] = true
-						log.Info("Ignoring address during verification", "address", addr.Hex())
-					}
-				}
-			}
-		}
-
-		if err := triedb.Close(); err != nil {
-			log.Warn("Failed to close trie database", "error", err)
-		}
-		if err := chaindb.Close(); err != nil {
-			log.Warn("Failed to close chain database", "error", err)
-		}
-		if err := stack.Close(); err != nil {
-			log.Warn("Failed to close node stack", "error", err)
-		}
-		verifyStart := time.Now()
-		if err := verifyGenesisInternal(ctx, genesis, ignoreAddresses); err != nil {
-			log.Error("Genesis verification failed", "error", err)
-			return err
-		}
-		log.Info("Genesis verification completed successfully", "elapsed", common.PrettyDuration(time.Since(verifyStart)))
-	}
 	return nil
 }
 
