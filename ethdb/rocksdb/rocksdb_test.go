@@ -26,10 +26,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/dbtest"
 )
 
-/*
-// TODO: fix this test
 func TestRocksDBSuite(t *testing.T) {
 	t.Run("DatabaseSuite", func(t *testing.T) {
 		dbtest.TestDatabaseSuite(t, func() ethdb.KeyValueStore {
@@ -41,7 +42,6 @@ func TestRocksDBSuite(t *testing.T) {
 		})
 	})
 }
-*/
 
 func TestRocksDBBasic(t *testing.T) {
 	db, err := New(fmt.Sprintf("/tmp/test-rocksdb-basic-%d-%d", os.Getpid(), time.Now().UnixNano()), 16, 16, "", false)

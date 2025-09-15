@@ -468,6 +468,10 @@ func (it *rocksdbIterator) Next() bool {
 // Error returns any accumulated error. Exhausting all the key/value pairs
 // is not considered to be an error.
 func (it *rocksdbIterator) Error() error {
+	// if iter is nil, it means the iterator is exhausted and released => no error
+	if it.iter == nil {
+		return nil
+	}
 	return it.iter.Err()
 }
 
