@@ -20,10 +20,12 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -359,6 +361,25 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 	var hash common.Hash
 	var compatErr *params.ConfigCompatError
 	var cfg *params.ChainConfig
+
+	// Start write genesis to file in parallel
+	outputPath := ctx.String("output")
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		buf, err := sonic.MarshalIndent(genesis, "", "  ")
+		if err != nil {
+			log.Warn("Failed to marshal updated genesis", "error", err)
+		} else if outputPath != "" {
+			if err := os.WriteFile(outputPath, buf, 0666); err != nil {
+				log.Warn("Failed to write updated genesis to file", "path", outputPath, "error", err)
+			} else {
+				log.Info("Updated genesis written to file", "path", outputPath)
+			}
+		} else {
+			log.Info("Updated genesis not written to file, use --output-path to specify the output path")
+		}
+	}()
 
 	// Start verifySMT in parallel
 	wg.Add(1)

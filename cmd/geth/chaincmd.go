@@ -147,6 +147,11 @@ It expects the genesis file as argument.`,
 				Category: flags.EthCategory,
 			},
 			&cli.StringFlag{
+				Name:     "output",
+				Usage:    "Path to write genesis.json (default: no file is written)",
+				Category: flags.EthCategory,
+			},
+			&cli.StringFlag{
 				Name:     "ignore-addresses",
 				Usage:    "Comma-separated list of addresses to ignore during migration (e.g., 0x123...,0x456...)",
 				Category: flags.EthCategory,
