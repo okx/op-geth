@@ -2,7 +2,6 @@ package eth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -305,48 +304,4 @@ func WrapAPIsForMigration(apis []rpc.API, config *MigrationConfig) []rpc.API {
 	}
 
 	return wrapped
-}
-
-// RegisterFallbackMethods adds a fallback service for unimplemented methods
-// This allows forwarding of unregistered RPC calls to Erigon
-func RegisterFallbackMethods(apis []rpc.API, config *MigrationConfig) []rpc.API {
-	if config == nil || config.ErigonClient == nil {
-		return apis
-	}
-
-	// Create the fallback service
-	fallback := &FallbackService{
-		config: config,
-	}
-
-	// Add a special API that can handle fallback calls
-	// Note: This is a simplified implementation. A full implementation would
-	// require modifying the RPC server to support dynamic method routing.
-	apis = append(apis, rpc.API{
-		Namespace: "fallback",
-		Service:   fallback,
-	})
-
-	return apis
-}
-
-// FallbackService handles forwarding of unregistered methods to Erigon
-type FallbackService struct {
-	config *MigrationConfig
-}
-
-// ForwardCall is a generic method that forwards calls to Erigon
-// This can be called explicitly for methods not implemented in op-geth
-func (s *FallbackService) ForwardCall(ctx context.Context, method string, params []interface{}) (json.RawMessage, error) {
-	if s.config == nil || s.config.ErigonClient == nil {
-		return nil, fmt.Errorf("fallback not configured")
-	}
-
-	var result json.RawMessage
-	err := s.config.ErigonClient.CallContext(ctx, &result, method, params...)
-	if err != nil {
-		return nil, fmt.Errorf("fallback call failed: %w", err)
-	}
-
-	return result, nil
 }

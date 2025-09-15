@@ -21,11 +21,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum/eth/filters"
 	"math/big"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/eth/filters"
 
 	"github.com/holiman/uint256"
 
@@ -459,8 +460,6 @@ func (s *Ethereum) APIs() []rpc.API {
 	// Wrap APIs with migration routing if configured
 	if s.migrationConfig != nil {
 		apis = WrapAPIsForMigration(apis, s.migrationConfig)
-		// Register fallback methods for unimplemented APIs
-		apis = RegisterFallbackMethods(apis, s.migrationConfig)
 		// Register filter here
 		filterSystem := filters.NewFilterSystem(s.APIBackend, filters.Config{
 			LogCacheSize: s.config.FilterLogCacheSize,

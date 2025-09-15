@@ -491,51 +491,6 @@ func TestMigrationTransactionAPI(t *testing.T) {
 	}
 }
 
-// Test FallbackService
-func TestFallbackService(t *testing.T) {
-	t.Parallel()
-
-	// Setup mock Erigon server
-	server, _ := createMockErigonServer(t)
-	defer server.Close()
-
-	// Create migration config
-	client, _ := rpc.Dial(server.URL)
-	config := &MigrationConfig{
-		MigrationBlock: 100,
-		ErigonClient:   client,
-	}
-	defer config.Close()
-
-	// Create fallback service
-	fallback := &FallbackService{config: config}
-
-	ctx := context.Background()
-
-	// Test 1: Forward a valid call
-	params := []interface{}{hexutil.Uint64(50), false}
-	result, err := fallback.ForwardCall(ctx, "eth_getBlockByNumber", params)
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
-	if result == nil {
-		t.Error("Expected non-nil result")
-	}
-
-	// Test 2: Forward with nil config
-	fallback2 := &FallbackService{config: nil}
-	_, err2 := fallback2.ForwardCall(ctx, "eth_getBlockByNumber", params)
-	if err2 == nil {
-		t.Error("Expected error with nil config")
-	}
-
-	// Test 3: Forward an invalid method
-	_, err3 := fallback.ForwardCall(ctx, "invalid_method", params)
-	if err3 == nil {
-		t.Error("Expected error for invalid method")
-	}
-}
-
 // Test Close method
 func TestMigrationConfig_Close(t *testing.T) {
 	t.Parallel()
@@ -561,50 +516,5 @@ func TestMigrationConfig_Close(t *testing.T) {
 	err := config.ErigonClient.Call(&result, "eth_blockNumber")
 	if err == nil {
 		t.Error("Expected error when using closed client")
-	}
-}
-
-// Test RegisterFallbackMethods
-func TestRegisterFallbackMethods(t *testing.T) {
-	t.Parallel()
-
-	originalAPIs := []rpc.API{
-		{
-			Namespace: "eth",
-			Service:   "someService",
-			Public:    true,
-		},
-	}
-
-	// Test with nil config
-	result1 := RegisterFallbackMethods(originalAPIs, nil)
-	if len(result1) != len(originalAPIs) {
-		t.Errorf("API count should not change with nil config: got %d, want %d", len(result1), len(originalAPIs))
-	}
-
-	// Test with valid config
-	config := &MigrationConfig{
-		MigrationBlock: 100,
-		ErigonClient:   &rpc.Client{}, // Mock client
-	}
-
-	result2 := RegisterFallbackMethods(originalAPIs, config)
-	if len(result2) != len(originalAPIs)+1 {
-		t.Errorf("Should add fallback API: got %d, want %d", len(result2), len(originalAPIs)+1)
-	}
-
-	// Check that fallback service was added
-	hasFallback := false
-	for _, api := range result2 {
-		if api.Namespace == "fallback" {
-			if _, ok := api.Service.(*FallbackService); ok {
-				hasFallback = true
-				break
-			}
-		}
-	}
-
-	if !hasFallback {
-		t.Error("Fallback service not found in APIs")
 	}
 }
