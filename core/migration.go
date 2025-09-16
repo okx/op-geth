@@ -201,6 +201,18 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 		if len(xlayerErigonAcct.Storage) != 0 {
 			logger.Error("create2Deployer has storage", "storage length", len(xlayerErigonAcct.Storage))
 		}
+		// Permit2 use code and storage from xlayer
+	case common.HexToAddress("000000000022d473030f116ddee9f6b43ac78ba3"):
+		destAccount.Nonce = xlayerErigonAcct.Nonce
+		destAccount.Balance = xlayerErigonAcct.Balance
+		destAccount.Code = xlayerErigonAcct.Code
+		destAccount.Storage = xlayerErigonAcct.Storage
+		if len(xlayerErigonAcct.Code) == 0 {
+			logger.Error("permit2 has no code")
+		}
+		if len(xlayerErigonAcct.Storage) != 0 {
+			logger.Error("permit2 has storage", "storage length", len(xlayerErigonAcct.Storage))
+		}
 	default:
 		destAccount.Balance = opGenesisAcct.Balance
 		destAccount.Nonce = opGenesisAcct.Nonce

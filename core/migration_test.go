@@ -576,6 +576,34 @@ func TestMigrationMergeConflictAccount(t *testing.T) {
 			},
 		},
 		{
+			name: "Permit2 address - 0x000000000022d473030f116ddee9f6b43ac78ba3",
+			addr: common.HexToAddress("0x000000000022d473030f116ddee9f6b43ac78ba3"),
+			xlayerErigonAcct: &types.Account{
+				Balance: big.NewInt(1000000000000000000), // 1 ETH
+				Code:    []byte{1, 2, 3, 4},
+				Nonce:   5,
+				Storage: map[common.Hash]common.Hash{
+					common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002"),
+				},
+			},
+			opGenesisAcct: &types.Account{
+				Balance: big.NewInt(2000000000000000000), // 2 ETH
+				Code:    []byte{9, 10, 11, 12},
+				Nonce:   10,
+				Storage: map[common.Hash]common.Hash{
+					common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000003"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000004"),
+				},
+			},
+			expectedResult: types.Account{
+				Balance: big.NewInt(1000000000000000000), // Use erigon balance (default case)
+				Code:    []byte{1, 2, 3, 4},              // Use erigon code (default case)
+				Nonce:   5,                               // Use erigon nonce (default case)
+				Storage: map[common.Hash]common.Hash{ // Use erigon storage (default case)
+					common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002"),
+				},
+			},
+		},
+		{
 			name: "default case - unknown address",
 			addr: common.HexToAddress("0x1111111111111111111111111111111111111111"),
 			xlayerErigonAcct: &types.Account{
