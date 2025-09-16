@@ -903,14 +903,14 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 
 	start := time.Now()
 	// Marshal the genesis state specification and persist.
-	blob, err := json.Marshal(g.Alloc)
-	if err != nil {
-		return nil, err
-	}
+	//blob, err := json.Marshal(g.Alloc)
+	//if err != nil {
+	//	return nil, err
+	//}
 	log.Info("marshal alloc", "elapsed", time.Since(start))
 	start = time.Now()
 	batch := db.NewBatch()
-	rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
+	//rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
 	rawdb.WriteBlock(batch, block)
 	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), nil)
 	rawdb.WriteCanonicalHash(batch, block.Hash(), block.NumberU64())
@@ -918,6 +918,12 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 	rawdb.WriteHeadFastBlockHash(batch, block.Hash())
 	rawdb.WriteHeadHeaderHash(batch, block.Hash())
 	rawdb.WriteChainConfig(batch, block.Hash(), config)
+
+	if block.NumberU64() != 0 {
+		// Also write the genesis block as number 0
+		rawdb.WriteCanonicalHash(batch, block.Hash(), 0)
+		rawdb.WriteGenesisHeader(batch, block.Header())
+	}
 
 	err = batch.Write()
 	log.Info("batch write", "elapsed", time.Since(start))
