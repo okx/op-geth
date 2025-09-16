@@ -193,18 +193,17 @@ type Config struct {
 	RollupSequencerTxConditionalCostRateLimit int
 	RollupHistoricalRPC                       string
 	RollupHistoricalRPCTimeout                time.Duration
-
-	// Transaction monitoring configuration
-	Monitor                                 MonitorConfig
-	RollupDisableTxPoolGossip               bool
-	RollupDisableTxPoolAdmission            bool
-	RollupHaltOnIncompatibleProtocolVersion string
+	RollupDisableTxPoolGossip                 bool
+	RollupDisableTxPoolAdmission              bool
+	RollupHaltOnIncompatibleProtocolVersion   string
 
 	InteropMessageRPC       string `toml:",omitempty"`
 	InteropMempoolFiltering bool   `toml:",omitempty"`
 
 	// For X Layer
 	XLayer XLayerConfig `toml:",omitempty"`
+	// Transaction monitoring configuration
+	Monitor MonitorConfig `toml:",omitempty"`
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain config.
