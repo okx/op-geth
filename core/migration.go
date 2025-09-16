@@ -19,6 +19,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"github.com/bytedance/gopkg/util/logger"
 	"math/big"
 	"os"
 	"runtime"
@@ -163,21 +164,60 @@ func decodeAccountData(enc []byte) (*types.Account, error) {
 	return account, nil
 }
 
-func mergeConflictAccount(addr common.Address, dbAccount, genesisAccount *types.Account) types.Account {
+func IsEmptyAccount(acct types.Account) bool {
+	return acct.Nonce == 0 &&
+		(acct.Balance == nil || acct.Balance.Cmp(big.NewInt(0)) == 0) && len(acct.Code) == 0
+}
+
+func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *types.Account) types.Account {
 
 	var destAccount types.Account
 	switch addr {
-	// TODO: implement conflict cases here:
-	// case params.WithdrawalQueueAddress:
-	// 	destAccount.Balance = genesisAccount.Balance
-	// 	destAccount.Nonce = genesisAccount.Nonce
-	// 	destAccount.Code = genesisAccount.Code
-	// 	destAccount.Storage = genesisAccount.Storage
+	// black hole on XLayer with no code or storage
+	// WETH preinstalled on OP-stack
+	// so we use nonce from xlayer, but code from op
+	// both xlayer and op have no storage for this address
+	case common.HexToAddress("0x4200000000000000000000000000000000000006"):
+		destAccount.Nonce = xlayerErigonAcct.Nonce
+		// The address 0x4200000000000000000000000000000000000006 has only a small amount of OKB, 0.000011 on 11th Sep.
+		// For compatibility and security reasons, we will zero out the balance of this address.
+		logger.Warn("clear balance for 0x4200000000000000000000000000000000000006", "balance", xlayerErigonAcct.Balance)
+		if len(xlayerErigonAcct.Code) != 0 {
+			logger.Error("black hole has code", "code length", len(xlayerErigonAcct.Code))
+		}
+		destAccount.Code = opGenesisAcct.Code
+		if len(xlayerErigonAcct.Storage) != 0 {
+			logger.Error("black hole has storage", "storage length", len(xlayerErigonAcct.Storage))
+		}
+		// `create2Deployer` on both xlayer and op stack
+		// op uses a version of code that does not have an owner, so we use nonce and balance from xlayer, but the code from op
+	case common.HexToAddress("0x13b0d85ccb8bf860b6b79af3029fca081ae9bef2"):
+		destAccount.Nonce = xlayerErigonAcct.Nonce
+		destAccount.Balance = xlayerErigonAcct.Balance
+		destAccount.Code = opGenesisAcct.Code
+		if len(xlayerErigonAcct.Code) == 0 {
+			logger.Error("create2Deployer has no code")
+		}
+		if len(xlayerErigonAcct.Storage) != 0 {
+			logger.Error("create2Deployer has storage", "storage length", len(xlayerErigonAcct.Storage))
+		}
+		// Permit2 use code and storage from xlayer
+	case common.HexToAddress("000000000022d473030f116ddee9f6b43ac78ba3"):
+		destAccount.Nonce = xlayerErigonAcct.Nonce
+		destAccount.Balance = xlayerErigonAcct.Balance
+		destAccount.Code = xlayerErigonAcct.Code
+		destAccount.Storage = xlayerErigonAcct.Storage
+		if len(xlayerErigonAcct.Code) == 0 {
+			logger.Error("permit2 has no code")
+		}
+		if len(xlayerErigonAcct.Storage) != 0 {
+			logger.Error("permit2 has storage", "storage length", len(xlayerErigonAcct.Storage))
+		}
 	default:
-		destAccount.Balance = genesisAccount.Balance
-		destAccount.Nonce = genesisAccount.Nonce
-		destAccount.Code = genesisAccount.Code
-		destAccount.Storage = genesisAccount.Storage
+		destAccount.Balance = opGenesisAcct.Balance
+		destAccount.Nonce = opGenesisAcct.Nonce
+		destAccount.Code = opGenesisAcct.Code
+		destAccount.Storage = opGenesisAcct.Storage
 	}
 
 	return destAccount
@@ -191,7 +231,13 @@ func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common
 	// Remove ignored addresses from dbAlloc
 	for addr, account := range dbAlloc {
 		if _, exists := ignoreAddresses[addr]; !exists {
-			migrateAlloc[addr] = account
+			if !IsEmptyAccount(account) {
+				migrateAlloc[addr] = account
+			} else {
+				log.Warn("empty account fond", "addr", addr)
+			}
+		} else {
+			log.Info("skip migrate for", "addr", addr)
 		}
 	}
 	log.Info("generateMigrateAlloc remove ignored addresses elapsed:", "elapsed", time.Since(start))
