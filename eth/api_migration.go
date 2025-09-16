@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/internal/ethapi/override"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -82,6 +84,75 @@ func NewMigrationBlockChainAPI(original *ethapi.BlockChainAPI, config *Migration
 		BlockChainAPI: original,
 		config:        config,
 	}
+}
+
+// eth_call
+// FORWARD
+func (api *MigrationBlockChainAPI) Call(ctx context.Context, args ethapi.TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash, overrides *override.StateOverride, blockOverrides *override.BlockOverrides) (hexutil.Bytes, error) {
+	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
+		if api.config.shouldProxy(uint64(blockNr)) {
+			var result hexutil.Bytes
+			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_call", args, blockNrOrHash, overrides)
+			return result, err
+		}
+	}
+
+	localResult, err := api.BlockChainAPI.Call(ctx, args, blockNrOrHash, overrides, blockOverrides)
+	if err == nil && localResult != nil {
+		return localResult, nil
+	}
+
+	var result hexutil.Bytes
+	err = api.config.ErigonClient.CallContext(ctx, &result, "eth_call", args, blockNrOrHash, overrides)
+	return result, err
+}
+
+// eth_estimateGas
+// FORWARD
+func (api *MigrationBlockChainAPI) EstimateGas(ctx context.Context, args ethapi.TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash, overrides *override.StateOverride, blockOverrides *override.BlockOverrides) (hexutil.Uint64, error) {
+	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
+		if api.config.shouldProxy(uint64(blockNr)) {
+			var result hexutil.Uint64
+			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_estimateGas", args, blockNrOrHash, overrides)
+			return result, err
+		}
+	}
+
+	localResult, err := api.BlockChainAPI.EstimateGas(ctx, args, blockNrOrHash, overrides, blockOverrides)
+	if err == nil && localResult != 0 {
+		return localResult, nil
+	}
+
+	var result hexutil.Uint64
+	err = api.config.ErigonClient.CallContext(ctx, &result, "eth_estimateGas", args, blockNrOrHash, overrides)
+	return result, err
+}
+
+type accessListResult struct {
+	Accesslist *types.AccessList `json:"accessList"`
+	Error      string            `json:"error,omitempty"`
+	GasUsed    hexutil.Uint64    `json:"gasUsed"`
+}
+
+// eth_createAccessList
+// FORWARD
+func (api *MigrationBlockChainAPI) CreateAccessList(ctx context.Context, args ethapi.TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash, stateOverrides *override.StateOverride) (*accessListResult, error) {
+	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
+		if api.config.shouldProxy(uint64(blockNr)) {
+			var result *accessListResult
+			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_createAccessList", args, blockNrOrHash, stateOverrides)
+			return result, err
+		}
+	}
+
+	localResult, err := api.BlockChainAPI.CreateAccessList(ctx, args, blockNrOrHash, stateOverrides)
+	if err == nil && localResult != nil {
+		return (*accessListResult)(localResult), nil
+	}
+
+	var result *accessListResult
+	err = api.config.ErigonClient.CallContext(ctx, &result, "eth_createAccessList", args, blockNrOrHash)
+	return result, err
 }
 
 // eth_getBlockByNumber
