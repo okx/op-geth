@@ -102,7 +102,7 @@ func (cache *StateCache) FlushBlock(blockNum uint64) error {
 		}
 
 		// Verify that the block cache is head (previous state reader is nil)
-		if bc.GetPrevBlockCache() == nil {
+		if bc.GetPrevBlockCache() != nil {
 			return fmt.Errorf("failed to flush block %d, block is not at head, prev state reader is not nil. globalHeight: %d", flushHeight, cache.globalHeight)
 		}
 
