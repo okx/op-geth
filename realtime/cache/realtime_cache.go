@@ -413,22 +413,43 @@ func (cache *RealtimeCache) GetPendingBlockStateCache(blockNum uint64) (*BlockSt
 	return nil, fmt.Errorf("blockNum %d is not in the pending blocks", blockNum)
 }
 
-func (cache *RealtimeCache) GetStateReaderByHeight(blockNum uint64) state.Reader {
+func (cache *RealtimeCache) GetPendingStateCache() (state.Reader, uint64) {
+	if cache.pendingBlocks.Size() == 0 {
+		return nil, 0
+	}
+	pendingHeight := cache.GetPendingHeight()
+	stateReader, err := cache.GetPendingBlockStateCache(pendingHeight)
+	if err != nil {
+		return nil, 0
+	}
+	return stateReader, pendingHeight
+}
+
+func (cache *RealtimeCache) GetLatestStateCache() (state.Reader, uint64) {
+	confirmHeight := cache.GetHighestConfirmHeight()
+	stateReader, err := cache.State.GetConfirmBlockStateCache(confirmHeight)
+	if err != nil {
+		return nil, 0
+	}
+	return stateReader, confirmHeight
+}
+
+func (cache *RealtimeCache) GetStateCacheByHeight(blockNum uint64) state.Reader {
 	var reader state.Reader
 	var err error
 
 	confirmHeight := cache.GetHighestConfirmHeight()
 	if blockNum > confirmHeight {
 		reader, err = cache.GetPendingBlockStateCache(blockNum)
-	}
-	if err != nil {
-		reader = nil
+		if err != nil {
+			reader = nil
+		}
 	}
 	if reader == nil {
 		reader, err = cache.State.GetConfirmBlockStateCache(blockNum)
-	}
-	if err != nil {
-		reader = nil
+		if err != nil {
+			reader = nil
+		}
 	}
 	return reader
 }

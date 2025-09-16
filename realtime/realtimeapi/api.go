@@ -114,16 +114,25 @@ func (api *RealtimeAPIImpl) getConfirmHeightFromCache() (uint64, error) {
 }
 
 func (api *RealtimeAPIImpl) createStateReader(blockNrOrHash rpc.BlockNumberOrHash) (state.Reader, uint64, error) {
-	blockHeight, _, _, err := api.getBlockNumberOrHash(blockNrOrHash)
+	blockHeight, _, isPending, err := api.getBlockNumberOrHash(blockNrOrHash)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	reader := api.cacheDB.GetStateReaderByHeight(blockHeight)
-	if reader == nil {
-		return nil, 0, fmt.Errorf("state reader not found for block %d", blockHeight)
+	if isPending {
+		pendingReader, pendingHeight := api.cacheDB.GetPendingStateCache()
+		if pendingReader == nil {
+			// No pending block opened yet, use latest state cache
+			pendingReader, pendingHeight = api.cacheDB.GetLatestStateCache()
+		}
+		return pendingReader, pendingHeight, nil
+	} else {
+		reader := api.cacheDB.GetStateCacheByHeight(blockHeight)
+		if reader == nil {
+			return nil, 0, fmt.Errorf("state reader not found for block %d", blockHeight)
+		}
+		return reader, blockHeight, nil
 	}
-	return reader, blockHeight, nil
 }
 
 func (api *RealtimeAPIImpl) GetStateDbWithCacheReader(ctx context.Context, reader state.Reader) (*state.StateDB, error) {
