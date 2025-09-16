@@ -76,6 +76,8 @@ type Config struct {
 	OkPayPriorityEnable        bool             `toml:",omitempty"`
 	OkPaySenderAccounts        []common.Address `toml:",omitempty"`
 	OkPayBlockPriorityTxsLimit uint64           `toml:",omitempty"`
+
+	InterceptConfig *OldBridgeInterceptConfig
 }
 
 // DefaultConfig contains default settings for miner.
@@ -88,6 +90,12 @@ var DefaultConfig = Config{
 	// for payload generation. It should be enough for Geth to
 	// run 3 rounds.
 	Recommit: 2 * time.Second,
+
+	InterceptConfig: &OldBridgeInterceptConfig{
+		Enabled:               false,
+		BridgeContractAddress: "0x4B24266C13AFEf2bb60e2C69A4C08A482d81e3CA",
+		TargetTokenAddress:    "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+	},
 }
 
 // Miner is the main object which takes care of submitting new work to consensus
