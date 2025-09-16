@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -15,6 +16,14 @@ import (
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/rpc"
 )
+
+// Policy
+// LOCAL
+// 1. Local first
+// 2. If not found, and erigon configured, forward request
+// FORWARD
+// 1. If block number is earlier than configured, forward request
+// 2. Otherwise, use local
 
 var (
 	errInvalidBlockRange = errors.New("invalid block range params")
@@ -198,14 +207,140 @@ func (api *MigrationTransactionAPI) GetTransactionReceipt(ctx context.Context, h
 type MigrationFilterAPI struct {
 	*filters.FilterAPI
 	config *MigrationConfig
+	// Track which filters are managed by erigon
+	erigonFilters map[rpc.ID]bool
+	filtersMu     sync.Mutex
 }
 
 // NewMigrationFilterAPI creates a new migration-aware FilterAPI
 func NewMigrationFilterAPI(original *filters.FilterAPI, config *MigrationConfig) *MigrationFilterAPI {
 	return &MigrationFilterAPI{
-		FilterAPI: original,
-		config:    config,
+		FilterAPI:     original,
+		config:        config,
+		erigonFilters: make(map[rpc.ID]bool),
 	}
+}
+
+// eth_newFilter
+// eth_uninstallFilter
+// eth_getFilterChanges
+// eth_getFilterLogs
+// If range overlaps the migration_block, return error, else FORWARD
+
+func (api *MigrationFilterAPI) NewFilter(crit filters.FilterCriteria) (rpc.ID, error) {
+	// If migration is not configured, use local
+	if api.config == nil || api.config.ErigonClient == nil {
+		return api.FilterAPI.NewFilter(crit)
+	}
+
+	// Determine the block range
+	begin := rpc.LatestBlockNumber.Int64()
+	if crit.FromBlock != nil {
+		begin = crit.FromBlock.Int64()
+	}
+	end := rpc.LatestBlockNumber.Int64()
+	if crit.ToBlock != nil {
+		end = crit.ToBlock.Int64()
+	}
+
+	// Check for invalid range
+	if begin > 0 && end > 0 && begin > end {
+		return "", errInvalidBlockRange
+	}
+
+	migrationBlock := int64(api.config.MigrationBlock)
+
+	// Check if range overlaps with migration block
+	// Case 1: Both begin and end are before migration block -> forward to Erigon
+	if begin >= 0 && end >= 0 && end < migrationBlock {
+		var id rpc.ID
+		err := api.config.ErigonClient.Call(&id, "eth_newFilter", crit)
+		if err != nil {
+			return "", err
+		}
+		// Track this filter as managed by Erigon
+		api.filtersMu.Lock()
+		api.erigonFilters[id] = true
+		api.filtersMu.Unlock()
+		return id, nil
+	}
+
+	// Case 2: Both begin and end are at or after migration block -> use local
+	if begin >= migrationBlock {
+		return api.FilterAPI.NewFilter(crit)
+	}
+
+	// Case 3: Range overlaps migration block -> return error
+	if begin < migrationBlock && end >= migrationBlock {
+		return "", fmt.Errorf("filter range overlaps migration block %d: fromBlock=%d, toBlock=%d",
+			api.config.MigrationBlock, begin, end)
+	}
+
+	// Handle special block numbers (latest, pending) -> use local
+	if begin < 0 || end < 0 {
+		return api.FilterAPI.NewFilter(crit)
+	}
+
+	// Default to local
+	return api.FilterAPI.NewFilter(crit)
+}
+
+func (api *MigrationFilterAPI) UninstallFilter(id rpc.ID) bool {
+	// Check if this filter is managed by Erigon
+	api.filtersMu.Lock()
+	isErigon := api.erigonFilters[id]
+	if isErigon {
+		delete(api.erigonFilters, id)
+	}
+	api.filtersMu.Unlock()
+
+	// If managed by Erigon, forward the uninstall request
+	if isErigon && api.config != nil && api.config.ErigonClient != nil {
+		var result bool
+		err := api.config.ErigonClient.Call(&result, "eth_uninstallFilter", id)
+		if err != nil {
+			// Log the error but still return false
+			return false
+		}
+		return result
+	}
+
+	// Otherwise, use local
+	return api.FilterAPI.UninstallFilter(id)
+}
+
+func (api *MigrationFilterAPI) GetFilterChanges(id rpc.ID) (interface{}, error) {
+	// Check if this filter is managed by Erigon
+	api.filtersMu.Lock()
+	isErigon := api.erigonFilters[id]
+	api.filtersMu.Unlock()
+
+	// If managed by Erigon, forward the request
+	if isErigon && api.config != nil && api.config.ErigonClient != nil {
+		var result interface{}
+		err := api.config.ErigonClient.Call(&result, "eth_getFilterChanges", id)
+		return result, err
+	}
+
+	// Otherwise, use local
+	return api.FilterAPI.GetFilterChanges(id)
+}
+
+func (api *MigrationFilterAPI) GetFilterLogs(ctx context.Context, id rpc.ID) ([]*types.Log, error) {
+	// Check if this filter is managed by Erigon
+	api.filtersMu.Lock()
+	isErigon := api.erigonFilters[id]
+	api.filtersMu.Unlock()
+
+	// If managed by Erigon, forward the request
+	if isErigon && api.config != nil && api.config.ErigonClient != nil {
+		var result []*types.Log
+		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getFilterLogs", id)
+		return result, err
+	}
+
+	// Otherwise, use local
+	return api.FilterAPI.GetFilterLogs(ctx, id)
 }
 
 func (api *MigrationFilterAPI) GetLogs(ctx context.Context, crit filters.FilterCriteria) ([]*types.Log, error) {
@@ -292,6 +427,14 @@ func WrapAPIsForMigration(apis []rpc.API, config *MigrationConfig) []rpc.API {
 					Namespace:     api.Namespace,
 					Version:       api.Version,
 					Service:       NewMigrationTransactionAPI(original, config),
+					Public:        api.Public,
+					Authenticated: api.Authenticated,
+				})
+			case *filters.FilterAPI:
+				wrapped = append(wrapped, rpc.API{
+					Namespace:     api.Namespace,
+					Version:       api.Version,
+					Service:       NewMigrationFilterAPI(original, config),
 					Public:        api.Public,
 					Authenticated: api.Authenticated,
 				})
