@@ -62,14 +62,12 @@ func NewMigrationConfig(config *ethconfig.Config) (*MigrationConfig, error) {
 
 // Close closes the erigon RPC client
 func (mc *MigrationConfig) Close() {
-	if mc != nil && mc.ErigonClient != nil {
-		mc.ErigonClient.Close()
-	}
+	mc.ErigonClient.Close()
 }
 
 // shouldProxy determines if a request should be proxied based on block number
 func (mc *MigrationConfig) shouldProxy(blockNumber uint64) bool {
-	return mc != nil && mc.MigrationBlock > 0 && blockNumber < mc.MigrationBlock
+	return mc.MigrationBlock > 0 && blockNumber < mc.MigrationBlock
 }
 
 // MigrationBlockChainAPI wraps the standard BlockChainAPI to add migration routing
@@ -87,14 +85,10 @@ func NewMigrationBlockChainAPI(original *ethapi.BlockChainAPI, config *Migration
 }
 
 // GetBlockByNumber returns the block for the given block number
+// FORWARD
 func (api *MigrationBlockChainAPI) GetBlockByNumber(ctx context.Context, number rpc.BlockNumber, fullTx bool) (map[string]interface{}, error) {
-	// Handle special block numbers (latest, pending, etc.)
-	if number < 0 {
-		return api.BlockChainAPI.GetBlockByNumber(ctx, number, fullTx)
-	}
-
 	// Check if we should proxy to erigon
-	if api.config != nil && api.config.shouldProxy(uint64(number)) {
+	if api.config.shouldProxy(uint64(number)) {
 		var result map[string]interface{}
 		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getBlockByNumber", hexutil.Uint64(number), fullTx)
 		return result, err
@@ -105,6 +99,7 @@ func (api *MigrationBlockChainAPI) GetBlockByNumber(ctx context.Context, number 
 }
 
 // GetBlockByHash returns the block for the given block hash
+// LOCAL
 func (api *MigrationBlockChainAPI) GetBlockByHash(ctx context.Context, hash common.Hash, fullTx bool) (map[string]interface{}, error) {
 	// Try local first
 	result, err := api.BlockChainAPI.GetBlockByHash(ctx, hash, fullTx)
@@ -113,41 +108,150 @@ func (api *MigrationBlockChainAPI) GetBlockByHash(ctx context.Context, hash comm
 	}
 
 	// If not found locally and migration is configured, try erigon
-	if api.config != nil && api.config.ErigonClient != nil {
-		var remoteResult map[string]interface{}
-		err := api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getBlockByHash", hash, fullTx)
-		if err == nil && remoteResult != nil {
-			return remoteResult, nil
-		}
+	var remoteResult map[string]interface{}
+	err = api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getBlockByHash", hash, fullTx)
+	if err == nil && remoteResult != nil {
+		return remoteResult, nil
 	}
 
 	return result, err
 }
 
 // GetStorageAt returns the storage value at the given address and key
+// FORWARD
 func (api *MigrationBlockChainAPI) GetStorageAt(ctx context.Context, address common.Address, hexKey string, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
 	// Try to determine the block number
 	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
-		if api.config != nil && api.config.shouldProxy(uint64(blockNr)) {
+		if api.config.shouldProxy(uint64(blockNr)) {
 			var result hexutil.Bytes
 			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getStorageAt", address, hexKey, blockNrOrHash)
 			return result, err
 		}
 	}
 
-	// For hash-based queries or recent blocks, try local first, if not found attempt to proxy to erigon
-	result, err := api.BlockChainAPI.GetStorageAt(ctx, address, hexKey, blockNrOrHash)
+	// For hash-based queries or recent blocks
+	localResult, err := api.BlockChainAPI.GetStorageAt(ctx, address, hexKey, blockNrOrHash)
+	if err == nil && localResult != nil {
+		return localResult, nil
+	}
+
+	var result hexutil.Bytes
+	err = api.config.ErigonClient.CallContext(ctx, &result, "eth_getStorageAt", address, hexKey, blockNrOrHash)
+	return result, err
+}
+
+// eth_getHeaderByHash
+// FORWARD
+func (api *MigrationBlockChainAPI) GetHeaderByHash(ctx context.Context, hash common.Hash) (map[string]interface{}, error) {
+	// Try local first to get the header and determine block number
+	localResult := api.BlockChainAPI.GetHeaderByHash(ctx, hash)
+	if localResult != nil {
+		return localResult, nil
+	}
+
+	// If not found locally and migration is configured, try erigon
+	var result map[string]interface{}
+	err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getHeaderByHash", hash)
 	if err == nil && result != nil {
 		return result, nil
 	}
 
-	if api.config != nil && api.config.ErigonClient != nil {
-		var remoteResult hexutil.Bytes
-		err := api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getStorageAt", address, hexKey, blockNrOrHash)
-		return remoteResult, err
+	return localResult, nil
+}
+
+// eth_getHeaderByNumber
+// FORWARD
+func (api *MigrationBlockChainAPI) GetHeaderByNumber(ctx context.Context, number rpc.BlockNumber) (map[string]interface{}, error) {
+	// Check if we should proxy to erigon
+	if api.config.shouldProxy(uint64(number)) {
+		var result map[string]interface{}
+		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getHeaderByNumber", hexutil.Uint64(number))
+		return result, err
 	}
 
-	return result, err
+	// Handle locally
+	return api.BlockChainAPI.GetHeaderByNumber(ctx, number)
+}
+
+// eth_getBlockReceipts
+// FORWARD
+func (api *MigrationBlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) ([]map[string]interface{}, error) {
+	// Check if we have a block number
+	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
+		if api.config.shouldProxy(uint64(blockNr)) {
+			var result []map[string]interface{}
+			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getBlockReceipts", blockNrOrHash)
+			return result, err
+		}
+	}
+
+	// For hash-based queries, try local first to determine the block number
+	localResult, err := api.BlockChainAPI.GetBlockReceipts(ctx, blockNrOrHash)
+	if err == nil && localResult != nil && len(localResult) > 0 {
+		return localResult, nil
+	}
+
+	// If not found locally and migration is configured, try erigon
+	var result []map[string]interface{}
+	err = api.config.ErigonClient.CallContext(ctx, &result, "eth_getBlockReceipts", blockNrOrHash)
+	if err == nil && result != nil {
+		return result, nil
+	}
+
+	return localResult, nil
+}
+
+// eth_getBalance
+// FORWARD
+func (api *MigrationBlockChainAPI) GetBalance(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Big, error) {
+	// Check if we should proxy based on block number
+	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
+		if api.config.shouldProxy(uint64(blockNr)) {
+			var result *hexutil.Big
+			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getBalance", address, blockNrOrHash)
+			return result, err
+		}
+	}
+
+	// Try local first
+	localResult, err := api.BlockChainAPI.GetBalance(ctx, address, blockNrOrHash)
+	if err == nil && localResult != nil {
+		return localResult, nil
+	}
+
+	// If local call failed and we have a proxy configured, use it as fallback
+	var result *hexutil.Big
+	err = api.config.ErigonClient.CallContext(ctx, &result, "eth_getBalance", address, blockNrOrHash)
+	if err == nil && result != nil {
+		return result, nil
+	}
+
+	return localResult, nil
+}
+
+// eth_getCode
+// FORWARD
+func (api *MigrationBlockChainAPI) GetCode(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
+	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
+		if api.config.shouldProxy(uint64(blockNr)) {
+			var result hexutil.Bytes
+			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getCode", address, blockNrOrHash)
+			return result, err
+		}
+	}
+
+	localResult, err := api.BlockChainAPI.GetCode(ctx, address, blockNrOrHash)
+	if err == nil && localResult != nil {
+		return localResult, nil
+	}
+
+	var result hexutil.Bytes
+	err = api.config.ErigonClient.CallContext(ctx, &result, "eth_getCode", address, blockNrOrHash)
+	if err == nil && result != nil {
+		return result, nil
+	}
+
+	return localResult, nil
 }
 
 // MigrationTransactionAPI wraps the standard TransactionAPI to add migration routing
@@ -173,12 +277,10 @@ func (api *MigrationTransactionAPI) GetTransactionByHash(ctx context.Context, ha
 	}
 
 	// If not found locally and migration is configured, try erigon
-	if api.config != nil && api.config.ErigonClient != nil {
-		var result *ethapi.RPCTransaction
-		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getTransactionByHash", hash)
-		if err == nil && result != nil {
-			return result, nil
-		}
+	var remoteTx *ethapi.RPCTransaction
+	err = api.config.ErigonClient.CallContext(ctx, &remoteTx, "eth_getTransactionByHash", hash)
+	if err == nil && remoteTx != nil {
+		return remoteTx, nil
 	}
 
 	return tx, err
@@ -193,15 +295,161 @@ func (api *MigrationTransactionAPI) GetTransactionReceipt(ctx context.Context, h
 	}
 
 	// If not found locally and migration is configured, try erigon
-	if api.config != nil && api.config.ErigonClient != nil {
-		var result map[string]interface{}
-		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getTransactionReceipt", hash)
-		if err == nil && result != nil {
-			return result, nil
-		}
+	var remoteReceipt map[string]interface{}
+	err = api.config.ErigonClient.CallContext(ctx, &remoteReceipt, "eth_getTransactionReceipt", hash)
+	if err == nil && remoteReceipt != nil {
+		return remoteReceipt, nil
 	}
 
 	return receipt, err
+}
+
+// eth_getBlockTransactionCountByHash LOCAL
+func (api *MigrationTransactionAPI) GetBlockTransactionCountByHash(ctx context.Context, blockHash common.Hash) (*hexutil.Uint, error) {
+	// Try local first
+	result, err := api.TransactionAPI.GetBlockTransactionCountByHash(ctx, blockHash)
+	if err == nil && result != nil {
+		return result, nil
+	}
+
+	// If not found locally and migration is configured, try erigon
+	var remoteResult *hexutil.Uint
+	err = api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getBlockTransactionCountByHash", blockHash)
+	return remoteResult, err
+}
+
+// eth_getBlockTransactionCountByNumber FORWARD
+func (api *MigrationTransactionAPI) GetBlockTransactionCountByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*hexutil.Uint, error) {
+	// Check if we should proxy to erigon
+	if api.config.shouldProxy(uint64(blockNr)) {
+		var result *hexutil.Uint
+		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getBlockTransactionCountByNumber", hexutil.Uint64(blockNr))
+		return result, err
+	}
+
+	// Handle locally
+	return api.TransactionAPI.GetBlockTransactionCountByNumber(ctx, blockNr)
+}
+
+// eth_getBlockInternalTransactions FORWARD
+func (api *MigrationTransactionAPI) GetBlockInternalTransactions(ctx context.Context, blockNr rpc.BlockNumber) (map[common.Hash][]*types.InnerTx, error) {
+	// Check if we should proxy to erigon
+	if api.config.shouldProxy(uint64(blockNr)) {
+		var result map[common.Hash][]*types.InnerTx
+		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getBlockInternalTransactions", hexutil.Uint64(blockNr))
+		return result, err
+	}
+
+	// Handle locally
+	return api.TransactionAPI.GetBlockInternalTransactions(ctx, blockNr)
+}
+
+// eth_getInternalTransactions TransactionAPI LOCAL
+func (api *MigrationTransactionAPI) GetInternalTransactions(ctx context.Context, txHash common.Hash) ([]*types.InnerTx, error) {
+	// Try local first
+	result, err := api.TransactionAPI.GetInternalTransactions(ctx, txHash)
+	if err == nil && result != nil {
+		return result, nil
+	}
+
+	// If not found locally and migration is configured, try erigon
+	var remoteResult []*types.InnerTx
+	err = api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getInternalTransactions", txHash)
+	return remoteResult, err
+}
+
+// eth_getRawTransactionByBlockHashAndIndex TransactionAPI LOCAL
+func (api *MigrationTransactionAPI) GetRawTransactionByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, index hexutil.Uint) hexutil.Bytes {
+	// Try local first
+	result := api.TransactionAPI.GetRawTransactionByBlockHashAndIndex(ctx, blockHash, index)
+	if result != nil {
+		return result
+	}
+
+	// If not found locally and migration is configured, try erigon
+	var remoteResult hexutil.Bytes
+	err := api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getRawTransactionByBlockHashAndIndex", blockHash, index)
+	if err != nil {
+		return nil
+	}
+	return remoteResult
+}
+
+// eth_getRawTransactionByBlockNumberAndIndex TransactionAPI FORWARD
+func (api *MigrationTransactionAPI) GetRawTransactionByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, index hexutil.Uint) hexutil.Bytes {
+	// If not found locally and migration is configured, try erigon
+	if api.config.shouldProxy(uint64(blockNr)) {
+		var result hexutil.Bytes
+		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getRawTransactionByBlockNumberAndIndex", blockNr, index)
+		if err != nil {
+			return nil
+		}
+		return result
+	}
+
+	return api.TransactionAPI.GetRawTransactionByBlockNumberAndIndex(ctx, blockNr, index)
+}
+
+// eth_getRawTransactionByHash TransactionAPI LOCAL
+func (api *MigrationTransactionAPI) GetRawTransactionByHash(ctx context.Context, hash common.Hash) (hexutil.Bytes, error) {
+	// Try local first
+	result, err := api.TransactionAPI.GetRawTransactionByHash(ctx, hash)
+	if err == nil && result != nil {
+		return result, nil
+	}
+
+	// If not found locally and migration is configured, try erigon
+	var remoteResult hexutil.Bytes
+	err = api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getRawTransactionByHash", hash)
+	return remoteResult, err
+}
+
+// eth_getTransactionByBlockHashAndIndex TransactionAPI LOCAL
+func (api *MigrationTransactionAPI) GetTransactionByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, index hexutil.Uint) (*ethapi.RPCTransaction, error) {
+	// Try local first
+	result, err := api.TransactionAPI.GetTransactionByBlockHashAndIndex(ctx, blockHash, index)
+	if err == nil && result != nil {
+		return result, nil
+	}
+
+	// If not found locally and migration is configured, try erigon
+	var remoteResult *ethapi.RPCTransaction
+	err = api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getTransactionByBlockHashAndIndex", blockHash, index)
+	return remoteResult, err
+}
+
+// eth_getTransactionByBlockNumberAndIndex TransactionAPI FORWARD
+func (api *MigrationTransactionAPI) GetTransactionByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, index hexutil.Uint) (*ethapi.RPCTransaction, error) {
+	// Try local first
+	result, err := api.TransactionAPI.GetTransactionByBlockNumberAndIndex(ctx, blockNr, index)
+	if err == nil && result != nil {
+		return result, nil
+	}
+
+	// If not found locally and migration is configured, try erigon
+	var remoteResult *ethapi.RPCTransaction
+	err = api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getTransactionByBlockNumberAndIndex", blockNr, index)
+	return remoteResult, err
+}
+
+// eth_getTransactionCount TransactionAPI LOCAL
+func (api *MigrationTransactionAPI) GetTransactionCount(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Uint64, error) {
+	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
+		if api.config.shouldProxy(uint64(blockNr)) {
+			var result *hexutil.Uint64
+			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getTransactionCount", address, blockNrOrHash)
+			return result, err
+		}
+	}
+
+	localResult, err := api.TransactionAPI.GetTransactionCount(ctx, address, blockNrOrHash)
+	if err == nil && localResult != nil {
+		return localResult, nil
+	}
+
+	var result *hexutil.Uint64
+	err = api.config.ErigonClient.CallContext(ctx, &result, "eth_getTransactionCount", address, blockNrOrHash)
+	return result, err
 }
 
 type MigrationFilterAPI struct {
@@ -228,10 +476,6 @@ func NewMigrationFilterAPI(original *filters.FilterAPI, config *MigrationConfig)
 // If range overlaps the migration_block, return error, else FORWARD
 
 func (api *MigrationFilterAPI) NewFilter(crit filters.FilterCriteria) (rpc.ID, error) {
-	// If migration is not configured, use local
-	if api.config == nil || api.config.ErigonClient == nil {
-		return api.FilterAPI.NewFilter(crit)
-	}
 
 	// Determine the block range
 	begin := rpc.LatestBlockNumber.Int64()
@@ -295,7 +539,7 @@ func (api *MigrationFilterAPI) UninstallFilter(id rpc.ID) bool {
 	api.filtersMu.Unlock()
 
 	// If managed by Erigon, forward the uninstall request
-	if isErigon && api.config != nil && api.config.ErigonClient != nil {
+	if isErigon {
 		var result bool
 		err := api.config.ErigonClient.Call(&result, "eth_uninstallFilter", id)
 		if err != nil {
@@ -316,7 +560,7 @@ func (api *MigrationFilterAPI) GetFilterChanges(id rpc.ID) (interface{}, error) 
 	api.filtersMu.Unlock()
 
 	// If managed by Erigon, forward the request
-	if isErigon && api.config != nil && api.config.ErigonClient != nil {
+	if isErigon {
 		var result interface{}
 		err := api.config.ErigonClient.Call(&result, "eth_getFilterChanges", id)
 		return result, err
@@ -333,7 +577,7 @@ func (api *MigrationFilterAPI) GetFilterLogs(ctx context.Context, id rpc.ID) ([]
 	api.filtersMu.Unlock()
 
 	// If managed by Erigon, forward the request
-	if isErigon && api.config != nil && api.config.ErigonClient != nil {
+	if isErigon {
 		var result []*types.Log
 		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getFilterLogs", id)
 		return result, err
