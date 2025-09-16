@@ -98,14 +98,19 @@ func (cache *StateCache) FlushBlock(blockNum uint64) error {
 	for flushHeight := cache.globalHeight + 1; flushHeight <= blockNum; flushHeight++ {
 		bc, exists := cache.blocksCache[flushHeight]
 		if !exists {
-			return fmt.Errorf("failed to flush block %d, block state cache not found in state cache. global cache height: %d", flushHeight, cache.globalHeight)
+			return fmt.Errorf("failed to flush block %d, block state cache not found in state cache. globalHeight: %d", flushHeight, cache.globalHeight)
+		}
+
+		// Verify that the block cache is head (previous state reader is nil)
+		if bc.GetPrevBlockCache() == nil {
+			return fmt.Errorf("failed to flush block %d, block is not at head, prev state reader is not nil. globalHeight: %d", flushHeight, cache.globalHeight)
 		}
 
 		// Flush global height
 		cache.globalHeight = flushHeight
 
-		// Update linked list - set the next block's previous reader to global cache
-		nbc := bc.nextCache
+		// Update linked list - set the next block previous reader to head
+		nbc := bc.GetNextBlockCache()
 		if nbc != nil {
 			nbc.SetPrevBlockCache(nil)
 		}

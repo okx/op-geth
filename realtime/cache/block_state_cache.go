@@ -48,10 +48,22 @@ func NewBlockStateCache(ctx context.Context, blockchain *core.BlockChain, height
 }
 
 // -------------- Block and linked list operations --------------
+func (cache *BlockStateCache) GetNextBlockCache() *BlockStateCache {
+	cache.cacheLock.RLock()
+	defer cache.cacheLock.RUnlock()
+	return cache.nextCache
+}
+
 func (cache *BlockStateCache) SetNextBlockCache(nextBlockCache *BlockStateCache) {
 	cache.cacheLock.Lock()
 	defer cache.cacheLock.Unlock()
 	cache.nextCache = nextBlockCache
+}
+
+func (cache *BlockStateCache) GetPrevBlockCache() *BlockStateCache {
+	cache.cacheLock.RLock()
+	defer cache.cacheLock.RUnlock()
+	return cache.prevCache
 }
 
 func (cache *BlockStateCache) SetPrevBlockCache(prevBlockCache *BlockStateCache) {
