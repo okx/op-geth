@@ -25,9 +25,10 @@ type BlockStateCache struct {
 	blockchain *core.BlockChain
 
 	// Cache
-	cacheLock sync.RWMutex
-	cache     *plainStateCache
-	height    uint64
+	cacheLock  sync.RWMutex
+	cache      *plainStateCache
+	height     uint64
+	prevHeight uint64
 
 	// Double-linked list holding previous and next block state caches
 	prevCache *BlockStateCache
@@ -39,6 +40,7 @@ func NewBlockStateCache(ctx context.Context, blockchain *core.BlockChain, height
 		ctx:        ctx,
 		blockchain: blockchain,
 		height:     height,
+		prevHeight: height - 1,
 		cache:      newPlainStateCache(DefaultPlainStateCacheSize),
 		nextCache:  nil,
 		prevCache:  nil,
@@ -178,7 +180,7 @@ func (cache *BlockStateCache) unsafeReadAccountData(address common.Address) (*ty
 
 	// Cache miss
 	if cache.prevCache == nil {
-		reader, err := cache.GetDbStateReaderFromHeight(cache.height - 1)
+		reader, err := cache.GetDbStateReader()
 		if err != nil {
 			return nil, err
 		}
@@ -203,7 +205,7 @@ func (cache *BlockStateCache) Account(addr common.Address) (*types.StateAccount,
 
 	// Cache miss
 	if cache.prevCache == nil {
-		reader, err := cache.GetDbStateReaderFromHeight(cache.height - 1)
+		reader, err := cache.GetDbStateReader()
 		if err != nil {
 			return nil, err
 		}
@@ -224,7 +226,7 @@ func (cache *BlockStateCache) Storage(addr common.Address, slot common.Hash) (co
 
 	// Cache miss
 	if cache.prevCache == nil {
-		reader, err := cache.GetDbStateReaderFromHeight(cache.height - 1)
+		reader, err := cache.GetDbStateReader()
 		if err != nil {
 			return common.Hash{}, err
 		}
@@ -246,7 +248,7 @@ func (cache *BlockStateCache) Code(addr common.Address, codeHash common.Hash) ([
 	}
 	// Cache miss
 	if cache.prevCache == nil {
-		reader, err := cache.GetDbStateReaderFromHeight(cache.height - 1)
+		reader, err := cache.GetDbStateReader()
 		if err != nil {
 			return nil, err
 		}
@@ -260,8 +262,8 @@ func (cache *BlockStateCache) CodeSize(addr common.Address, codeHash common.Hash
 	return len(code), err
 }
 
-func (cache *BlockStateCache) GetDbStateReaderFromHeight(prevHeight uint64) (state.Reader, error) {
-	prevRoot := cache.blockchain.GetHeaderByNumber(prevHeight).Root
+func (cache *BlockStateCache) GetDbStateReader() (state.Reader, error) {
+	prevRoot := cache.blockchain.GetHeaderByNumber(cache.prevHeight).Root
 	reader, err := cache.blockchain.StateCache().Reader(prevRoot)
 	if err != nil {
 		return nil, err
