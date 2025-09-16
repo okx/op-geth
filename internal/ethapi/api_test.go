@@ -1491,7 +1491,7 @@ func TestSimulateV1(t *testing.T) {
 		Data        hexutil.Bytes  `json:"data"`
 		BlockNumber hexutil.Uint64 `json:"blockNumber"`
 		// Skip txHash
-		//TxHash common.Hash `json:"transactionHash" gencodec:"required"`
+		//Hash common.Hash `json:"transactionHash" gencodec:"required"`
 		TxIndex hexutil.Uint `json:"transactionIndex"`
 		//BlockHash common.Hash  `json:"blockHash"`
 		Index hexutil.Uint `json:"logIndex"`

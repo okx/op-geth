@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -94,16 +95,40 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
+		txHash := tx.Hash().Hex()
+
+		// Log transaction processing start
+		monitor.LogTransactionStart(
+			txHash,
+			monitor.ServiceNameState,
+			monitor.StepStateProcessTx.ID,
+			monitor.StepStateProcessTx.Key,
+			blockNumber.Uint64(),
+			int8(tx.Type()),
+			"", "", "", tx.Nonce(),
+		)
 		msg, err := TransactionToMessage(tx, signer, header.BaseFee)
 		if err != nil {
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameState, monitor.StepStateProcessTx.ID,
+				monitor.StepStateProcessTx.Key, blockNumber.Uint64(), blockHash.Hex(), header.Time,
+				int8(tx.Type()), "failed", err.Error(), 0)
 			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 		statedb.SetTxContext(tx.Hash(), i)
 
 		receipt, innerTxs, err := ApplyTransactionWithEVM_XLayer(msg, gp, statedb, blockNumber, blockHash, tx, usedGas, evm)
 		if err != nil {
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameState, monitor.StepStateProcessTx.ID,
+				monitor.StepStateProcessTx.Key, blockNumber.Uint64(), blockHash.Hex(), header.Time,
+				int8(tx.Type()), "failed", err.Error(), 0)
 			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
+
+		// Log successful processing
+		monitor.LogTransactionEnd(txHash, monitor.ServiceNameState, monitor.StepStateProcessTx.ID,
+			monitor.StepStateProcessTx.Key, blockNumber.Uint64(), blockHash.Hex(), header.Time,
+			int8(tx.Type()), "success", "", receipt.GasUsed)
+
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
 
@@ -153,6 +178,12 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 // and uses the input parameters for its environment similar to ApplyTransaction. However,
 // this method takes an already created EVM instance as input.
 func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (receipt *types.Receipt, err error) {
+	txHash := tx.Hash().Hex()
+
+	// Log transaction application start
+	monitor.LogTransactionProgress(txHash, monitor.ServiceNameState, monitor.StepStateApplyTx.ID,
+		monitor.StepStateApplyTx.Key, blockNumber.Uint64(), int8(tx.Type()), "applying", 0)
+
 	if hooks := evm.Config.Tracer; hooks != nil {
 		if hooks.OnTxStart != nil {
 			hooks.OnTxStart(evm.GetVMContext(), tx, msg.From)
@@ -186,6 +217,10 @@ func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, 
 	if statedb.GetTrie().IsVerkle() {
 		statedb.AccessEvents().Merge(evm.AccessEvents)
 	}
+
+	// Log receipt generation
+	monitor.LogTransactionProgress(txHash, monitor.ServiceNameState, monitor.StepStateGenerateReceipt.ID,
+		monitor.StepStateGenerateReceipt.Key, blockNumber.Uint64(), int8(tx.Type()), "generating_receipt", result.UsedGas)
 
 	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce), nil
 }

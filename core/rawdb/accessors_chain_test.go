@@ -900,7 +900,7 @@ func TestDeriveLogFields(t *testing.T) {
 				t.Errorf("receipts[%d].Logs[%d].BlockHash = %s, want %s", i, j, receipts[i].Logs[j].BlockHash.String(), hash.String())
 			}
 			if receipts[i].Logs[j].TxHash != txs[i].Hash() {
-				t.Errorf("receipts[%d].Logs[%d].TxHash = %s, want %s", i, j, receipts[i].Logs[j].TxHash.String(), txs[i].Hash().String())
+				t.Errorf("receipts[%d].Logs[%d].Hash = %s, want %s", i, j, receipts[i].Logs[j].TxHash.String(), txs[i].Hash().String())
 			}
 			if receipts[i].Logs[j].TxIndex != uint(i) {
 				t.Errorf("receipts[%d].Logs[%d].TransactionIndex = %d, want %d", i, j, receipts[i].Logs[j].TxIndex, i)

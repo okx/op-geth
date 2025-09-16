@@ -39,6 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/catalyst"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/internal/flags"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -239,6 +240,9 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 
 	// Start metrics export if enabled
 	utils.SetupMetrics(&cfg.Metrics)
+
+	// Initialize monitoring system
+	monitor.InitTraceLogger(cfg.Eth.Monitor.EnableTraceLog, cfg.Eth.Monitor.TraceLogPath)
 
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
 

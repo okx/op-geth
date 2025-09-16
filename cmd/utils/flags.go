@@ -1764,6 +1764,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	setMiner(ctx, &cfg.Miner)
 	setRequiredBlocks(ctx, cfg)
 	setLes(ctx, cfg)
+	setMonitor(ctx, &cfg.Monitor)
 
 	// Cap the cache allowance and tune the garbage collector
 	mem, err := gopsutil.VirtualMemory()
@@ -2510,4 +2511,14 @@ func MakeTrieDatabase(ctx *cli.Context, disk ethdb.Database, preimage bool, read
 		config.PathDB = pathdb.Defaults
 	}
 	return triedb.NewDatabase(disk, config)
+}
+
+// setMonitor applies monitor-related command line flags to the config.
+func setMonitor(ctx *cli.Context, cfg *ethconfig.MonitorConfig) {
+	if ctx.IsSet(EnableTraceLog.Name) {
+		cfg.EnableTraceLog = ctx.Bool(EnableTraceLog.Name)
+	}
+	if ctx.IsSet(TraceLogPath.Name) {
+		cfg.TraceLogPath = ctx.String(TraceLogPath.Name)
+	}
 }
