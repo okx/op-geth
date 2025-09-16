@@ -12,10 +12,9 @@ var (
 	StepRPCSendTx    = ProcessStep{10012, "rpc_send_tx"}
 
 	// Transaction Pool Steps
-	StepTxPoolAdd      = ProcessStep{10020, "txpool_add"}
-	StepTxPoolValidate = ProcessStep{10022, "txpool_validate"}
-	StepTxPoolAccept   = ProcessStep{10024, "txpool_accept"}
-	StepTxPoolReject   = ProcessStep{10026, "txpool_reject"}
+	StepTxPoolAdd    = ProcessStep{10020, "txpool_add"}
+	StepTxPoolAccept = ProcessStep{10024, "txpool_accept"}
+	StepTxPoolReject = ProcessStep{10026, "txpool_reject"}
 
 	// Mining Steps
 	StepMinerSelectTx  = ProcessStep{10030, "miner_select_tx"}
@@ -36,8 +35,6 @@ var (
 )
 
 const (
-	Chain = "op-geth"
-
 	ServiceNameRPC        = "op-geth-rpc"
 	ServiceNameTxPool     = "op-geth-txpool"
 	ServiceNameMiner      = "op-geth-miner"

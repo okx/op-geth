@@ -116,7 +116,6 @@ func TestProcessSteps(t *testing.T) {
 		StepRPCReceiveTx,
 		StepRPCSendTx,
 		StepTxPoolAdd,
-		StepTxPoolValidate,
 		StepMinerSelectTx,
 		StepMinerExecuteTx,
 		StepStateProcessTx,
