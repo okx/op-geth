@@ -21,7 +21,7 @@ func (miner *Miner) applyTransaction_okx(env *environment, tx *types.Transaction
 		gp   = env.gasPool.Gas()
 	)
 
-	receipt, _, err := core.ApplyTransaction(env.evm, env.gasPool, env.state, env.header, tx, &env.header.GasUsed)
+	receipt, err := core.ApplyTransaction(env.evm, env.gasPool, env.state, env.header, tx, &env.header.GasUsed)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
 		env.gasPool.SetGas(gp)
