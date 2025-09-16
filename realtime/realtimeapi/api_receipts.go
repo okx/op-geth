@@ -61,7 +61,7 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 		return backend.GetBlockReceipts(ctx, number)
 	}
 
-	blockNum, err := api.getBlockNumberOrHash(number)
+	blockNum, _, _, err := api.getBlockNumberOrHash(number)
 	if err != nil {
 		backend := ethapi.NewBlockChainAPI(api.b)
 		return backend.GetBlockReceipts(ctx, number)

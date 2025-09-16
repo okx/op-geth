@@ -2,52 +2,60 @@ package cache
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
+const DefaultPlainStateCacheSize = 1_000
+
 // BlockStateCache is a double-linked list that implements the plain state reader
 // with a changeset cache layer. The block state cache holds the block chainstate,
 // and the previous block state cache reader.
 type BlockStateCache struct {
-	height         uint64
-	nextBlockCache *BlockStateCache
-	prevCache      state.Reader
-	isPrevGlobal   atomic.Bool
+	// Blockchain backend
+	ctx        context.Context
+	blockchain *core.BlockChain
 
+	// Cache
 	cacheLock sync.RWMutex
 	cache     *plainStateCache
+	height    uint64
+
+	// Double-linked list holding previous and next block state caches
+	prevCache *BlockStateCache
+	nextCache *BlockStateCache
 }
 
-func NewBlockStateCache(height uint64, size int) *BlockStateCache {
+func NewBlockStateCache(ctx context.Context, blockchain *core.BlockChain, height uint64) *BlockStateCache {
 	return &BlockStateCache{
-		height:         height,
-		nextBlockCache: nil,
-		prevCache:      nil,
-		isPrevGlobal:   atomic.Bool{},
-		cache:          newPlainStateCache(size),
+		ctx:        ctx,
+		blockchain: blockchain,
+		height:     height,
+		cache:      newPlainStateCache(DefaultPlainStateCacheSize),
+		nextCache:  nil,
+		prevCache:  nil,
 	}
 }
 
-// -------------- Linked list operations --------------
+// -------------- Block and linked list operations --------------
 func (cache *BlockStateCache) SetNextBlockCache(nextBlockCache *BlockStateCache) {
 	cache.cacheLock.Lock()
 	defer cache.cacheLock.Unlock()
-	cache.nextBlockCache = nextBlockCache
+	cache.nextCache = nextBlockCache
 }
 
-func (cache *BlockStateCache) SetPrevStateReader(stateReader state.Reader, isGlobal bool) {
+func (cache *BlockStateCache) SetPrevBlockCache(prevBlockCache *BlockStateCache) {
 	cache.cacheLock.Lock()
 	defer cache.cacheLock.Unlock()
-	cache.prevCache = stateReader
-	cache.isPrevGlobal.Store(isGlobal)
+	cache.prevCache = prevBlockCache
 }
 
 func (cache *BlockStateCache) Clear() {
@@ -58,11 +66,8 @@ func (cache *BlockStateCache) Clear() {
 	cache.cache.Clear()
 
 	// Clear linked list references to prevent circular references
-	cache.nextBlockCache = nil
+	cache.nextCache = nil
 	cache.prevCache = nil
-
-	// Reset flags
-	cache.isPrevGlobal.Store(false)
 }
 
 // -------------- State apply operations --------------
@@ -171,7 +176,14 @@ func (cache *BlockStateCache) unsafeReadAccountData(address common.Address) (*ty
 		return acc, nil
 	}
 
-	// Cache miss, read from global cache
+	// Cache miss
+	if cache.prevCache == nil {
+		reader, err := cache.GetDbStateReaderFromHeight(cache.height - 1)
+		if err != nil {
+			return nil, err
+		}
+		return reader.Account(address)
+	}
 	return cache.prevCache.Account(address)
 }
 
@@ -182,30 +194,42 @@ func (cache *BlockStateCache) createAccount() *types.StateAccount {
 // -------------- StateReader implementation --------------
 func (cache *BlockStateCache) Account(addr common.Address) (*types.StateAccount, error) {
 	cache.cacheLock.RLock()
+	defer cache.cacheLock.RUnlock()
 	acc, ok := cache.cache.accountCache[addr]
 	if ok {
 		accCopy := acc.Copy()
-		cache.cacheLock.RUnlock()
 		return accCopy, nil
 	}
-	cache.cacheLock.RUnlock()
 
-	// Cache miss, read from global cache
+	// Cache miss
+	if cache.prevCache == nil {
+		reader, err := cache.GetDbStateReaderFromHeight(cache.height - 1)
+		if err != nil {
+			return nil, err
+		}
+		return reader.Account(addr)
+	}
 	return cache.prevCache.Account(addr)
 }
 
 func (cache *BlockStateCache) Storage(addr common.Address, slot common.Hash) (common.Hash, error) {
 	compositeKey := GenerateCompositeStorageKey(addr.Bytes(), slot.Bytes())
-
 	cache.cacheLock.RLock()
+	defer cache.cacheLock.RUnlock()
+
 	storage, ok := cache.cache.storageCache[string(compositeKey)]
 	if ok {
-		cache.cacheLock.RUnlock()
 		return storage, nil
 	}
-	cache.cacheLock.RUnlock()
 
-	// Cache miss, read from global cache
+	// Cache miss
+	if cache.prevCache == nil {
+		reader, err := cache.GetDbStateReaderFromHeight(cache.height - 1)
+		if err != nil {
+			return common.Hash{}, err
+		}
+		return reader.Storage(addr, slot)
+	}
 	return cache.prevCache.Storage(addr, slot)
 }
 
@@ -213,20 +237,34 @@ func (cache *BlockStateCache) Code(addr common.Address, codeHash common.Hash) ([
 	if bytes.Equal(codeHash.Bytes(), types.EmptyCodeHash[:]) {
 		return nil, nil
 	}
-
 	cache.cacheLock.RLock()
+	defer cache.cacheLock.RUnlock()
+
 	code, ok := cache.cache.codeCache[codeHash]
 	if ok {
-		cache.cacheLock.RUnlock()
 		return code, nil
 	}
-	cache.cacheLock.RUnlock()
-
-	// Cache miss, read from global cache
+	// Cache miss
+	if cache.prevCache == nil {
+		reader, err := cache.GetDbStateReaderFromHeight(cache.height - 1)
+		if err != nil {
+			return nil, err
+		}
+		return reader.Code(addr, codeHash)
+	}
 	return cache.prevCache.Code(addr, codeHash)
 }
 
 func (cache *BlockStateCache) CodeSize(addr common.Address, codeHash common.Hash) (int, error) {
 	code, err := cache.Code(addr, codeHash)
 	return len(code), err
+}
+
+func (cache *BlockStateCache) GetDbStateReaderFromHeight(prevHeight uint64) (state.Reader, error) {
+	prevRoot := cache.blockchain.GetHeaderByNumber(prevHeight).Root
+	reader, err := cache.blockchain.StateCache().Reader(prevRoot)
+	if err != nil {
+		return nil, err
+	}
+	return reader, nil
 }

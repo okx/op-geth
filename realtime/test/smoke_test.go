@@ -237,7 +237,7 @@ func TestRealtimeRPC(t *testing.T) {
 		require.Equal(t, "0x00000000000000000000000000000000000000000052b7d2c1069f6b95380000", endValue, fmt.Sprintf("Balance of %s should be equal to 9.9999998e+25 after transfer", fromAddress))
 
 		// Get block height specific state
-		testValue, err := client.EthGetTokenBalance(ctx, testAddress, erc20Address, new(big.Int).SetUint64(targetBlockNumber))
+		testValue, err := GetErc20Balance(ctx, client, testAddress, erc20Address, new(big.Int).SetUint64(targetBlockNumber))
 		require.NoError(t, err)
 		require.NotEqual(t, testValue, correctValue)
 	})

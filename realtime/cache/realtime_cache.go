@@ -26,9 +26,7 @@ const (
 	DefaultStatelessTxCacheSize    = 1_000 * DefaultStatelessBlockCacheSize
 
 	// State cache size
-	DefaultGlobalStateCacheSize  = 1_000_000
-	DefaultPendingStateCacheSize = 1_000
-	DefaultBlockStateCacheSize   = 1_000
+	DefaultStateBlockCacheSize = 1_000
 
 	// Sync threshold config
 	PendingBlocksCacheSizeThreshold = 20
@@ -76,11 +74,13 @@ func ComparePendingBlockContext(a, b *PendingBlockContext) int {
 
 type RealtimeCache struct {
 	// Blockchain backend
+	ctx        context.Context
 	blockchain *core.BlockChain
 
 	// Caches
-	State           *StateCache
-	Stateless       *StatelessCache
+	State     *StateCache
+	Stateless *StatelessCache
+
 	ReadyFlag       atomic.Bool
 	CacheDumpPath   string
 	HeightThreshold uint64
@@ -100,7 +100,9 @@ type RealtimeCache struct {
 
 func NewRealtimeCache(ctx context.Context, blockchain *core.BlockChain, cacheDumpPath string, heightThreshold uint64) *RealtimeCache {
 	return &RealtimeCache{
-		State:                  NewStateCache(ctx, blockchain.StateCache(), DefaultGlobalStateCacheSize, DefaultBlockStateCacheSize),
+		ctx:                    ctx,
+		blockchain:             blockchain,
+		State:                  NewStateCache(DefaultStateBlockCacheSize),
 		Stateless:              NewStatelessCache(DefaultStatelessBlockCacheSize, DefaultStatelessTxCacheSize),
 		ReadyFlag:              atomic.Bool{},
 		CacheDumpPath:          cacheDumpPath,
@@ -306,28 +308,25 @@ func (cache *RealtimeCache) tryCreateNewPendingBlockContext(blockNum uint64, sta
 	}
 
 	// Create block state cache
-	bc := NewBlockStateCache(blockNum, DefaultPendingStateCacheSize)
+	bc := NewBlockStateCache(cache.ctx, cache.blockchain, blockNum)
 	// Get previous block state reader
 	prevBlockNum := blockNum - 1
 	if prevBlockNum == confirmHeight {
-		prevStateReader, isGlobal, err := cache.State.GetStateReaderWithHeight(prevBlockNum)
+		pbc, err := cache.State.GetConfirmBlockStateCache(prevBlockNum)
 		if err != nil {
-			return fmt.Errorf("failed to get prev block state reader from state cache, prevBlockNum: %d, err: %v", prevBlockNum, err)
+			pbc = nil
 		}
 
-		bc.SetPrevStateReader(prevStateReader, isGlobal)
-		if !isGlobal {
-			// Global creates the tail of the double-linked list. Only set for non-global
-			pbc := prevStateReader.(*BlockStateCache)
+		bc.SetPrevBlockCache(pbc)
+		if pbc != nil {
 			pbc.SetNextBlockCache(bc)
 		}
-
 	} else if prevBlockNum > confirmHeight {
 		pbc, err := cache.GetPendingBlockStateCache(prevBlockNum)
-		if err != nil {
+		if err != nil || pbc == nil {
 			return fmt.Errorf("failed to get prev block state reader from pending cache, prevBlockNum: %d, err: %v", prevBlockNum, err)
 		}
-		bc.SetPrevStateReader(pbc, false)
+		bc.SetPrevBlockCache(pbc)
 		pbc.SetNextBlockCache(bc)
 	} else {
 		return fmt.Errorf("failed to get prev block state reader, block num behind confirm height. prevBlockNum: %d, confirmHeight: %d", prevBlockNum, confirmHeight)
@@ -382,6 +381,10 @@ func (cache *RealtimeCache) tryCloseBlock(pendingBlockContext *PendingBlockConte
 	}
 
 	// Close block
+	err := cache.State.AddBlock(pendingBlockContext.blockNum, pendingBlockContext.blockStateCache)
+	if err != nil {
+		return err
+	}
 	items := cache.pendingBlocks.Items()
 	for i, item := range items {
 		if item.blockNum == pendingBlockContext.blockNum {
@@ -391,10 +394,6 @@ func (cache *RealtimeCache) tryCloseBlock(pendingBlockContext *PendingBlockConte
 			cache.pendingBlocks.Sort()
 			break
 		}
-	}
-	err := cache.State.AddBlock(pendingBlockContext.blockNum, pendingBlockContext.blockStateCache)
-	if err != nil {
-		return err
 	}
 	pendingBlockContext.blockStateCache = nil
 
@@ -414,28 +413,24 @@ func (cache *RealtimeCache) GetPendingBlockStateCache(blockNum uint64) (*BlockSt
 	return nil, fmt.Errorf("blockNum %d is not in the pending blocks", blockNum)
 }
 
-func (cache *RealtimeCache) GetPendingStateCache() (state.Reader, error) {
-	if cache.pendingBlocks.Size() == 0 {
-		return nil, fmt.Errorf("no pending blocks in pending cache")
-	}
-	pendingHeight := cache.GetPendingHeight()
-	return cache.GetPendingBlockStateCache(pendingHeight)
-}
-
-func (cache *RealtimeCache) GetLatestStateCache() state.Reader {
-	stateReader, _, err := cache.State.GetStateReaderWithHeight(cache.GetHighestConfirmHeight())
-	if err != nil {
-		return nil
-	}
-	return stateReader
-}
-
 func (cache *RealtimeCache) GetStateReaderByHeight(blockNum uint64) state.Reader {
-	stateReader, _, err := cache.State.GetStateReaderWithHeight(blockNum)
-	if err != nil {
-		return nil
+	var reader state.Reader
+	var err error
+
+	confirmHeight := cache.GetHighestConfirmHeight()
+	if blockNum > confirmHeight {
+		reader, err = cache.GetPendingBlockStateCache(blockNum)
 	}
-	return stateReader
+	if err != nil {
+		reader = nil
+	}
+	if reader == nil {
+		reader, err = cache.State.GetConfirmBlockStateCache(blockNum)
+	}
+	if err != nil {
+		reader = nil
+	}
+	return reader
 }
 
 // -------------- ReceiptGetter implementation --------------

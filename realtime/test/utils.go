@@ -551,8 +551,35 @@ func WaitMined(ctx context.Context, b bind.DeployBackend, txHash common.Hash) (*
 
 type ethClienter interface {
 	ethereum.TransactionReader
+	ethereum.ChainStateReader
 	ethereum.ContractCaller
 	bind.DeployBackend
+}
+
+func GetErc20Balance(ctx context.Context, client ethClienter, addr common.Address, erc20Addr common.Address, height *big.Int) (*big.Int, error) {
+	// Pack the balanceOf function call
+	data, err := erc20ABI.Pack("balanceOf", addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack balanceOf call: %v", err)
+	}
+
+	// Make the eth_call
+	result, err := client.CallContract(ctx, ethereum.CallMsg{
+		To:   &erc20Addr,
+		Data: data,
+	}, height)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call contract: %v", err)
+	}
+
+	// Unpack the result
+	var balance *big.Int
+	err = erc20ABI.UnpackIntoInterface(&balance, "balanceOf", result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unpack result: %v", err)
+	}
+
+	return balance, nil
 }
 
 // RevertReason returns the revert reason for a tx that has a receipt with failed status

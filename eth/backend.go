@@ -128,14 +128,14 @@ type Ethereum struct {
 	nodeCloser func() error
 
 	// For X Layer, realtime
-	kafkaEnabled  bool
-	kafkaProducer *realtimeKafka.KafkaProducer
-	kafkaConsumer *realtimeKafka.KafkaConsumer
-	realtimeCache *realtimeCache.RealtimeCache
-	blockInfoChan chan *types.Header
-	txInfoChan    chan state.TxInfo
-	finishChan    chan realtimeTypes.FinishedEntry
-	realtimeSub   *realtimeSub.RealtimeSubscription
+	kafkaEnabled       bool
+	kafkaProducer      *realtimeKafka.KafkaProducer
+	kafkaConsumer      *realtimeKafka.KafkaConsumer
+	realtimeCache      *realtimeCache.RealtimeCache
+	kafkaBlockInfoChan chan *realtimeTypes.BlockInfo
+	kafkaTxInfoChan    chan state.TxInfo
+	finishChan         chan realtimeTypes.FinishedEntry
+	realtimeSub        *realtimeSub.RealtimeSubscription
 }
 
 // New creates a new Ethereum object (including the initialisation of the common Ethereum object),
@@ -434,15 +434,15 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// For X Layer, realtime
 	if eth.config.XLayer.Realtime.Enable {
 		if eth.config.XLayer.IsSequencer {
-			kafkaProducer, err := realtimeKafka.NewKafkaProducer(eth.config.XLayer.Realtime.Kafka, context.Background(), eth.blockchain, nil)
+			kafkaProducer, err := realtimeKafka.NewKafkaProducer(eth.config.XLayer.Realtime.Kafka, context.Background(), nil)
 			if err != nil {
 				eth.kafkaEnabled = false
 				log.Warn("[Realtime] Failed to initialize kafka producer", "error", err)
 			} else {
 				eth.kafkaEnabled = true
 				eth.kafkaProducer = kafkaProducer
-				eth.blockInfoChan = make(chan *types.Header, realtimeKafka.DefaultKafkaBufferSize)
-				eth.txInfoChan = make(chan state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
+				eth.kafkaBlockInfoChan = make(chan *realtimeTypes.BlockInfo, realtimeKafka.DefaultKafkaBufferSize)
+				eth.kafkaTxInfoChan = make(chan state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
 
 				// Send error trigger message on sequencer restart
 				if err := eth.kafkaProducer.SendKafkaErrorTrigger(0); err != nil {
@@ -460,11 +460,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				eth.kafkaConsumer = kafkaConsumer
 
 				// Init realtime cache
-				eth.realtimeCache, err = realtimeCache.NewRealtimeCache(context.Background(), eth.blockchain, eth.config.XLayer.Realtime.CacheDumpPath)
-				if err != nil {
-					return nil, err
-				}
-
+				eth.realtimeCache = realtimeCache.NewRealtimeCache(context.Background(), eth.blockchain, eth.config.XLayer.Realtime.CacheDumpPath, eth.config.XLayer.Realtime.CacheHeightThreshold)
 				eth.finishChan = make(chan realtimeTypes.FinishedEntry)
 
 				if eth.config.XLayer.Realtime.EnableSubscribe {
@@ -598,7 +594,7 @@ func (s *Ethereum) Start() error {
 	// For X Layer, realtime
 	if s.config.XLayer.Realtime.Enable && s.kafkaEnabled {
 		go realtime.ListenKafkaConsumer(context.Background(), s.kafkaConsumer, s.realtimeCache, s.finishChan, s.realtimeSub, s.config.XLayer.IsSequencer)
-		go realtime.ListenKafkaProducer(context.Background(), s.kafkaProducer, s.blockInfoChan, s.txInfoChan, s.config.XLayer.IsSequencer)
+		go realtime.ListenKafkaProducer(context.Background(), s.kafkaProducer, s.kafkaBlockInfoChan, s.kafkaTxInfoChan, s.config.XLayer.IsSequencer)
 	}
 
 	return nil
