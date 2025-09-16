@@ -118,14 +118,14 @@ const (
 	//
 	// - Version 4
 	//   The following incompatible database changes were added:
-	//   * the `BlockNumber`, `Hash`, `TxIndex`, `BlockHash` and `Index` fields of log are deleted
+	//   * the `BlockNumber`, `TxHash`, `TxIndex`, `BlockHash` and `Index` fields of log are deleted
 	//   * the `Bloom` field of receipt is deleted
 	//   * the `BlockIndex` and `TxIndex` fields of txlookup are deleted
 	//
 	// - Version 5
 	//  The following incompatible database changes were added:
-	//    * the `Hash`, `GasCost`, and `ContractAddress` fields are no longer stored for a receipt
-	//    * the `Hash`, `GasCost`, and `ContractAddress` fields are computed by looking up the
+	//    * the `TxHash`, `GasCost`, and `ContractAddress` fields are no longer stored for a receipt
+	//    * the `TxHash`, `GasCost`, and `ContractAddress` fields are computed by looking up the
 	//      receipts' corresponding block
 	//
 	// - Version 6
