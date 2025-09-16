@@ -23,6 +23,8 @@ type TraceLogEntry struct {
 	ServiceName     string `json:"serviceName"`
 	ProcessID       uint64 `json:"processId"`
 	ProcessWord     string `json:"processWord"`
+	Phase           string `json:"phase"` // 新增：处理阶段 (rpc, txpool, miner, state, blockchain)
+	Step            string `json:"step"`  // 新增：具体步骤 (receive_tx, add, execute_tx, etc.)
 	BlockHeight     uint64 `json:"blockHeight"`
 	BlockHash       string `json:"blockHash"`
 	BlockTime       uint64 `json:"blockTime"`
@@ -35,6 +37,7 @@ type TraceLogEntry struct {
 	To              string `json:"to,omitempty"`
 	Value           string `json:"value,omitempty"`
 	Nonce           uint64 `json:"nonce,omitempty"`
+	Duration        int64  `json:"duration,omitempty"` // 新增：步骤耗时(毫秒)
 }
 
 // TraceLogger handles transaction trace logging
@@ -49,6 +52,30 @@ var (
 	globalLogger *TraceLogger
 	once         sync.Once
 )
+
+func getPhaseFromServiceName(serviceName string) string {
+	switch serviceName {
+	case ServiceNameRPC:
+		return "rpc"
+	case ServiceNameTxPool:
+		return "txpool"
+	case ServiceNameMiner:
+		return "miner"
+	case ServiceNameState:
+		return "state"
+	case ServiceNameBlockchain:
+		return "blockchain"
+	default:
+		return "unknown"
+	}
+}
+
+func getStepFromProcessWord(processWord string) string {
+	if len(processWord) > 11 && processWord[:11] == "op_geth_" {
+		return processWord[11:]
+	}
+	return processWord
+}
 
 // InitTraceLogger initializes the global trace logger
 func InitTraceLogger(enabled bool, logPath string) {
@@ -103,12 +130,17 @@ func LogTrace(txHash, serviceName string, processID uint64, processWord string,
 		return
 	}
 
+	timestamp := time.Now().UnixNano() / 1000000 // milliseconds
+	step := getStepFromProcessWord(processWord)
+
 	entry := TraceLogEntry{
-		Timestamp:       time.Now().UnixNano() / 1000000, // milliseconds
+		Timestamp:       timestamp,
 		TxHash:          txHash,
 		ServiceName:     serviceName,
 		ProcessID:       processID,
 		ProcessWord:     processWord,
+		Phase:           getPhaseFromServiceName(serviceName),
+		Step:            step,
 		BlockHeight:     blockHeight,
 		BlockHash:       blockHash,
 		BlockTime:       blockTime,
