@@ -182,9 +182,6 @@ var (
 		utils.BeaconGenesisTimeFlag,
 		utils.BeaconCheckpointFlag,
 		utils.BeaconCheckpointFileFlag,
-		// Monitor flags
-		utils.TraceLogPath,
-		utils.EnableTraceLog,
 	}, utils.NetworkFlags, utils.DatabaseFlags, utils.XLayerFlags)
 
 	rpcFlags = []cli.Flag{

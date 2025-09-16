@@ -56,6 +56,18 @@ var (
 		Category: flags.XLayerCategory,
 	}
 
+	TraceLogPath = &cli.StringFlag{
+		Name:  "monitor.trace-log-path",
+		Usage: "Path of trace.log for transaction monitoring",
+		Value: "/var/log/op-geth/trace.log",
+	}
+
+	EnableTraceLog = &cli.BoolFlag{
+		Name:  "monitor.enable-trace-log",
+		Usage: "Enable full transaction trace log",
+		Value: false,
+	}
+
 	// XLayerFlags are the default flags for X Layer features
 	XLayerFlags = []cli.Flag{
 		OkPayPriorityEnableFlag,
@@ -65,6 +77,8 @@ var (
 		InterceptBridgeContractAddress,
 		InterceptTargetTokenAddress,
 		InnerTxFlag,
+		TraceLogPath,
+		EnableTraceLog,
 	}
 )
 
@@ -110,4 +124,15 @@ func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setOkPayXLayer(ctx, cfg)
 	setXLayerIntercept(ctx, cfg)
 	setInnerTxXLayer(ctx, cfg)
+	setMonitor(ctx, &cfg.Monitor)
+}
+
+// setMonitor applies monitor-related command line flags to the config.
+func setMonitor(ctx *cli.Context, cfg *ethconfig.MonitorConfig) {
+	if ctx.IsSet(EnableTraceLog.Name) {
+		cfg.EnableTraceLog = ctx.Bool(EnableTraceLog.Name)
+	}
+	if ctx.IsSet(TraceLogPath.Name) {
+		cfg.TraceLogPath = ctx.String(TraceLogPath.Name)
+	}
 }
