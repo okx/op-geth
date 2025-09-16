@@ -8,10 +8,8 @@ type ProcessStep struct {
 
 var (
 	// RPC Service Steps
-	StepRPCReceiveTx    = ProcessStep{10010, "rpc_receive_tx"}
-	StepRPCSendTx       = ProcessStep{10012, "rpc_send_tx"}
-	StepRPCReceiveBlock = ProcessStep{10060, "rpc_receive_block"}
-	StepRPCFinishBlock  = ProcessStep{10062, "rpc_finish_block"}
+	StepRPCReceiveTx = ProcessStep{10010, "rpc_receive_tx"}
+	StepRPCSendTx    = ProcessStep{10012, "rpc_send_tx"}
 
 	// Transaction Pool Steps
 	StepTxPoolAdd      = ProcessStep{10020, "txpool_add"}
@@ -45,18 +43,4 @@ const (
 	ServiceNameMiner      = "op-geth-miner"
 	ServiceNameState      = "op-geth-state"
 	ServiceNameBlockchain = "op-geth-blockchain"
-
-	Business = "op-geth"
-	ChainID  = 0 // Will be set based on configuration
-
-	Client               string = ""
-	Status               string = ""
-	Index                string = ""
-	InnerIndex           string = ""
-	ReferId              string = ""
-	DepositConfirmHeight string = ""
-	TokenID              string = ""
-	MevSupplier          string = ""
-	BusinessHash         string = ""
-	ContractAddress      string = ""
 )
