@@ -123,7 +123,9 @@ type Ethereum struct {
 	seqRPCService        *rpc.Client
 	historicalRPCService *rpc.Client
 
-	interopRPC *interop.InteropClient
+	// For X Layer
+	interopRPC             *interop.InteropClient
+	xlayerLegacyRPCService *XlayerLegacyRPCService // Migration configuration for routing to xlayer-erigon
 
 	nodeCloser func() error
 
@@ -396,6 +398,21 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, config.GPO, config.Miner.GasPrice)
 
+	// For X Layer, set up migration configuration if configured
+	if config.XLayer.LegacyPp.MigrationBlock != nil && config.XLayer.LegacyPp.PPRPCUrl != "" {
+		migrationConfig, err := NewXlayerLegacyRPCService(config)
+		if err != nil {
+			log.Error("Failed to create migration configuration", "error", err)
+			return nil, err
+		}
+		if migrationConfig != nil {
+			eth.xlayerLegacyRPCService = migrationConfig
+			log.Info("Migration routing enabled",
+				"migrationBlock", *config.XLayer.LegacyPp.MigrationBlock,
+				"ppUrl", config.XLayer.LegacyPp.PPRPCUrl)
+		}
+	}
+
 	if config.RollupSequencerHTTP != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		client, err := rpc.DialContext(ctx, config.RollupSequencerHTTP)
@@ -494,10 +511,26 @@ func makeExtraData(extra []byte) []byte {
 // APIs return the collection of RPC services the ethereum package offers.
 // NOTE, some of these services probably need to be moved to somewhere else.
 func (s *Ethereum) APIs() []rpc.API {
+
 	apis := ethapi.GetAPIs(s.APIBackend)
 
 	// Append any APIs exposed explicitly by the consensus engine
 	apis = append(apis, s.engine.APIs(s.BlockChain())...)
+
+	// For X Layer, wrap APIs with migration routing if configured
+	if s.xlayerLegacyRPCService != nil {
+		apis = WrapAPIsForMigration(apis, s.xlayerLegacyRPCService)
+		// Register filter here
+		filterSystem := filters.NewFilterSystem(s.APIBackend, filters.Config{
+			LogCacheSize: s.config.FilterLogCacheSize,
+		})
+		originalFilterApi := filters.NewFilterAPI(filterSystem)
+		filterApi := rpc.API{
+			Namespace: "eth",
+			Service:   NewMigrationFilterAPI(originalFilterApi, s.xlayerLegacyRPCService),
+		}
+		apis = append(apis, filterApi)
+	}
 
 	// Append any Sequencer APIs as enabled
 	if s.config.RollupSequencerTxConditionalEnabled {
@@ -718,6 +751,10 @@ func (s *Ethereum) Stop() error {
 	}
 	if s.historicalRPCService != nil {
 		s.historicalRPCService.Close()
+	}
+	// For X Layer
+	if s.xlayerLegacyRPCService != nil {
+		s.xlayerLegacyRPCService.Close()
 	}
 	if s.interopRPC != nil {
 		s.interopRPC.Close()

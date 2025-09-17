@@ -38,7 +38,9 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/eth/catalyst"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/internal/flags"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -240,6 +242,9 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	// Start metrics export if enabled
 	utils.SetupMetrics(&cfg.Metrics)
 
+	// For X Layer, initialize monitoring system
+	monitor.InitTraceLogger(cfg.Eth.XLayer.Monitor.EnableTraceLog, cfg.Eth.XLayer.Monitor.TraceLogPath)
+
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
 
 	// Create gauge with geth system and build information
@@ -257,7 +262,15 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	}
 
 	// Configure log filter RPC API.
-	filterSystem, filterApi := utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
+	// For X Layer
+	isMigrationConfigured := cfg.Eth.XLayer.LegacyPp.MigrationBlock != nil && cfg.Eth.XLayer.LegacyPp.PPRPCUrl != ""
+	var filterSystem *filters.FilterSystem
+	var filterApi *filters.FilterAPI
+	if isMigrationConfigured {
+		filterSystem, filterApi = utils.RegisterMigrationFilterAPI(stack, backend, &cfg.Eth)
+	} else {
+		filterSystem, filterApi = utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
+	}
 
 	// For X Layer, realtime
 	realtimeApi := eth.TryGetRealtimeAPIs(filterApi)
