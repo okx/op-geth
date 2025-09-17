@@ -26,8 +26,6 @@ func GetBlockNumber() (uint64, error) {
 		return 0, err
 	}
 
-	fmt.Println("result", result)
-
 	return transHexStringToUint64(result)
 }
 
@@ -256,7 +254,6 @@ func GetMetricsPrometheus() (string, error) {
 	}
 	resp, err := client.Get(DefaultL2MetricsPrometheusURL)
 	if err != nil {
-		fmt.Println("Error:", err)
 		return "", err
 	}
 	defer resp.Body.Close()
@@ -273,7 +270,6 @@ func GetMetrics() (string, error) {
 	}
 	resp, err := client.Get(DefaultL2MetricsURL)
 	if err != nil {
-		fmt.Println("Error:", err)
 		return "", err
 	}
 	defer resp.Body.Close()
