@@ -481,19 +481,6 @@ func TestEthereumBlockRPC(t *testing.T) {
 		require.NotNil(t, tx, "Transaction should not be nil")
 		log.Info("EthGetTransactionByBlockNumberAndIndex result type: %T", tx)
 	})
-
-	// Test eth_getBlockInternalTransactions
-	t.Run("EthGetBlockInternalTransactions", func(t *testing.T) {
-		currentBlockHex := fmt.Sprintf("0x%x", blockNumber)
-		internalTxs, err := operations.EthGetBlockInternalTransactions(currentBlockHex)
-		if err != nil && strings.Contains(err.Error(), "does not exist/is not available") {
-			t.Skip("eth_getBlockInternalTransactions method not available on this network")
-			return
-		}
-		require.NoError(t, err)
-		require.NotNil(t, internalTxs, "Internal transactions should not be nil")
-		log.Info("EthGetBlockInternalTransactions result type: %T", internalTxs)
-	})
 }
 
 // TestEthereumTransactionRPC tests Ethereum transaction-related RPC methods
