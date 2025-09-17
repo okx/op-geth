@@ -220,8 +220,7 @@ func (api *MigrationBlockChainAPI) GetStorageAt(ctx context.Context, address com
 	return result, err
 }
 
-// eth_getHeaderByHash
-// FORWARD
+// eth_getHeaderByHash LOCAL
 func (api *MigrationBlockChainAPI) GetHeaderByHash(ctx context.Context, hash common.Hash) (map[string]interface{}, error) {
 	// Try local first to get the header and determine block number
 	localResult := api.BlockChainAPI.GetHeaderByHash(ctx, hash)
@@ -439,10 +438,9 @@ func (api *MigrationTransactionAPI) GetRawTransactionByBlockNumberAndIndex(ctx c
 	if api.config.shouldProxy(uint64(blockNr)) {
 		var result hexutil.Bytes
 		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getRawTransactionByBlockNumberAndIndex", blockNr, index)
-		if err != nil {
-			return nil
+		if err == nil && result != nil {
+			return result
 		}
-		return result
 	}
 
 	return api.TransactionAPI.GetRawTransactionByBlockNumberAndIndex(ctx, blockNr, index)
@@ -478,19 +476,15 @@ func (api *MigrationTransactionAPI) GetTransactionByBlockHashAndIndex(ctx contex
 
 // eth_getTransactionByBlockNumberAndIndex TransactionAPI FORWARD
 func (api *MigrationTransactionAPI) GetTransactionByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, index hexutil.Uint) (*ethapi.RPCTransaction, error) {
-	// Try local first
-	result, err := api.TransactionAPI.GetTransactionByBlockNumberAndIndex(ctx, blockNr, index)
-	if err == nil && result != nil {
-		return result, nil
+	if api.config.shouldProxy(uint64(blockNr)) {
+		var result *ethapi.RPCTransaction
+		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getTransactionByBlockNumberAndIndex", blockNr, index)
+		return result, err
 	}
-
-	// If not found locally and migration is configured, try erigon
-	var remoteResult *ethapi.RPCTransaction
-	err = api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getTransactionByBlockNumberAndIndex", blockNr, index)
-	return remoteResult, err
+	return api.TransactionAPI.GetTransactionByBlockNumberAndIndex(ctx, blockNr, index)
 }
 
-// eth_getTransactionCount TransactionAPI LOCAL
+// eth_getTransactionCount TransactionAPI FORWARD
 func (api *MigrationTransactionAPI) GetTransactionCount(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Uint64, error) {
 	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
 		if api.config.shouldProxy(uint64(blockNr)) {
