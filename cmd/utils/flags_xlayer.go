@@ -82,6 +82,17 @@ var (
 		Category: flags.XLayerCategory,
 		EnvVars:  []string{"OP_PP_RPC_TIMEOUT"},
 	}
+	TraceLogPath = &cli.StringFlag{
+		Name:  "monitor.trace-log-path",
+		Usage: "Path of trace.log for transaction monitoring",
+		Value: "/var/log/op-geth/trace.log",
+	}
+
+	EnableTraceLog = &cli.BoolFlag{
+		Name:  "monitor.enable-trace-log",
+		Usage: "Enable full transaction trace log",
+		Value: false,
+	}
 	// XLayerFlags are the default flags for X Layer features
 	XLayerFlags = []cli.Flag{
 		OkPayPriorityEnableFlag,
@@ -94,6 +105,8 @@ var (
 		MigrationBlockFlag,
 		PPRPCUrlFlag,
 		PPRPCTimeoutFlag,
+		TraceLogPath,
+		EnableTraceLog,
 	}
 )
 
@@ -156,6 +169,7 @@ func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setXLayerIntercept(ctx, cfg)
 	setInnerTxXLayer(ctx, cfg)
 	setMigrationXLayer(ctx, cfg)
+  setMonitor(ctx, &cfg.Monitor)
 }
 
 // RegisterMigrationFilterAPI adds the eth log filtering RPC API to the node.
@@ -174,4 +188,14 @@ func RegisterMigrationFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg
 	}
 	stack.RegisterAPIs([]rpc.API{migrationFilterApi})
 	return filterSystem
+}
+
+// setMonitor applies monitor-related command line flags to the config.
+func setMonitor(ctx *cli.Context, cfg *ethconfig.MonitorConfig) {
+	if ctx.IsSet(EnableTraceLog.Name) {
+		cfg.EnableTraceLog = ctx.Bool(EnableTraceLog.Name)
+	}
+	if ctx.IsSet(TraceLogPath.Name) {
+		cfg.TraceLogPath = ctx.String(TraceLogPath.Name)
+	}
 }

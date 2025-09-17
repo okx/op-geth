@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
@@ -369,8 +370,32 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 }
 
 func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) error {
+	txHash := tx.Hash().Hex()
+	blockHeight := env.header.Number.Uint64()
+
+	// Log transaction selection
+	monitor.LogTransactionStart(
+		txHash,
+		monitor.ServiceNameMiner,
+		monitor.StepMinerSelectTx.ID,
+		monitor.StepMinerSelectTx.Key,
+		blockHeight,
+		int8(tx.Type()),
+		"", "", "", tx.Nonce(),
+	)
+
 	if tx.Type() == types.BlobTxType {
-		return miner.commitBlobTransaction(env, tx)
+		err := miner.commitBlobTransaction(env, tx)
+		if err != nil {
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+				int8(tx.Type()), "failed", err.Error(), 0)
+		} else {
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+				int8(tx.Type()), "success", "", 0)
+		}
+		return err
 	}
 
 	// If a conditional is set, check prior to applying
@@ -379,20 +404,40 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 
 		// check the conditional
 		if err := env.header.CheckTransactionConditional(conditional); err != nil {
-			return fmt.Errorf("failed header check: %s: %w", err, errTxConditionalInvalid)
+			err := fmt.Errorf("failed header check: %s: %w", err, errTxConditionalInvalid)
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+				int8(tx.Type()), "failed", err.Error(), 0)
+			return err
 		}
 		if err := env.state.CheckTransactionConditional(conditional); err != nil {
-			return fmt.Errorf("failed state check: %s: %w", err, errTxConditionalInvalid)
+			err := fmt.Errorf("failed state check: %s: %w", err, errTxConditionalInvalid)
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+				int8(tx.Type()), "failed", err.Error(), 0)
+			return err
 		}
 	}
 
+	// Log transaction execution start
+	monitor.LogTransactionProgress(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+		monitor.StepMinerExecuteTx.Key, blockHeight, int8(tx.Type()), "executing", 0)
+
 	receipt, err := miner.applyTransaction_okx(env, tx)
 	if err != nil {
+		monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+			monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+			int8(tx.Type()), "failed", err.Error(), 0)
 		return err
 	}
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
 	env.tcount++
+
+	// Log successful execution
+	monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+		monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+		int8(tx.Type()), "success", "", receipt.GasUsed)
 	return nil
 }
 
