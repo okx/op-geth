@@ -258,7 +258,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	}
 
 	// Configure log filter RPC API.
-	isMigrationConfigured := cfg.Eth.XLayer.RpcMigration.MigrationBlock != nil && cfg.Eth.XLayer.RpcMigration.PPRPCUrl != ""
+	isMigrationConfigured := cfg.Eth.XLayer.LegacyPp.MigrationBlock != nil && cfg.Eth.XLayer.LegacyPp.PPRPCUrl != ""
 	var filterSystem *filters.FilterSystem
 	if isMigrationConfigured {
 		filterSystem = utils.RegisterMigrationFilterAPI(stack, backend, &cfg.Eth)

@@ -19,7 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
-// Policy
+// XlayerLegacyRPCService Forward Policy
 // LOCAL
 // 1. Local first
 // 2. If not found, and erigon configured, forward request
@@ -32,19 +32,19 @@ var (
 	errInvalidBlockRange = errors.New("invalid block range params")
 )
 
-// MigrationRPCService holds the configuration for RPC migration
-type MigrationRPCService struct {
+// XlayerLegacyRPCService holds the configuration for RPC migration
+type XlayerLegacyRPCService struct {
 	MigrationBlock uint64
 	ErigonClient   *rpc.Client
 }
 
-// NewMigrationRPCService creates a new migration configuration
-func NewMigrationRPCService(config *ethconfig.Config) (*MigrationRPCService, error) {
-	if config.XLayer.RpcMigration.MigrationBlock == nil || config.XLayer.RpcMigration.PPRPCUrl == "" {
+// NewXlayerLegacyRPCService creates a new migration configuration
+func NewXlayerLegacyRPCService(config *ethconfig.Config) (*XlayerLegacyRPCService, error) {
+	if config.XLayer.LegacyPp.MigrationBlock == nil || config.XLayer.LegacyPp.PPRPCUrl == "" {
 		return nil, nil // Migration not configured
 	}
 
-	timeout := config.XLayer.RpcMigration.PPRPCTimeout
+	timeout := config.XLayer.LegacyPp.PPRPCTimeout
 	if timeout == 0 {
 		timeout = 10 * time.Second
 	}
@@ -52,35 +52,35 @@ func NewMigrationRPCService(config *ethconfig.Config) (*MigrationRPCService, err
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	erigonClient, err := rpc.DialContext(ctx, config.XLayer.RpcMigration.PPRPCUrl)
+	erigonClient, err := rpc.DialContext(ctx, config.XLayer.LegacyPp.PPRPCUrl)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to erigon RPC: %w", err)
 	}
 
-	return &MigrationRPCService{
-		MigrationBlock: *config.XLayer.RpcMigration.MigrationBlock,
+	return &XlayerLegacyRPCService{
+		MigrationBlock: *config.XLayer.LegacyPp.MigrationBlock,
 		ErigonClient:   erigonClient,
 	}, nil
 }
 
 // Close closes the erigon RPC client
-func (mc *MigrationRPCService) Close() {
+func (mc *XlayerLegacyRPCService) Close() {
 	mc.ErigonClient.Close()
 }
 
 // shouldProxy determines if a request should be proxied based on block number
-func (mc *MigrationRPCService) shouldProxy(blockNumber uint64) bool {
+func (mc *XlayerLegacyRPCService) shouldProxy(blockNumber uint64) bool {
 	return mc.MigrationBlock > 0 && blockNumber < mc.MigrationBlock
 }
 
 // MigrationBlockChainAPI wraps the standard BlockChainAPI to add migration routing
 type MigrationBlockChainAPI struct {
 	*ethapi.BlockChainAPI
-	config *MigrationRPCService
+	config *XlayerLegacyRPCService
 }
 
 // NewMigrationBlockChainAPI creates a new migration-aware BlockChainAPI
-func NewMigrationBlockChainAPI(original *ethapi.BlockChainAPI, config *MigrationRPCService) *MigrationBlockChainAPI {
+func NewMigrationBlockChainAPI(original *ethapi.BlockChainAPI, config *XlayerLegacyRPCService) *MigrationBlockChainAPI {
 	return &MigrationBlockChainAPI{
 		BlockChainAPI: original,
 		config:        config,
@@ -326,11 +326,11 @@ func (api *MigrationBlockChainAPI) GetCode(ctx context.Context, address common.A
 // MigrationTransactionAPI wraps the standard TransactionAPI to add migration routing
 type MigrationTransactionAPI struct {
 	*ethapi.TransactionAPI
-	config *MigrationRPCService
+	config *XlayerLegacyRPCService
 }
 
 // NewMigrationTransactionAPI creates a new migration-aware TransactionAPI
-func NewMigrationTransactionAPI(original *ethapi.TransactionAPI, config *MigrationRPCService) *MigrationTransactionAPI {
+func NewMigrationTransactionAPI(original *ethapi.TransactionAPI, config *XlayerLegacyRPCService) *MigrationTransactionAPI {
 	return &MigrationTransactionAPI{
 		TransactionAPI: original,
 		config:         config,
@@ -508,14 +508,14 @@ func (api *MigrationTransactionAPI) GetTransactionCount(ctx context.Context, add
 
 type MigrationFilterAPI struct {
 	*filters.FilterAPI
-	config *MigrationRPCService
+	config *XlayerLegacyRPCService
 	// Track which filters are managed by erigon
 	erigonFilters map[rpc.ID]bool
 	filtersMu     sync.Mutex
 }
 
 // NewMigrationFilterAPI creates a new migration-aware FilterAPI
-func NewMigrationFilterAPI(original *filters.FilterAPI, config *MigrationRPCService) *MigrationFilterAPI {
+func NewMigrationFilterAPI(original *filters.FilterAPI, config *XlayerLegacyRPCService) *MigrationFilterAPI {
 	return &MigrationFilterAPI{
 		FilterAPI:     original,
 		config:        config,
@@ -710,7 +710,7 @@ func (api *MigrationFilterAPI) GetLogs(ctx context.Context, crit filters.FilterC
 }
 
 // WrapAPIsForMigration wraps the standard APIs with migration-aware versions
-func WrapAPIsForMigration(apis []rpc.API, config *MigrationRPCService) []rpc.API {
+func WrapAPIsForMigration(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API {
 	if config == nil {
 		return apis // No migration configured, return original APIs
 	}

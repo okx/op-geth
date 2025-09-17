@@ -138,15 +138,15 @@ func setMigrationXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	// Migration configuration
 	if ctx.IsSet(MigrationBlockFlag.Name) {
 		migrationBlock := ctx.Uint64(MigrationBlockFlag.Name)
-		cfg.XLayer.RpcMigration.MigrationBlock = &migrationBlock
+		cfg.XLayer.LegacyPp.MigrationBlock = &migrationBlock
 	}
 	if ctx.IsSet(PPRPCUrlFlag.Name) {
-		cfg.XLayer.RpcMigration.PPRPCUrl = ctx.String(PPRPCUrlFlag.Name)
+		cfg.XLayer.LegacyPp.PPRPCUrl = ctx.String(PPRPCUrlFlag.Name)
 	}
 	if ctx.IsSet(PPRPCTimeoutFlag.Name) {
-		cfg.XLayer.RpcMigration.PPRPCTimeout = ctx.Duration(PPRPCTimeoutFlag.Name)
-	} else if cfg.XLayer.RpcMigration.PPRPCTimeout == 0 && cfg.XLayer.RpcMigration.PPRPCUrl != "" {
-		cfg.XLayer.RpcMigration.PPRPCTimeout = 10 * time.Second
+		cfg.XLayer.LegacyPp.PPRPCTimeout = ctx.Duration(PPRPCTimeoutFlag.Name)
+	} else if cfg.XLayer.LegacyPp.PPRPCTimeout == 0 && cfg.XLayer.LegacyPp.PPRPCUrl != "" {
+		cfg.XLayer.LegacyPp.PPRPCTimeout = 10 * time.Second
 	}
 }
 
@@ -163,7 +163,7 @@ func RegisterMigrationFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg
 	filterSystem := filters.NewFilterSystem(backend, filters.Config{
 		LogCacheSize: ethcfg.FilterLogCacheSize,
 	})
-	migrationRpcService, err := eth.NewMigrationRPCService(ethcfg)
+	migrationRpcService, err := eth.NewXlayerLegacyRPCService(ethcfg)
 	if err != nil {
 		panic(err)
 	}

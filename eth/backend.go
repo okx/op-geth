@@ -114,8 +114,8 @@ type Ethereum struct {
 	seqRPCService        *rpc.Client
 	historicalRPCService *rpc.Client
 
-	interopRPC          *interop.InteropClient
-	migrationRPCService *MigrationRPCService // Migration configuration for routing to xlayer-erigon
+	interopRPC             *interop.InteropClient
+	xlayerLegacyRPCService *XlayerLegacyRPCService // Migration configuration for routing to xlayer-erigon
 
 	nodeCloser func() error
 }
@@ -379,17 +379,17 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, config.GPO, config.Miner.GasPrice)
 
 	// Set up migration configuration if configured
-	if config.XLayer.RpcMigration.MigrationBlock != nil && config.XLayer.RpcMigration.PPRPCUrl != "" {
-		migrationConfig, err := NewMigrationRPCService(config)
+	if config.XLayer.LegacyPp.MigrationBlock != nil && config.XLayer.LegacyPp.PPRPCUrl != "" {
+		migrationConfig, err := NewXlayerLegacyRPCService(config)
 		if err != nil {
 			log.Error("Failed to create migration configuration", "error", err)
 			return nil, err
 		}
 		if migrationConfig != nil {
-			eth.migrationRPCService = migrationConfig
+			eth.xlayerLegacyRPCService = migrationConfig
 			log.Info("Migration routing enabled",
-				"migrationBlock", *config.XLayer.RpcMigration.MigrationBlock,
-				"ppUrl", config.XLayer.RpcMigration.PPRPCUrl)
+				"migrationBlock", *config.XLayer.LegacyPp.MigrationBlock,
+				"ppUrl", config.XLayer.LegacyPp.PPRPCUrl)
 		}
 	}
 
@@ -458,8 +458,8 @@ func (s *Ethereum) APIs() []rpc.API {
 	apis = append(apis, s.engine.APIs(s.BlockChain())...)
 
 	// Wrap APIs with migration routing if configured
-	if s.migrationRPCService != nil {
-		apis = WrapAPIsForMigration(apis, s.migrationRPCService)
+	if s.xlayerLegacyRPCService != nil {
+		apis = WrapAPIsForMigration(apis, s.xlayerLegacyRPCService)
 		// Register filter here
 		filterSystem := filters.NewFilterSystem(s.APIBackend, filters.Config{
 			LogCacheSize: s.config.FilterLogCacheSize,
@@ -467,7 +467,7 @@ func (s *Ethereum) APIs() []rpc.API {
 		originalFilterApi := filters.NewFilterAPI(filterSystem)
 		filterApi := rpc.API{
 			Namespace: "eth",
-			Service:   NewMigrationFilterAPI(originalFilterApi, s.migrationRPCService),
+			Service:   NewMigrationFilterAPI(originalFilterApi, s.xlayerLegacyRPCService),
 		}
 		apis = append(apis, filterApi)
 	}
@@ -661,8 +661,8 @@ func (s *Ethereum) Stop() error {
 	if s.historicalRPCService != nil {
 		s.historicalRPCService.Close()
 	}
-	if s.migrationRPCService != nil {
-		s.migrationRPCService.Close()
+	if s.xlayerLegacyRPCService != nil {
+		s.xlayerLegacyRPCService.Close()
 	}
 	if s.interopRPC != nil {
 		s.interopRPC.Close()
