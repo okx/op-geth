@@ -198,6 +198,7 @@ type Config struct {
 
 	InteropMessageRPC       string `toml:",omitempty"`
 	InteropMempoolFiltering bool   `toml:",omitempty"`
+
 	// For X Layer
 	XLayer XLayerConfig `toml:",omitempty"`
 }

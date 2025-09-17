@@ -1018,6 +1018,7 @@ var (
 		Category: flags.RollupCategory,
 		Value:    5000,
 	}
+
 	// Metrics flags
 	MetricsEnabledFlag = &cli.BoolFlag{
 		Name:     "metrics",
