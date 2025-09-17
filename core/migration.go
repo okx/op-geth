@@ -19,7 +19,6 @@ package core
 import (
 	"context"
 	"fmt"
-	"github.com/bytedance/gopkg/util/logger"
 	"math/big"
 	"os"
 	"runtime"
@@ -28,6 +27,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/bytedance/gopkg/util/logger"
 
 	"github.com/bytedance/sonic"
 	"github.com/ethereum/go-ethereum/common"
@@ -765,6 +766,7 @@ func verifySMT(chainDataPath string, smtDataPath string, dbAlloc *types.GenesisA
 	log.Info("verifySMT called", "chainDataPath", chainDataPath, "smtDataPath", smtDataPath, "accounts", len(*dbAlloc))
 	smtBatchRootHashOrigin, err := getSmtBatchRootHashOrigin(chainDataPath, smtDataPath)
 	if err != nil {
+		log.Error("getSmtBatchRootHashOrigin failed", "error", err)
 		return err
 	}
 	log.Info("getSmtBatchRootHashOrigin", "smtBatchRootHashOrigin", fmt.Sprintf("0x%s", smtBatchRootHashOrigin.Text(16)))
@@ -772,6 +774,7 @@ func verifySMT(chainDataPath string, smtDataPath string, dbAlloc *types.GenesisA
 	// Use dbAlloc directly for SMT verification
 	smtBatchRootHashRebuild, err := calcSmtRoot(*dbAlloc)
 	if err != nil {
+		log.Error("calcSmtRoot failed", "error", err)
 		return err
 	}
 	log.Info("verifySMT", "smtBatchRootHashOrigin", fmt.Sprintf("0x%s", smtBatchRootHashOrigin.Text(16)), "smtBatchRootHashRebuild", fmt.Sprintf("0x%s", smtBatchRootHashRebuild.Text(16)))

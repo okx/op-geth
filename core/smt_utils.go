@@ -345,7 +345,9 @@ func ScalarToArrayUint64(scalar *big.Int) [8]uint64 {
 		return result
 	}
 
-	tmp := scalar
+	// crate a new big.Int
+	tmp := new(big.Int).Set(scalar)
+
 	for i := 0; i < 8; i++ {
 		result[i] = tmp.Uint64() & 0xFFFFFFFF
 		tmp.Rsh(tmp, 32)
