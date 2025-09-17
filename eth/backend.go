@@ -114,8 +114,8 @@ type Ethereum struct {
 	seqRPCService        *rpc.Client
 	historicalRPCService *rpc.Client
 
-	interopRPC      *interop.InteropClient
-	migrationConfig *MigrationConfig // Migration configuration for routing to xlayer-erigon
+	interopRPC          *interop.InteropClient
+	migrationRPCService *MigrationRPCService // Migration configuration for routing to xlayer-erigon
 
 	nodeCloser func() error
 }
@@ -380,13 +380,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	// Set up migration configuration if configured
 	if config.XLayer.RpcMigration.MigrationBlock != nil && config.XLayer.RpcMigration.PPRPCUrl != "" {
-		migrationConfig, err := NewMigrationConfig(config)
+		migrationConfig, err := NewMigrationRPCService(config)
 		if err != nil {
 			log.Error("Failed to create migration configuration", "error", err)
 			return nil, err
 		}
 		if migrationConfig != nil {
-			eth.migrationConfig = migrationConfig
+			eth.migrationRPCService = migrationConfig
 			log.Info("Migration routing enabled",
 				"migrationBlock", *config.XLayer.RpcMigration.MigrationBlock,
 				"ppUrl", config.XLayer.RpcMigration.PPRPCUrl)
@@ -458,8 +458,8 @@ func (s *Ethereum) APIs() []rpc.API {
 	apis = append(apis, s.engine.APIs(s.BlockChain())...)
 
 	// Wrap APIs with migration routing if configured
-	if s.migrationConfig != nil {
-		apis = WrapAPIsForMigration(apis, s.migrationConfig)
+	if s.migrationRPCService != nil {
+		apis = WrapAPIsForMigration(apis, s.migrationRPCService)
 		// Register filter here
 		filterSystem := filters.NewFilterSystem(s.APIBackend, filters.Config{
 			LogCacheSize: s.config.FilterLogCacheSize,
@@ -467,7 +467,7 @@ func (s *Ethereum) APIs() []rpc.API {
 		originalFilterApi := filters.NewFilterAPI(filterSystem)
 		filterApi := rpc.API{
 			Namespace: "eth",
-			Service:   NewMigrationFilterAPI(originalFilterApi, s.migrationConfig),
+			Service:   NewMigrationFilterAPI(originalFilterApi, s.migrationRPCService),
 		}
 		apis = append(apis, filterApi)
 	}
@@ -661,8 +661,8 @@ func (s *Ethereum) Stop() error {
 	if s.historicalRPCService != nil {
 		s.historicalRPCService.Close()
 	}
-	if s.migrationConfig != nil {
-		s.migrationConfig.Close()
+	if s.migrationRPCService != nil {
+		s.migrationRPCService.Close()
 	}
 	if s.interopRPC != nil {
 		s.interopRPC.Close()

@@ -230,18 +230,18 @@ func createTestBlockchain(t *testing.T) (*core.BlockChain, *types.Block, *types.
 	return chain, blocks[0], blocks[len(blocks)-1]
 }
 
-// Test NewMigrationConfig
+// Test NewMigrationRPCService
 func TestNewMigrationConfig(t *testing.T) {
 	t.Parallel()
 
 	// Test case 1: No migration configured
 	config1 := &ethconfig.Config{}
-	mc1, err := NewMigrationConfig(config1)
+	mc1, err := NewMigrationRPCService(config1)
 	if err != nil {
 		t.Errorf("Unexpected error for empty config: %v", err)
 	}
 	if mc1 != nil {
-		t.Error("Expected nil MigrationConfig when not configured")
+		t.Error("Expected nil MigrationRPCService when not configured")
 	}
 
 	// Test case 2: Migration configured with valid URL
@@ -255,12 +255,12 @@ func TestNewMigrationConfig(t *testing.T) {
 		PPRPCTimeout:   5 * time.Second,
 	}}}
 
-	mc2, err := NewMigrationConfig(config2)
+	mc2, err := NewMigrationRPCService(config2)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 	if mc2 == nil {
-		t.Fatal("Expected non-nil MigrationConfig")
+		t.Fatal("Expected non-nil MigrationRPCService")
 	}
 	if mc2.MigrationBlock != migrationBlock {
 		t.Errorf("MigrationBlock mismatch: got %d, want %d", mc2.MigrationBlock, migrationBlock)
@@ -279,12 +279,12 @@ func TestNewMigrationConfig(t *testing.T) {
 			PPRPCTimeout:   1 * time.Second,
 		}}}
 
-	mc3, err := NewMigrationConfig(config3)
+	mc3, err := NewMigrationRPCService(config3)
 	if err == nil {
 		t.Error("Expected error for invalid URL")
 	}
 	if mc3 != nil {
-		t.Error("Expected nil MigrationConfig on error")
+		t.Error("Expected nil MigrationRPCService on error")
 	}
 }
 
@@ -311,7 +311,7 @@ func TestMigrationBlockChainAPI_GetBlockByNumber(t *testing.T) {
 	// Create migration config
 	client, _ := rpc.Dial(server.URL)
 	migrationBlock := uint64(100)
-	config := &MigrationConfig{
+	config := &MigrationRPCService{
 		MigrationBlock: migrationBlock,
 		ErigonClient:   client,
 	}
@@ -363,7 +363,7 @@ func TestMigrationBlockChainAPI_GetBlockByHash(t *testing.T) {
 
 	// Create migration config
 	client, _ := rpc.Dial(server.URL)
-	config := &MigrationConfig{
+	config := &MigrationRPCService{
 		MigrationBlock: 100,
 		ErigonClient:   client,
 	}
@@ -408,7 +408,7 @@ func TestMigrationBlockChainAPI_GetStorageAt(t *testing.T) {
 
 	// Create migration config
 	client, _ := rpc.Dial(server.URL)
-	config := &MigrationConfig{
+	config := &MigrationRPCService{
 		MigrationBlock: 100,
 		ErigonClient:   client,
 	}
@@ -448,7 +448,7 @@ func TestMigrationTransactionAPI(t *testing.T) {
 
 	// Create migration config
 	client, _ := rpc.Dial(server.URL)
-	config := &MigrationConfig{
+	config := &MigrationRPCService{
 		MigrationBlock: 100,
 		ErigonClient:   client,
 	}
@@ -496,7 +496,7 @@ func TestMigrationConfig_Close(t *testing.T) {
 	t.Parallel()
 
 	// Test closing nil config
-	var nilConfig *MigrationConfig
+	var nilConfig *MigrationRPCService
 	nilConfig.Close() // Should not panic
 
 	// Test closing config with client
@@ -504,7 +504,7 @@ func TestMigrationConfig_Close(t *testing.T) {
 	defer server.Close()
 
 	client, _ := rpc.Dial(server.URL)
-	config := &MigrationConfig{
+	config := &MigrationRPCService{
 		MigrationBlock: 100,
 		ErigonClient:   client,
 	}

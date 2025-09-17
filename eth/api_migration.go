@@ -31,14 +31,14 @@ var (
 	errInvalidBlockRange = errors.New("invalid block range params")
 )
 
-// MigrationConfig holds the configuration for RPC migration
-type MigrationConfig struct {
+// MigrationRPCService holds the configuration for RPC migration
+type MigrationRPCService struct {
 	MigrationBlock uint64
 	ErigonClient   *rpc.Client
 }
 
-// NewMigrationConfig creates a new migration configuration
-func NewMigrationConfig(config *ethconfig.Config) (*MigrationConfig, error) {
+// NewMigrationRPCService creates a new migration configuration
+func NewMigrationRPCService(config *ethconfig.Config) (*MigrationRPCService, error) {
 	if config.XLayer.RpcMigration.MigrationBlock == nil || config.XLayer.RpcMigration.PPRPCUrl == "" {
 		return nil, nil // Migration not configured
 	}
@@ -56,30 +56,30 @@ func NewMigrationConfig(config *ethconfig.Config) (*MigrationConfig, error) {
 		return nil, fmt.Errorf("failed to connect to erigon RPC: %w", err)
 	}
 
-	return &MigrationConfig{
+	return &MigrationRPCService{
 		MigrationBlock: *config.XLayer.RpcMigration.MigrationBlock,
 		ErigonClient:   erigonClient,
 	}, nil
 }
 
 // Close closes the erigon RPC client
-func (mc *MigrationConfig) Close() {
+func (mc *MigrationRPCService) Close() {
 	mc.ErigonClient.Close()
 }
 
 // shouldProxy determines if a request should be proxied based on block number
-func (mc *MigrationConfig) shouldProxy(blockNumber uint64) bool {
+func (mc *MigrationRPCService) shouldProxy(blockNumber uint64) bool {
 	return mc.MigrationBlock > 0 && blockNumber < mc.MigrationBlock
 }
 
 // MigrationBlockChainAPI wraps the standard BlockChainAPI to add migration routing
 type MigrationBlockChainAPI struct {
 	*ethapi.BlockChainAPI
-	config *MigrationConfig
+	config *MigrationRPCService
 }
 
 // NewMigrationBlockChainAPI creates a new migration-aware BlockChainAPI
-func NewMigrationBlockChainAPI(original *ethapi.BlockChainAPI, config *MigrationConfig) *MigrationBlockChainAPI {
+func NewMigrationBlockChainAPI(original *ethapi.BlockChainAPI, config *MigrationRPCService) *MigrationBlockChainAPI {
 	return &MigrationBlockChainAPI{
 		BlockChainAPI: original,
 		config:        config,
@@ -312,11 +312,11 @@ func (api *MigrationBlockChainAPI) GetCode(ctx context.Context, address common.A
 // MigrationTransactionAPI wraps the standard TransactionAPI to add migration routing
 type MigrationTransactionAPI struct {
 	*ethapi.TransactionAPI
-	config *MigrationConfig
+	config *MigrationRPCService
 }
 
 // NewMigrationTransactionAPI creates a new migration-aware TransactionAPI
-func NewMigrationTransactionAPI(original *ethapi.TransactionAPI, config *MigrationConfig) *MigrationTransactionAPI {
+func NewMigrationTransactionAPI(original *ethapi.TransactionAPI, config *MigrationRPCService) *MigrationTransactionAPI {
 	return &MigrationTransactionAPI{
 		TransactionAPI: original,
 		config:         config,
@@ -501,14 +501,14 @@ func (api *MigrationTransactionAPI) GetTransactionCount(ctx context.Context, add
 
 type MigrationFilterAPI struct {
 	*filters.FilterAPI
-	config *MigrationConfig
+	config *MigrationRPCService
 	// Track which filters are managed by erigon
 	erigonFilters map[rpc.ID]bool
 	filtersMu     sync.Mutex
 }
 
 // NewMigrationFilterAPI creates a new migration-aware FilterAPI
-func NewMigrationFilterAPI(original *filters.FilterAPI, config *MigrationConfig) *MigrationFilterAPI {
+func NewMigrationFilterAPI(original *filters.FilterAPI, config *MigrationRPCService) *MigrationFilterAPI {
 	return &MigrationFilterAPI{
 		FilterAPI:     original,
 		config:        config,
@@ -703,7 +703,7 @@ func (api *MigrationFilterAPI) GetLogs(ctx context.Context, crit filters.FilterC
 }
 
 // WrapAPIsForMigration wraps the standard APIs with migration-aware versions
-func WrapAPIsForMigration(apis []rpc.API, config *MigrationConfig) []rpc.API {
+func WrapAPIsForMigration(apis []rpc.API, config *MigrationRPCService) []rpc.API {
 	if config == nil {
 		return apis // No migration configured, return original APIs
 	}

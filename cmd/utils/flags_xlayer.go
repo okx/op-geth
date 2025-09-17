@@ -59,7 +59,7 @@ var (
 	InnerTxFlag = &cli.BoolFlag{
 		Name:     "innertx",
 		Usage:    "Enable inner transaction capture and storage (disabled by default)",
-    Value:    false,
+		Value:    false,
 		Category: flags.XLayerCategory,
 	}
 	// Migration flags for XLayer routing
@@ -163,14 +163,14 @@ func RegisterMigrationFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg
 	filterSystem := filters.NewFilterSystem(backend, filters.Config{
 		LogCacheSize: ethcfg.FilterLogCacheSize,
 	})
-	migrationCfg, err := eth.NewMigrationConfig(ethcfg)
+	migrationRpcService, err := eth.NewMigrationRPCService(ethcfg)
 	if err != nil {
 		panic(err)
 	}
 	originalFilterApi := filters.NewFilterAPI(filterSystem)
 	migrationFilterApi := rpc.API{
 		Namespace: "eth",
-		Service:   eth.NewMigrationFilterAPI(originalFilterApi, migrationCfg),
+		Service:   eth.NewMigrationFilterAPI(originalFilterApi, migrationRpcService),
 	}
 	stack.RegisterAPIs([]rpc.API{migrationFilterApi})
 	return filterSystem
