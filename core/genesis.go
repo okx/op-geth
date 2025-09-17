@@ -916,6 +916,13 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 	rawdb.WriteHeadHeaderHash(batch, block.Hash())
 	rawdb.WriteChainConfig(batch, block.Hash(), config)
 
+	// TODO remove after testing
+	if block.NumberU64() != 0 {
+		// Also write the genesis block as number 0
+		rawdb.WriteCanonicalHash(batch, block.Hash(), 0)
+		rawdb.WriteGenesisHeader(batch, block.Header())
+	}
+
 	err = batch.Write()
 	log.Info("batch write", "elapsed", time.Since(start))
 
