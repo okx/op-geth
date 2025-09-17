@@ -24,8 +24,9 @@ import (
 // 1. Local first
 // 2. If not found, and erigon configured, forward request
 // FORWARD
-// 1. If block number is earlier than configured, forward request
-// 2. Otherwise, use local
+// 1. number, greater than migration block, use local, do not fallback
+// 2. number, less or equal than migration block, use proxy, do not fallback
+// 3. other cases, use local, fallback to proxy
 
 var (
 	errInvalidBlockRange = errors.New("invalid block range params")
@@ -94,6 +95,8 @@ func (api *MigrationBlockChainAPI) Call(ctx context.Context, args ethapi.Transac
 			var result hexutil.Bytes
 			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_call", args, blockNrOrHash, overrides)
 			return result, err
+		} else {
+			return api.BlockChainAPI.Call(ctx, args, blockNrOrHash, overrides, blockOverrides)
 		}
 	}
 
@@ -115,6 +118,8 @@ func (api *MigrationBlockChainAPI) EstimateGas(ctx context.Context, args ethapi.
 			var result hexutil.Uint64
 			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_estimateGas", args, blockNrOrHash, overrides)
 			return result, err
+		} else {
+			return api.BlockChainAPI.EstimateGas(ctx, args, blockNrOrHash, overrides, blockOverrides)
 		}
 	}
 
@@ -142,6 +147,9 @@ func (api *MigrationBlockChainAPI) CreateAccessList(ctx context.Context, args et
 			var result *accessListResult
 			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_createAccessList", args, blockNrOrHash, stateOverrides)
 			return result, err
+		} else {
+			accessList, err := api.BlockChainAPI.CreateAccessList(ctx, args, blockNrOrHash, stateOverrides)
+			return (*accessListResult)(accessList), err
 		}
 	}
 
@@ -164,7 +172,6 @@ func (api *MigrationBlockChainAPI) GetBlockByNumber(ctx context.Context, number 
 		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getBlockByNumber", hexutil.Uint64(number), fullTx)
 		return result, err
 	}
-
 	// Handle locally
 	return api.BlockChainAPI.GetBlockByNumber(ctx, number, fullTx)
 }
@@ -197,6 +204,8 @@ func (api *MigrationBlockChainAPI) GetStorageAt(ctx context.Context, address com
 			var result hexutil.Bytes
 			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getStorageAt", address, hexKey, blockNrOrHash)
 			return result, err
+		} else {
+			return api.BlockChainAPI.GetStorageAt(ctx, address, hexKey, blockNrOrHash)
 		}
 	}
 
@@ -249,6 +258,8 @@ func (api *MigrationBlockChainAPI) GetBlockReceipts(ctx context.Context, blockNr
 			var result []map[string]interface{}
 			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getBlockReceipts", blockNrOrHash)
 			return result, err
+		} else {
+			return api.BlockChainAPI.GetBlockReceipts(ctx, blockNrOrHash)
 		}
 	}
 
@@ -273,6 +284,8 @@ func (api *MigrationBlockChainAPI) GetBalance(ctx context.Context, address commo
 			var result *hexutil.Big
 			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getBalance", address, blockNrOrHash)
 			return result, err
+		} else {
+			return api.BlockChainAPI.GetBalance(ctx, address, blockNrOrHash)
 		}
 	}
 
@@ -296,6 +309,8 @@ func (api *MigrationBlockChainAPI) GetCode(ctx context.Context, address common.A
 			var result hexutil.Bytes
 			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getCode", address, blockNrOrHash)
 			return result, err
+		} else {
+			return api.BlockChainAPI.GetCode(ctx, address, blockNrOrHash)
 		}
 	}
 
@@ -373,7 +388,6 @@ func (api *MigrationTransactionAPI) GetBlockTransactionCountByNumber(ctx context
 		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getBlockTransactionCountByNumber", hexutil.Uint64(blockNr))
 		return result, err
 	}
-
 	// Handle locally
 	return api.TransactionAPI.GetBlockTransactionCountByNumber(ctx, blockNr)
 }
@@ -386,7 +400,6 @@ func (api *MigrationTransactionAPI) GetBlockInternalTransactions(ctx context.Con
 		err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getBlockInternalTransactions", hexutil.Uint64(blockNr))
 		return result, err
 	}
-
 	// Handle locally
 	return api.TransactionAPI.GetBlockInternalTransactions(ctx, blockNr)
 }
@@ -398,7 +411,6 @@ func (api *MigrationTransactionAPI) GetInternalTransactions(ctx context.Context,
 	if err == nil && result != nil {
 		return result, nil
 	}
-
 	// If not found locally and migration is configured, try erigon
 	var remoteResult []*types.InnerTx
 	err = api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getInternalTransactions", txHash)
@@ -412,7 +424,6 @@ func (api *MigrationTransactionAPI) GetRawTransactionByBlockHashAndIndex(ctx con
 	if result != nil {
 		return result
 	}
-
 	// If not found locally and migration is configured, try erigon
 	var remoteResult hexutil.Bytes
 	err := api.config.ErigonClient.CallContext(ctx, &remoteResult, "eth_getRawTransactionByBlockHashAndIndex", blockHash, index)
@@ -486,6 +497,8 @@ func (api *MigrationTransactionAPI) GetTransactionCount(ctx context.Context, add
 			var result *hexutil.Uint64
 			err := api.config.ErigonClient.CallContext(ctx, &result, "eth_getTransactionCount", address, blockNrOrHash)
 			return result, err
+		} else {
+			return api.TransactionAPI.GetTransactionCount(ctx, address, blockNrOrHash)
 		}
 	}
 
