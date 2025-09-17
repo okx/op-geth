@@ -28,16 +28,18 @@ func TestTransactionPreExec_SimpleEthTransfer(t *testing.T) {
 }
 
 // EIP 1559 transaction test
-func TestTransactionPreExec_EIP1559Rejection(t *testing.T) {
+func TestTransactionPreExec_EIP1559(t *testing.T) {
 	client, ctx := SetupRPCClient(t)
 
-	// Define test cases for EIP-1559 rejection
 	testCases := []struct {
 		name     string
 		txFields map[string]interface{}
 	}{
-		{"maxFeePerGas_set", map[string]interface{}{"maxFeePerGas": "0x4a817c800"}},
-		{"maxPriorityFeePerGas_set", map[string]interface{}{"maxPriorityFeePerGas": "0x4a817c800"}},
+		{"maxFeePerGas_only", map[string]interface{}{"maxFeePerGas": "0x4a817c800"}},
+		{"maxFeePerGas_with_maxPriorityFeePerGas", map[string]interface{}{
+			"maxFeePerGas":         "0x4a817c800",
+			"maxPriorityFeePerGas": "0x3b9aca00",
+		}},
 	}
 
 	stateOverrides := CreateDefaultStateOverrides()
@@ -54,15 +56,19 @@ func TestTransactionPreExec_EIP1559Rejection(t *testing.T) {
 				transactionArgs[key] = value
 			}
 
+			// Remove gasPrice field for EIP-1559 transactions
+			delete(transactionArgs, "gasPrice")
+
 			result := ExecutePreExec(t, client, ctx, []map[string]interface{}{transactionArgs}, stateOverrides)
 			resultMap := ValidateResult(t, result[0], tc.name)
-			CheckErrorResult(t, resultMap, "EIP-1559", tc.name)
+			CheckSuccessfulResult(t, resultMap, "Support EIP-1559 transactions")
+
 		})
 	}
 }
 
 // EIP-7702 transaction test
-func TestTransactionPreExec_EIP7702Rejection(t *testing.T) {
+func TestTransactionPreExec_EIP7702(t *testing.T) {
 	client, ctx := SetupRPCClient(t)
 
 	testCases := []struct {
@@ -82,13 +88,13 @@ func TestTransactionPreExec_EIP7702Rejection(t *testing.T) {
 			transactionArgs := CreateBasicTransaction(
 				"0x0165878a594ca255338adfa4d48449f69242eb8f",
 				"0x1111111111111111111111111111111111111111",
-				"0x0", "0x5208", "0x4a817c800", "0x0", "")
+				"0x0", "0x15f90", "0x4a817c800", "0x0", "")
 			transactionArgs["authorizationList"] = CreateAuthorizationList(tc.addresses)
 
 			// Execute and validate
 			result := ExecutePreExec(t, client, ctx, []map[string]interface{}{transactionArgs}, stateOverrides)
 			resultMap := ValidateResult(t, result[0], tc.name)
-			CheckErrorResult(t, resultMap, "EIP-7702", tc.name)
+			CheckSuccessfulResult(t, resultMap, "Support EIP-7702 transactions")
 		})
 	}
 }

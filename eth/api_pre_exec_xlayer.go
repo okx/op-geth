@@ -687,16 +687,6 @@ func preArgsCheck(state *coreState.StateDB, arg PreArgs) error {
 		return fmt.Errorf("%s, nonce is nil", arg.From.Hex())
 	}
 
-	// Check for EIP-1559 transaction fields - not supported
-	if arg.MaxFeePerGas != nil || arg.MaxPriorityFeePerGas != nil {
-		return fmt.Errorf("EIP-1559 transactions are not supported: maxFeePerGas and maxPriorityFeePerGas should not be set")
-	}
-
-	// Check for EIP-7702 transaction fields - not supported
-	if len(arg.AuthorizationList) > 0 {
-		return fmt.Errorf("EIP-7702 transactions are not supported: authorizationList should not be set")
-	}
-
 	msgFrom := *arg.From
 	msgNonce := uint64(*arg.Nonce)
 	stNonce := state.GetNonce(msgFrom)
