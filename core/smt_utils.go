@@ -380,19 +380,19 @@ func ArrayToScalar(array []uint64) *big.Int {
 }
 
 func ScalarToArray(scalar *big.Int) []uint64 {
-	scalar = new(big.Int).Set(scalar)
+	scalarCopy := new(big.Int).Set(scalar)
 	mask := new(big.Int)
 	mask.SetString("FFFFFFFFFFFFFFFF", 16)
 
-	r0 := new(big.Int).And(scalar, mask)
+	r0 := new(big.Int).And(scalarCopy, mask)
 
-	r1 := new(big.Int).Rsh(scalar, 64)
+	r1 := new(big.Int).Rsh(scalarCopy, 64)
 	r1 = new(big.Int).And(r1, mask)
 
-	r2 := new(big.Int).Rsh(scalar, 128)
+	r2 := new(big.Int).Rsh(scalarCopy, 128)
 	r2 = new(big.Int).And(r2, mask)
 
-	r3 := new(big.Int).Rsh(scalar, 192)
+	r3 := new(big.Int).Rsh(scalarCopy, 192)
 	r3 = new(big.Int).And(r3, mask)
 
 	return []uint64{r0.Uint64(), r1.Uint64(), r2.Uint64(), r3.Uint64()}
@@ -583,43 +583,43 @@ func RemoveKeyBits(k NodeKey, nBits int) NodeKey {
 }
 
 func ScalarToArrayBig12(scalar *big.Int) []*big.Int {
-	scalar = new(big.Int).Set(scalar)
+	scalarCopy := new(big.Int).Set(scalar)
 	mask := new(big.Int)
 	mask.SetString("FFFFFFFF", 16)
 
-	r0 := new(big.Int).And(scalar, mask)
+	r0 := new(big.Int).And(scalarCopy, mask)
 
-	r1 := new(big.Int).Rsh(scalar, 32)
+	r1 := new(big.Int).Rsh(scalarCopy, 32)
 	r1 = new(big.Int).And(r1, mask)
 
-	r2 := new(big.Int).Rsh(scalar, 64)
+	r2 := new(big.Int).Rsh(scalarCopy, 64)
 	r2 = new(big.Int).And(r2, mask)
 
-	r3 := new(big.Int).Rsh(scalar, 96)
+	r3 := new(big.Int).Rsh(scalarCopy, 96)
 	r3 = new(big.Int).And(r3, mask)
 
-	r4 := new(big.Int).Rsh(scalar, 128)
+	r4 := new(big.Int).Rsh(scalarCopy, 128)
 	r4 = new(big.Int).And(r4, mask)
 
-	r5 := new(big.Int).Rsh(scalar, 160)
+	r5 := new(big.Int).Rsh(scalarCopy, 160)
 	r5 = new(big.Int).And(r5, mask)
 
-	r6 := new(big.Int).Rsh(scalar, 192)
+	r6 := new(big.Int).Rsh(scalarCopy, 192)
 	r6 = new(big.Int).And(r6, mask)
 
-	r7 := new(big.Int).Rsh(scalar, 224)
+	r7 := new(big.Int).Rsh(scalarCopy, 224)
 	r7 = new(big.Int).And(r7, mask)
 
-	r8 := new(big.Int).Rsh(scalar, 256)
+	r8 := new(big.Int).Rsh(scalarCopy, 256)
 	r8 = new(big.Int).And(r8, mask)
 
-	r9 := new(big.Int).Rsh(scalar, 288)
+	r9 := new(big.Int).Rsh(scalarCopy, 288)
 	r9 = new(big.Int).And(r9, mask)
 
-	r10 := new(big.Int).Rsh(scalar, 320)
+	r10 := new(big.Int).Rsh(scalarCopy, 320)
 	r10 = new(big.Int).And(r10, mask)
 
-	r11 := new(big.Int).Rsh(scalar, 352)
+	r11 := new(big.Int).Rsh(scalarCopy, 352)
 	r11 = new(big.Int).And(r11, mask)
 
 	return []*big.Int{r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11}
@@ -628,27 +628,28 @@ func ScalarToArrayBig12(scalar *big.Int) []*big.Int {
 var mask = big.NewInt(4294967295)
 
 func ScalarToArrayBig(scalar *big.Int) []*big.Int {
-	r0 := new(big.Int).And(scalar, mask)
+	scalarCopy := new(big.Int).Set(scalar)
+	r0 := new(big.Int).And(scalarCopy, mask)
 
-	r1 := new(big.Int).Rsh(scalar, 32)
+	r1 := new(big.Int).Rsh(scalarCopy, 32)
 	r1.And(r1, mask)
 
-	r2 := new(big.Int).Rsh(scalar, 64)
+	r2 := new(big.Int).Rsh(scalarCopy, 64)
 	r2.And(r2, mask)
 
-	r3 := new(big.Int).Rsh(scalar, 96)
+	r3 := new(big.Int).Rsh(scalarCopy, 96)
 	r3.And(r3, mask)
 
-	r4 := new(big.Int).Rsh(scalar, 128)
+	r4 := new(big.Int).Rsh(scalarCopy, 128)
 	r4.And(r4, mask)
 
-	r5 := new(big.Int).Rsh(scalar, 160)
+	r5 := new(big.Int).Rsh(scalarCopy, 160)
 	r5.And(r5, mask)
 
-	r6 := new(big.Int).Rsh(scalar, 192)
+	r6 := new(big.Int).Rsh(scalarCopy, 192)
 	r6.And(r6, mask)
 
-	r7 := new(big.Int).Rsh(scalar, 224)
+	r7 := new(big.Int).Rsh(scalarCopy, 224)
 	r7.And(r7, mask)
 
 	return []*big.Int{r0, r1, r2, r3, r4, r5, r6, r7}
@@ -682,12 +683,14 @@ func JoinKey(usedBits []int, remainingKey NodeKey) *NodeKey {
 	return &NodeKey{auxk[0], auxk[1], auxk[2], auxk[3]}
 }
 
-func RemoveOver(m map[int]*NodeValue12, level int) {
-	for k := range m {
-		if k >= level {
-			delete(m, k)
+func RemoveOver(m map[int]*NodeValue12, level int) map[int]*NodeValue12 {
+	result := make(map[int]*NodeValue12)
+	for k, v := range m {
+		if k < level {
+			result[k] = v
 		}
 	}
+	return result
 }
 
 func StringToH4(s string) ([4]uint64, error) {
