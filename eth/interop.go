@@ -39,7 +39,7 @@ func (s *Ethereum) CurrentInteropBlockTime() (uint64, error) {
 		return 0, errors.New("chain is not an Optimism chain")
 	}
 	if chainConfig.InteropTime == nil {
-		return 0, errors.New("interop time not set in chain legacyRpc")
+		return 0, errors.New("interop time not set in chain config")
 	}
 	// The pending block may be aliased to the current block in op-geth. Infer the pending time instead.
 	currentHeader := s.BlockChain().CurrentHeader()

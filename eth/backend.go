@@ -238,7 +238,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 		vmConfig.Tracer = t
 	}
-	// Override the chain legacyRpc with provided settings.
+	// Override the chain config with provided settings.
 	var overrides core.ChainOverrides
 	if config.OverridePrague != nil {
 		overrides.OverridePrague = config.OverridePrague
@@ -277,7 +277,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	if chainConfig := eth.blockchain.Config(); chainConfig.Optimism != nil { // legacyRpc.Genesis.Config.ChainID cannot be used because it's based on CLI flags only, thus default to mainnet L1
+	if chainConfig := eth.blockchain.Config(); chainConfig.Optimism != nil { // config.Genesis.Config.ChainID cannot be used because it's based on CLI flags only, thus default to mainnet L1
 		config.NetworkId = chainConfig.ChainID.Uint64() // optimism defaults eth network ID to chain ID
 		eth.networkID = config.NetworkId
 	}
