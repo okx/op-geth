@@ -182,13 +182,13 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 		destAccount.Nonce = xlayerErigonAcct.Nonce
 		// The address 0x4200000000000000000000000000000000000006 has only a small amount of OKB, 0.000011 on 11th Sep.
 		// For compatibility and security reasons, we will zero out the balance of this address.
-		logger.Warn("clear balance for 0x4200000000000000000000000000000000000006", "balance", xlayerErigonAcct.Balance)
+		logger.Warn("mergeAlloc: clear balance for 0x4200000000000000000000000000000000000006", "balance", xlayerErigonAcct.Balance)
 		if len(xlayerErigonAcct.Code) != 0 {
-			logger.Error("black hole has code", "code length", len(xlayerErigonAcct.Code))
+			logger.Error("mergeAlloc: black hole has code", "code length", len(xlayerErigonAcct.Code))
 		}
 		destAccount.Code = opGenesisAcct.Code
 		if len(xlayerErigonAcct.Storage) != 0 {
-			logger.Error("black hole has storage", "storage length", len(xlayerErigonAcct.Storage))
+			logger.Error("mergeAlloc: black hole has storage", "storage length", len(xlayerErigonAcct.Storage))
 		}
 		// `create2Deployer` on both xlayer and op stack
 		// op uses a version of code that does not have an owner, so we use nonce and balance from xlayer, but the code from op
@@ -197,10 +197,10 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 		destAccount.Balance = xlayerErigonAcct.Balance
 		destAccount.Code = opGenesisAcct.Code
 		if len(xlayerErigonAcct.Code) == 0 {
-			logger.Error("create2Deployer has no code")
+			logger.Error("mergeAlloc: create2Deployer has no code")
 		}
 		if len(xlayerErigonAcct.Storage) != 0 {
-			logger.Error("create2Deployer has storage", "storage length", len(xlayerErigonAcct.Storage))
+			logger.Error("mergeAlloc: create2Deployer has storage", "storage length", len(xlayerErigonAcct.Storage))
 		}
 		// Permit2 use code and storage from xlayer
 	case common.HexToAddress("000000000022d473030f116ddee9f6b43ac78ba3"):
@@ -209,10 +209,10 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 		destAccount.Code = xlayerErigonAcct.Code
 		destAccount.Storage = xlayerErigonAcct.Storage
 		if len(xlayerErigonAcct.Code) == 0 {
-			logger.Error("permit2 has no code")
+			logger.Error("mergeAlloc: permit2 has no code")
 		}
 		if len(xlayerErigonAcct.Storage) != 0 {
-			logger.Error("permit2 has storage", "storage length", len(xlayerErigonAcct.Storage))
+			logger.Error("mergeAlloc: permit2 has storage", "storage length", len(xlayerErigonAcct.Storage))
 		}
 	default:
 		destAccount.Balance = opGenesisAcct.Balance
@@ -235,20 +235,20 @@ func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common
 			if !IsEmptyAccount(account) {
 				migrateAlloc[addr] = account
 			} else {
-				log.Warn("empty account fond", "addr", addr)
+				log.Warn("mergeAlloc: empty account found", "address", addr.Hex())
 			}
 		} else {
-			log.Info("skip migrate for", "addr", addr)
+			log.Info("mergeAlloc: skipping ignored address", "address", addr.Hex())
 		}
 	}
-	log.Info("generateMigrateAlloc remove ignored addresses", "elapsed", time.Since(start))
+	log.Info("mergeAlloc: filtered ignored addresses", "kept", len(migrateAlloc), "elapsed", time.Since(start))
 
 	start = time.Now()
 	// Merge with genesisAlloc and handle conflicts
 	for addr, genesisAccount := range *genesisAlloc {
 		var destAccount types.Account
 		if dbAccount, exists := migrateAlloc[addr]; exists {
-			log.Warn("account state conflict found", "account", addr.Hex())
+			log.Warn("mergeAlloc: account conflict detected", "address", addr.Hex())
 			destAccount = mergeConflictAccount(addr, &dbAccount, &genesisAccount)
 		} else {
 			destAccount = genesisAccount
@@ -260,18 +260,18 @@ func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common
 
 		migrateAlloc[addr] = destAccount
 	}
-	log.Info("generateMigrateAlloc merge with genesisAlloc", "elapsed", time.Since(start))
+	log.Info("mergeAlloc: merge completed", "status", "✅", "total_accounts", len(migrateAlloc), "elapsed", time.Since(start))
 
 	return migrateAlloc
 }
 
 // LoadErigonGenesisData load erigon db plainstate data
 func LoadErigonGenesisData(migrationPath string) (types.GenesisAlloc, error) {
-	// Scan migration database
-	log.Info("Scanning migration database to get dbAlloc")
+	start := time.Now()
+	log.Info("LoadDB: scanning migration database", "path", migrationPath)
 	db, err := setupDB(migrationPath)
 	if err != nil {
-		log.Error("Failed to setup mdbx database", "err", err)
+		log.Error("LoadDB: failed to setup database", "err", err)
 		return nil, err
 	}
 	defer db.Close()
@@ -279,16 +279,18 @@ func LoadErigonGenesisData(migrationPath string) (types.GenesisAlloc, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan migration database: %w", err)
 	}
+	log.Info("LoadDB: successfully loaded erigon genesis data", "status", "✅", "accounts", len(dbAlloc), "elapsed", time.Since(start))
 	return dbAlloc, nil
 }
 
 func setupDB(migrationPath string) (kv.RwDB, error) {
-	log.Info("Setup Erigon DB", "path", migrationPath)
+	log.Info("LoadDB: setting up database", "path", migrationPath)
 	opts := mdbx.NewMDBX(erigonlog.New()).Path(migrationPath)
 	db, err := opts.Open(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to open migration database: %w", err)
 	}
+	log.Info("LoadDB: database opened successfully")
 	return db, nil
 }
 
@@ -306,7 +308,7 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 				// Decode account data
 				genesisAccount, err := decodeAccountData(v)
 				if err != nil {
-					log.Warn("Failed to decode account", "address", addr.Hex(), "error", err)
+					log.Warn("LoadDB: failed to decode account", "address", addr.Hex(), "error", err)
 					return nil
 				}
 
@@ -354,7 +356,7 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 		return nil, fmt.Errorf("failed to scan migration database: %w", err)
 	}
 
-	log.Info("ScanDB completed", "total_accounts", len(dbAlloc), "elapsed", time.Since(start))
+	log.Info("LoadDB: database scan completed", "accounts", len(dbAlloc), "elapsed", time.Since(start))
 
 	return dbAlloc, nil
 }
@@ -556,7 +558,7 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 	}
 
 	numWorkers := runtime.NumCPU()
-	log.Info("calcSmtRoot total addrs:", "total_addrs", len(addrs), "num_workers", numWorkers)
+	log.Info("verifySMT: starting calculation", "addresses", len(addrs), "workers", numWorkers)
 	chunkSize := (len(addrs) + numWorkers - 1) / numWorkers
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -698,7 +700,7 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 	}
 
 	wg.Wait()
-	log.Info("prepare finish", "elapsed", time.Since(start1))
+	log.Info("verifySMT: data preparation completed", "nodes", len(nodeKvs), "elapsed", time.Since(start1))
 
 	start11 := time.Now()
 	slices.SortFunc(nodeKvs, func(a, b *NodeKV) int {
@@ -713,11 +715,11 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 		}
 		return 0
 	})
-	log.Info("sorting nodes finish", "elapsed", time.Since(start11))
+	log.Info("verifySMT: node sorting completed", "elapsed", time.Since(start11))
 
 	start2 := time.Now()
 	calculateLevels(nodeKvs, 0)
-	log.Info("calculate level finish", "elapsed", time.Since(start2))
+	log.Info("verifySMT: level calculation completed", "elapsed", time.Since(start2))
 
 	start3 := time.Now()
 	// 2. Calculate leaf node hashes concurrently
@@ -752,38 +754,39 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 		}(i, end)
 	}
 	wg.Wait()
-	log.Info("calculate leaf hash finish", "elapsed", time.Since(start3))
+	log.Info("verifySMT: leaf hash calculation completed", "elapsed", time.Since(start3))
 
 	start4 := time.Now()
 	root := NodeKey(calculateRoot(nodeKvs, 0, len(nodeKvs), 0))
-	log.Info("calculate root hash finish", "elapsed", time.Since(start4))
+	log.Info("verifySMT: root hash calculation completed", "elapsed", time.Since(start4))
 
 	return root.ToBigInt(), nil
 }
 
 // verifySMT verifies the SMT (Sparse Merkle Tree) data
 func verifySMT(chainDataPath string, smtDataPath string, dbAlloc *types.GenesisAlloc) error {
-	log.Info("verifySMT called", "chainDataPath", chainDataPath, "smtDataPath", smtDataPath, "accounts", len(*dbAlloc))
+	start := time.Now()
+	log.Info("verifySMT: starting verification", "chainDataPath", chainDataPath, "smtDataPath", smtDataPath, "accounts", len(*dbAlloc))
 	smtBatchRootHashOrigin, err := getSmtBatchRootHashOrigin(chainDataPath, smtDataPath)
 	if err != nil {
-		log.Error("getSmtBatchRootHashOrigin failed", "error", err)
+		log.Error("verifySMT: failed to get origin hash", "error", err)
 		return err
 	}
-	log.Info("getSmtBatchRootHashOrigin", "smtBatchRootHashOrigin", fmt.Sprintf("0x%s", smtBatchRootHashOrigin.Text(16)))
+	log.Info("verifySMT: origin hash retrieved", "hash", fmt.Sprintf("0x%s", smtBatchRootHashOrigin.Text(16)), "elapsed", time.Since(start))
 
 	// Use dbAlloc directly for SMT verification
 	smtBatchRootHashRebuild, err := calcSmtRoot(*dbAlloc)
 	if err != nil {
-		log.Error("calcSmtRoot failed", "error", err)
+		log.Error("verifySMT: failed to calculate rebuild hash", "error", err)
 		return err
 	}
-	log.Info("verifySMT", "smtBatchRootHashOrigin", fmt.Sprintf("0x%s", smtBatchRootHashOrigin.Text(16)), "smtBatchRootHashRebuild", fmt.Sprintf("0x%s", smtBatchRootHashRebuild.Text(16)))
+	log.Info("verifySMT: rebuild hash calculated", "origin", fmt.Sprintf("0x%s", smtBatchRootHashOrigin.Text(16)), "rebuild", fmt.Sprintf("0x%s", smtBatchRootHashRebuild.Text(16)))
 
 	if smtBatchRootHashOrigin != nil {
 		if smtBatchRootHashOrigin.Text(16) == smtBatchRootHashRebuild.Text(16) {
-			log.Info("Batch check: Pass")
+			log.Info("verifySMT: verification passed", "status", "✅", "elapsed", time.Since(start))
 		} else {
-			log.Error("Batch check: Failed")
+			log.Error("verifySMT: verification failed", "status", "❌", "elapsed", time.Since(start))
 		}
 	}
 	return nil
@@ -791,18 +794,18 @@ func verifySMT(chainDataPath string, smtDataPath string, dbAlloc *types.GenesisA
 
 func dumpGenesis(genesis *Genesis, outputPath string) {
 	start := time.Now()
-	log.Info("dumpGenesis start")
+	log.Info("dumpGenesis: starting dump")
 	buf, err := sonic.MarshalIndent(genesis, "", "  ")
 	if err != nil {
-		log.Warn("Failed to marshal updated genesis", "error", err)
+		log.Warn("dumpGenesis: failed to marshal genesis", "error", err)
 	} else if outputPath != "" {
 		if err := os.WriteFile(outputPath, buf, 0666); err != nil {
-			log.Warn("Failed to write updated genesis to file", "path", outputPath, "error", err)
+			log.Warn("dumpGenesis: failed to write file", "path", outputPath, "error", err)
 		} else {
-			log.Info("Updated genesis written to file", "path", outputPath)
+			log.Info("dumpGenesis: file written successfully", "path", outputPath)
 		}
 	}
-	log.Info("dumpGenesis finish", "elapsed", time.Since(start))
+	log.Info("dumpGenesis: completed", "elapsed", time.Since(start))
 }
 
 // SetupGenesisBlockWithMigrationData sets up the genesis block with migration data
@@ -843,7 +846,7 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 	kv.InitStandaloneSMT(isStandaloneDb)
 	dbAlloc, err := LoadErigonGenesisData(migrationConfig.ChainDataPath)
 	if err != nil {
-		log.Error("Failed to load erigon genesis data", "error", err)
+		log.Error("SetupGenesis: failed to load erigon genesis data", "error", err)
 		return nil, common.Hash{}, nil, err
 	}
 
@@ -882,7 +885,11 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		start := time.Now()
 		cfg, hash, compatErr, setupErr = SetupGenesisBlockWithOverride(chaindb, triedb, genesis, overrides)
+		if smtErr == nil && setupErr == nil {
+			log.Info("SetupGenesis: migration completed successfully", "status", "✅", "elapsed", time.Since(start))
+		}
 	}()
 
 	// Wait for both goroutines to complete
