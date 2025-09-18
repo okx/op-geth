@@ -173,8 +173,8 @@ func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setMonitor(ctx, &cfg.Monitor)
 }
 
-// RegisterXlayerLegacyFilterAPI adds the eth log filtering RPC API to the node.
-func RegisterXlayerLegacyFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconfig.Config) *filters.FilterSystem {
+// RegisterXlayerHybridFilterAPI adds the eth log filtering RPC API to the node.
+func RegisterXlayerHybridFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconfig.Config) *filters.FilterSystem {
 	filterSystem := filters.NewFilterSystem(backend, filters.Config{
 		LogCacheSize: ethcfg.FilterLogCacheSize,
 	})

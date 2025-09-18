@@ -265,7 +265,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	isMigrationConfigured := cfg.Eth.XLayer.LegacyPp.MigrationBlock != nil && cfg.Eth.XLayer.LegacyPp.PPRPCUrl != ""
 	var filterSystem *filters.FilterSystem
 	if isMigrationConfigured {
-		filterSystem = utils.RegisterXlayerLegacyFilterAPI(stack, backend, &cfg.Eth)
+		filterSystem = utils.RegisterXlayerHybridFilterAPI(stack, backend, &cfg.Eth)
 	} else {
 		filterSystem = utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
 	}
