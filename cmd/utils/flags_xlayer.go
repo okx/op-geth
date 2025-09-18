@@ -104,6 +104,11 @@ var (
 		Usage: "Kafka sync enable flag",
 		Value: true,
 	}
+	RealtimeRpcFlag = &cli.BoolFlag{
+		Name:  "realtime.rpc-flag",
+		Usage: "Enable rpc flag",
+		Value: false,
+	}
 	RealtimeEnableSubscribeFlag = &cli.BoolFlag{
 		Name:  "realtime.enable-subscribe-flag",
 		Usage: "Enable subscribe flag",
@@ -165,6 +170,7 @@ var (
 		TraceLogPath,
 		EnableTraceLog,
 		RealtimeEnableFlag,
+		RealtimeRpcFlag,
 		RealtimeEnableSubscribeFlag,
 		RealtimeCacheHeightThreshold,
 		RealtimeKafkaSyncBootstrapServers,
@@ -278,6 +284,7 @@ func setRealtimeXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	cfg.XLayer = ethconfig.XLayerConfig{
 		Realtime: realtime.RealtimeConfig{
 			Enable:               ctx.Bool(RealtimeEnableFlag.Name),
+			RealtimeRpc:          ctx.Bool(RealtimeRpcFlag.Name),
 			EnableSubscribe:      ctx.Bool(RealtimeEnableSubscribeFlag.Name),
 			CacheHeightThreshold: ctx.Uint64(RealtimeCacheHeightThreshold.Name),
 			CacheDumpPath:        ctx.String(RealtimeCacheDumpPath.Name),

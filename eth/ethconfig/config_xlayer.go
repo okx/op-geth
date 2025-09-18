@@ -9,7 +9,6 @@ import (
 )
 
 var DefaultXLayerConfig = XLayerConfig{
-	IsSequencer: false,
 	OkPay: OkPayConfig{
 		PriorityEnable:        false,
 		SenderAccountsList:    []common.Address{},
@@ -26,6 +25,7 @@ var DefaultXLayerConfig = XLayerConfig{
 	},
 	Realtime: realtime.RealtimeConfig{
 		Enable:               false,
+		RealtimeRpc:          false,
 		EnableSubscribe:      false,
 		CacheHeightThreshold: 10,
 		Kafka:                kafka.KafkaConfig{},
@@ -35,11 +35,10 @@ var DefaultXLayerConfig = XLayerConfig{
 
 // XLayerConfig is the X Layer config used on the eth backend
 type XLayerConfig struct {
-	IsSequencer bool                    `toml:",omitempty"`
-	OkPay       OkPayConfig             `toml:",omitempty"`
-	LegacyPp    MigrationConfig         `toml:",omitempty"` // The erigon RPC endpoint URL for pre-migration blocks
-	Monitor     MonitorConfig           `toml:",omitempty"` // Transaction monitoring configuration
-	Realtime    realtime.RealtimeConfig `toml:",omitempty"`
+	OkPay    OkPayConfig             `toml:",omitempty"`
+	LegacyPp MigrationConfig         `toml:",omitempty"` // The erigon RPC endpoint URL for pre-migration blocks
+	Monitor  MonitorConfig           `toml:",omitempty"` // Transaction monitoring configuration
+	Realtime realtime.RealtimeConfig `toml:",omitempty"`
 }
 
 type MigrationConfig struct {

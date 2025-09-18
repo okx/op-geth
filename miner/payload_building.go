@@ -52,6 +52,8 @@ type BuildPayloadArgs struct {
 	Transactions  []*types.Transaction // Optimism addition: txs forced into the block via engine API
 	GasLimit      *uint64              // Optimism addition: override gas limit of the block to build
 	EIP1559Params []byte               // Optimism addition: encodes Holocene EIP-1559 params
+	// For X Layer, realtime
+	RealtimeEnabled bool
 }
 
 // Id computes an 8-byte identifier by hashing the components of the payload arguments.
@@ -311,6 +313,8 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 			eip1559Params: args.EIP1559Params,
 			// No RPC requests allowed.
 			rpcCtx: nil,
+			// For X Layer, realtime
+			realtimeEnabled: args.RealtimeEnabled,
 		}
 		empty := miner.generateWork(emptyParams, witness)
 		if empty.err != nil {
@@ -338,6 +342,8 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 		txs:           args.Transactions,
 		gasLimit:      args.GasLimit,
 		eip1559Params: args.EIP1559Params,
+		// For X Layer, realtime
+		realtimeEnabled: args.RealtimeEnabled,
 	}
 
 	// Since we skip building the empty block when using the tx pool, we need to explicitly

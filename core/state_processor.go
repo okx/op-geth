@@ -181,7 +181,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (receipt *types.Receipt, err error) {
 	txHash := tx.Hash().Hex()
 
-	// Log transaction application start
+	// For X Layer, log transaction application start
 	monitor.LogTransactionProgress(txHash, monitor.ServiceNameState, monitor.StepStateApplyTx.ID,
 		monitor.StepStateApplyTx.Key, blockNumber.Uint64(), int8(tx.Type()), "applying", 0)
 
@@ -219,15 +219,11 @@ func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, 
 		statedb.AccessEvents().Merge(evm.AccessEvents)
 	}
 
-	// Log receipt generation
+	// For X Layer, log receipt generation
 	monitor.LogTransactionProgress(txHash, monitor.ServiceNameState, monitor.StepStateGenerateReceipt.ID,
 		monitor.StepStateGenerateReceipt.Key, blockNumber.Uint64(), int8(tx.Type()), "generating_receipt", result.UsedGas)
 
-	// For X Layer, realtime
-	receipt = MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce)
-	statedb.SendTxInfoToRealtimeChannel(evm.Context.Time, tx, receipt, nil, result.Entries)
-
-	return receipt, nil
+	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce), nil
 }
 
 // MakeReceipt generates the receipt object for a transaction given its execution result.

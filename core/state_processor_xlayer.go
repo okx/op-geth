@@ -23,7 +23,21 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 )
+
+// ApplyTransaction_XLayer attempts to apply a transaction to the given state
+// database and uses the input parameters for its environment. It returns the
+// receipt for the transaction, gas used and an error if the transaction failed,
+// indicating the block was invalid.
+func ApplyTransaction_XLayer(evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64) (*types.Receipt, []*types.InnerTx, error) {
+	msg, err := TransactionToMessage(tx, types.MakeSigner(evm.ChainConfig(), header.Number, header.Time), header.BaseFee)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Create a new context to be used in the EVM environment
+	return ApplyTransactionWithEVM_XLayer(msg, gp, statedb, header.Number, header.Hash(), tx, usedGas, evm)
+}
 
 func afterApplyTransaction(env *vm.EVM, failed bool) []*types.InnerTx {
 	innerTxs := env.GetInnerTxMeta().InnerTxs
@@ -35,7 +49,13 @@ func afterApplyTransaction(env *vm.EVM, failed bool) []*types.InnerTx {
 	return innerTxs
 }
 
-func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (receipt *types.Receipt, innerTXs []*types.InnerTx, err error) {
+func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (receipt *types.Receipt, innerTxs []*types.InnerTx, err error) {
+	txHash := tx.Hash().Hex()
+
+	// For X Layer, log transaction application start
+	monitor.LogTransactionProgress(txHash, monitor.ServiceNameState, monitor.StepStateApplyTx.ID,
+		monitor.StepStateApplyTx.Key, blockNumber.Uint64(), int8(tx.Type()), "applying", 0)
+
 	if hooks := evm.Config.Tracer; hooks != nil {
 		if hooks.OnTxStart != nil {
 			hooks.OnTxStart(evm.GetVMContext(), tx, msg.From)
@@ -70,8 +90,11 @@ func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.St
 		statedb.AccessEvents().Merge(evm.AccessEvents)
 	}
 
+	// For X Layer, log receipt generation
+	monitor.LogTransactionProgress(txHash, monitor.ServiceNameState, monitor.StepStateGenerateReceipt.ID,
+		monitor.StepStateGenerateReceipt.Key, blockNumber.Uint64(), int8(tx.Type()), "generating_receipt", result.UsedGas)
+
 	// For X Layer
-	var innerTxs []*types.InnerTx
 	if evm.Config.EnableInnerTxs {
 		innerTxs = afterApplyTransaction(evm, result.Failed())
 	}

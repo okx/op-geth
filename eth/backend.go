@@ -45,7 +45,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
-	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/eth/interop"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
@@ -64,10 +63,8 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/dnsdisc"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/realtime"
 	realtimeCache "github.com/ethereum/go-ethereum/realtime/cache"
 	realtimeKafka "github.com/ethereum/go-ethereum/realtime/kafka"
-	"github.com/ethereum/go-ethereum/realtime/realtimeapi"
 	realtimeSub "github.com/ethereum/go-ethereum/realtime/subscription"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -75,9 +72,6 @@ import (
 	gethversion "github.com/ethereum/go-ethereum/version"
 	"golang.org/x/time/rate"
 )
-
-// For X Layer, realtime
-const kafkaBufferSize = 10000
 
 // Config contains the configuration options of the ETH protocol.
 // Deprecated: use ethconfig.Config instead.
@@ -449,44 +443,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	eth.shutdownTracker.MarkStartup()
 
 	// For X Layer, realtime
-	if eth.config.XLayer.Realtime.Enable {
-		if eth.config.XLayer.IsSequencer {
-			kafkaProducer, err := realtimeKafka.NewKafkaProducer(eth.config.XLayer.Realtime.Kafka, context.Background(), nil)
-			if err != nil {
-				eth.kafkaEnabled = false
-				log.Warn("[Realtime] Failed to initialize kafka producer", "error", err)
-			} else {
-				eth.kafkaEnabled = true
-				eth.kafkaProducer = kafkaProducer
-				eth.kafkaBlockInfoChan = make(chan *realtimeTypes.BlockInfo, realtimeKafka.DefaultKafkaBufferSize)
-				eth.kafkaTxInfoChan = make(chan state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
-
-				// Send error trigger message on sequencer restart
-				if err := eth.kafkaProducer.SendKafkaErrorTrigger(0); err != nil {
-					log.Error(fmt.Sprintf("[Realtime] Failed to send kafka error trigger message. error: %v", err))
-				}
-			}
-		} else {
-			// Init kafka consumer
-			kafkaConsumer, err := realtimeKafka.NewKafkaConsumer(eth.config.XLayer.Realtime.Kafka, true)
-			if err != nil {
-				eth.kafkaEnabled = false
-				log.Warn("[Realtime] Failed to initialize kafka consumer", "error", err)
-			} else {
-				eth.kafkaEnabled = true
-				eth.kafkaConsumer = kafkaConsumer
-
-				// Init realtime cache
-				eth.realtimeCache = realtimeCache.NewRealtimeCache(context.Background(), eth.blockchain, eth.config.XLayer.Realtime.CacheDumpPath, eth.config.XLayer.Realtime.CacheHeightThreshold)
-				eth.finishChan = make(chan realtimeTypes.FinishedEntry)
-
-				if eth.config.XLayer.Realtime.EnableSubscribe {
-					eth.realtimeSub = realtimeSub.NewRealtimeSubscription()
-					eth.realtimeSub.Start(context.Background())
-				}
-			}
-		}
-	}
+	eth.InitRealtime()
 
 	return eth, nil
 }
@@ -550,23 +507,6 @@ func (s *Ethereum) APIs() []rpc.API {
 	}...)
 }
 
-// For X Layer, realtime
-func (s *Ethereum) TryGetRealtimeAPIs(filterApi *filters.FilterAPI) []rpc.API {
-	if s.config.XLayer.Realtime.Enable && s.kafkaEnabled {
-		return []rpc.API{
-			{
-				Namespace: "eth",
-				Service:   realtimeapi.NewRealtimeAPI(s.realtimeCache, s.realtimeSub, s.APIBackend, filterApi),
-			},
-			{
-				Namespace: "debug",
-				Service:   realtimeapi.NewRealtimeDebugAPI(s.realtimeCache, s.APIBackend),
-			},
-		}
-	}
-	return nil
-}
-
 func (s *Ethereum) ResetWithGenesisBlock(gb *types.Block) {
 	s.blockchain.ResetWithGenesisBlock(gb)
 }
@@ -615,10 +555,7 @@ func (s *Ethereum) Start() error {
 	go s.updateFilterMapsHeads()
 
 	// For X Layer, realtime
-	if s.config.XLayer.Realtime.Enable && s.kafkaEnabled {
-		go realtime.ListenKafkaConsumer(context.Background(), s.kafkaConsumer, s.realtimeCache, s.finishChan, s.realtimeSub, s.config.XLayer.IsSequencer)
-		go realtime.ListenKafkaProducer(context.Background(), s.kafkaProducer, s.kafkaBlockInfoChan, s.kafkaTxInfoChan, s.config.XLayer.IsSequencer)
-	}
+	s.StartRealtime()
 
 	return nil
 }
@@ -722,11 +659,7 @@ func (s *Ethereum) Stop() error {
 	s.handler.Stop()
 
 	// For X Layer, realtime
-	if s.config.XLayer.IsSequencer {
-		if err := s.kafkaProducer.SendKafkaErrorTrigger(0); err != nil {
-			log.Error(fmt.Sprintf("[Realtime] Failed to send kafka error trigger message. error: %v", err))
-		}
-	}
+	s.StopRealtime()
 
 	// Then stop everything else.
 	ch := make(chan struct{})

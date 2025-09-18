@@ -1,0 +1,111 @@
+package eth
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/eth/filters"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/realtime"
+	realtimeCache "github.com/ethereum/go-ethereum/realtime/cache"
+	realtimeKafka "github.com/ethereum/go-ethereum/realtime/kafka"
+	"github.com/ethereum/go-ethereum/realtime/realtimeapi"
+	realtimeSub "github.com/ethereum/go-ethereum/realtime/subscription"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
+	"github.com/ethereum/go-ethereum/rpc"
+)
+
+func (eth *Ethereum) RealtimeEnabled() bool {
+	return eth.config.XLayer.Realtime.Enable && eth.kafkaEnabled
+}
+
+func (eth *Ethereum) GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo {
+	if eth.RealtimeEnabled() {
+		return eth.kafkaBlockInfoChan
+	}
+	return nil
+}
+
+func (eth *Ethereum) GetRealtimeTxInfoChan() chan state.TxInfo {
+	return eth.kafkaTxInfoChan
+}
+
+func (eth *Ethereum) GetFinishChan() chan realtimeTypes.FinishedEntry {
+	if eth.RealtimeEnabled() {
+		return eth.finishChan
+	}
+	return nil
+}
+
+func (eth *Ethereum) InitRealtime() {
+	if eth.config.XLayer.Realtime.Enable {
+		if !eth.config.XLayer.Realtime.RealtimeRpc {
+			kafkaProducer, err := realtimeKafka.NewKafkaProducer(eth.config.XLayer.Realtime.Kafka, context.Background(), nil)
+			if err != nil {
+				eth.kafkaEnabled = false
+				log.Warn("[Realtime] Failed to initialize kafka producer", "error", err)
+			} else {
+				eth.kafkaEnabled = true
+				eth.kafkaProducer = kafkaProducer
+				eth.kafkaBlockInfoChan = make(chan *realtimeTypes.BlockInfo, realtimeKafka.DefaultKafkaBufferSize)
+				eth.kafkaTxInfoChan = make(chan state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
+
+				// Send error trigger message on EL restart
+				if err := eth.kafkaProducer.SendKafkaErrorTrigger(0); err != nil {
+					log.Error(fmt.Sprintf("[Realtime] Failed to send kafka error trigger message. error: %v", err))
+				}
+			}
+		} else {
+			// Init kafka consumer
+			kafkaConsumer, err := realtimeKafka.NewKafkaConsumer(eth.config.XLayer.Realtime.Kafka, true)
+			if err != nil {
+				eth.kafkaEnabled = false
+				log.Warn("[Realtime] Failed to initialize kafka consumer", "error", err)
+			} else {
+				eth.kafkaEnabled = true
+				eth.kafkaConsumer = kafkaConsumer
+
+				// Init realtime cache
+				eth.realtimeCache = realtimeCache.NewRealtimeCache(context.Background(), eth.blockchain, eth.config.XLayer.Realtime.CacheDumpPath, eth.config.XLayer.Realtime.CacheHeightThreshold)
+				eth.finishChan = make(chan realtimeTypes.FinishedEntry)
+
+				if eth.config.XLayer.Realtime.EnableSubscribe {
+					eth.realtimeSub = realtimeSub.NewRealtimeSubscription()
+					eth.realtimeSub.Start(context.Background())
+				}
+			}
+		}
+	}
+}
+
+func (eth *Ethereum) StartRealtime() {
+	if eth.RealtimeEnabled() {
+		go realtime.ListenKafkaConsumer(context.Background(), eth.kafkaConsumer, eth.realtimeCache, eth.finishChan, eth.realtimeSub, eth.config.XLayer.Realtime.RealtimeRpc)
+		go realtime.ListenKafkaProducer(context.Background(), eth.kafkaProducer, eth.kafkaBlockInfoChan, eth.kafkaTxInfoChan, eth.config.XLayer.Realtime.RealtimeRpc)
+	}
+}
+
+func (eth *Ethereum) StopRealtime() {
+	if eth.RealtimeEnabled() && !eth.config.XLayer.Realtime.RealtimeRpc {
+		if err := eth.kafkaProducer.SendKafkaErrorTrigger(0); err != nil {
+			log.Error(fmt.Sprintf("[Realtime] Failed to send kafka error trigger message. error: %v", err))
+		}
+	}
+}
+
+func (eth *Ethereum) TryGetRealtimeAPIs(filterApi *filters.FilterAPI) []rpc.API {
+	if eth.RealtimeEnabled() {
+		return []rpc.API{
+			{
+				Namespace: "eth",
+				Service:   realtimeapi.NewRealtimeAPI(eth.realtimeCache, eth.realtimeSub, eth.APIBackend, filterApi),
+			},
+			{
+				Namespace: "debug",
+				Service:   realtimeapi.NewRealtimeDebugAPI(eth.realtimeCache, eth.APIBackend),
+			},
+		}
+	}
+	return nil
+}

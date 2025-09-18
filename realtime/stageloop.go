@@ -30,9 +30,9 @@ func ListenKafkaProducer(
 	kafkaProducer *kafka.KafkaProducer,
 	blockInfoChan chan *realtimeTypes.BlockInfo,
 	txInfoChan chan state.TxInfo,
-	isSequencer bool) {
-	if !isSequencer {
-		log.Info("[Realtime] KafkaProducer is disabled on non-sequencer, skipping")
+	isRpc bool) {
+	if isRpc {
+		log.Info("[Realtime] KafkaProducer is disabled on realtime-rpc, skipping")
 		return
 	}
 
@@ -77,9 +77,9 @@ func ListenKafkaConsumer(
 	realtimeCache *cache.RealtimeCache,
 	finishChan chan realtimeTypes.FinishedEntry,
 	subService *realtimeSub.RealtimeSubscription,
-	isSequencer bool) {
-	if isSequencer {
-		log.Info("[Realtime] KafkaConsumer is disabled on sequencer, skipping")
+	isRpc bool) {
+	if !isRpc {
+		log.Info("[Realtime] KafkaConsumer is disabled on non realtime-rpc, skipping")
 		return
 	}
 

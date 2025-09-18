@@ -22,21 +22,17 @@ type Entries struct {
 	snapshot int
 }
 
+// SetReader sets the reader for the state database.
+func (s *StateDB) SetReader(reader Reader) {
+	s.reader = reader
+}
+
 func CollectChangeset(entries Entries) *realtimeTypes.Changeset {
 	changeset := realtimeTypes.NewChangeset()
 	for _, entry := range (*entries.entries)[(entries).snapshot:] {
 		entry.collectChangeset(changeset)
 	}
 	return changeset
-}
-
-func (s *StateDB) SetTxInfoChan(txInfoChan chan TxInfo) {
-	s.txInfoChan = txInfoChan
-}
-
-// SetReader sets the reader for the state database.
-func (s *StateDB) SetReader(reader Reader) {
-	s.reader = reader
 }
 
 func (s *StateDB) GenerateChangeset() *realtimeTypes.Changeset {
@@ -59,18 +55,5 @@ func (s *StateDB) GenerateEntriesSinceSnapshot(revid int) Entries {
 	return Entries{
 		entries:  &s.journal.entries,
 		snapshot: snapshot,
-	}
-}
-
-func (s *StateDB) SendTxInfoToRealtimeChannel(blockTime uint64, tx *types.Transaction, receipt *types.Receipt, innerTxs []*types.InnerTx, entries Entries) {
-	if s.txInfoChan != nil {
-		s.txInfoChan <- TxInfo{
-			BlockNumber: receipt.BlockNumber.Uint64(),
-			BlockTime:   blockTime,
-			Tx:          tx,
-			Receipt:     receipt,
-			InnerTxs:    innerTxs,
-			Entries:     entries,
-		}
 	}
 }

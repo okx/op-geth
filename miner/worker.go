@@ -120,6 +120,9 @@ type generateParams struct {
 	isUpdate      bool               // Optional flag indicating that this is building a discardable update
 
 	rpcCtx context.Context // context to control block-building RPC work. No RPC allowed if nil.
+
+	// For X Layer, realtime
+	realtimeEnabled bool
 }
 
 // generateWork generates a sealing block based on the given parameters.
@@ -148,7 +151,7 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 	for _, tx := range params.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
-		err = miner.commitTransaction(work, tx)
+		err = miner.commitTransaction(work, tx, params.realtimeEnabled)
 		if err != nil {
 			return &newPayloadResult{err: fmt.Errorf("failed to force-include tx: %s type: %d sender: %s nonce: %d, err: %w", tx.Hash(), tx.Type(), from, tx.Nonce(), err)}
 		}
@@ -163,7 +166,7 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 			interrupt.Store(commitInterruptTimeout)
 		})
 
-		err := miner.fillTransactions(interrupt, work)
+		err := miner.fillTransactions(interrupt, work, params.realtimeEnabled)
 		timer.Stop() // don't need timeout interruption any more
 		if errors.Is(err, errBlockInterruptedByTimeout) {
 			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(miner.config.Recommit))
@@ -369,7 +372,7 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 	}, nil
 }
 
-func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) error {
+func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction, realtimeEnabled bool) error {
 	txHash := tx.Hash().Hex()
 	blockHeight := env.header.Number.Uint64()
 
@@ -385,7 +388,7 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 	)
 
 	if tx.Type() == types.BlobTxType {
-		err := miner.commitBlobTransaction(env, tx)
+		err := miner.commitBlobTransaction(env, tx, realtimeEnabled)
 		if err != nil {
 			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
 				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
@@ -423,7 +426,7 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 	monitor.LogTransactionProgress(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
 		monitor.StepMinerExecuteTx.Key, blockHeight, int8(tx.Type()), "executing", 0)
 
-	receipt, err := miner.applyTransaction_okx(env, tx)
+	snap, receipt, innertxs, err := miner.applyTransaction_XLayer(env, tx)
 	if err != nil {
 		monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
 			monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
@@ -434,6 +437,11 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 	env.receipts = append(env.receipts, receipt)
 	env.tcount++
 
+	// For X Layer, realtime
+	if realtimeEnabled {
+		miner.SendTxInfoToRealtimeChannel(env.state, snap, env.header.Time, tx, receipt, innertxs)
+	}
+
 	// Log successful execution
 	monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
 		monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
@@ -441,7 +449,7 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 	return nil
 }
 
-func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transaction) error {
+func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transaction, realtimeEnabled bool) error {
 	sc := tx.BlobTxSidecar()
 	if sc == nil {
 		panic("blob transaction without blobs in miner")
@@ -454,7 +462,7 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 	if env.blobs+len(sc.Blobs) > maxBlobs {
 		return errors.New("max data blobs reached")
 	}
-	receipt, err := miner.applyTransaction_okx(env, tx)
+	snap, receipt, innertxs, err := miner.applyTransaction_XLayer(env, tx)
 	if err != nil {
 		return err
 	}
@@ -464,6 +472,12 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 	env.blobs += len(sc.Blobs)
 	*env.header.BlobGasUsed += receipt.BlobGasUsed
 	env.tcount++
+
+	// For X Layer, realtime
+	if realtimeEnabled {
+		miner.SendTxInfoToRealtimeChannel(env.state, snap, env.header.Time, tx, receipt, innertxs)
+	}
+
 	return nil
 }
 
@@ -481,7 +495,7 @@ func (miner *Miner) applyTransaction(env *environment, tx *types.Transaction) (*
 	return receipt, err
 }
 
-func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *transactionsByPriceAndNonce, interrupt *atomic.Int32) error {
+func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *transactionsByPriceAndNonce, interrupt *atomic.Int32, realtimeEnabled bool) error {
 	gasLimit := env.header.GasLimit
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
@@ -588,7 +602,7 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 		// Start executing the transaction
 		env.state.SetTxContext(tx.Hash(), env.tcount)
 
-		err := miner.commitTransaction(env, tx)
+		err := miner.commitTransaction(env, tx, realtimeEnabled)
 		switch {
 		case errors.Is(err, core.ErrNonceTooLow):
 			// New head notification data race between the transaction pool and miner, shift
@@ -630,7 +644,7 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 // fillTransactions retrieves the pending transactions from the txpool and fills them
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
-func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) error {
+func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment, realtimeEnabled bool) error {
 	miner.confMu.RLock()
 	tip := miner.config.GasPrice
 	prio := miner.prio
@@ -716,7 +730,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 		okpayPlainTxs := newTransactionsByPriceAndNonce(env.signer, okPayTxs, env.header.BaseFee)
 		emptyBlobTxs := newTransactionsByPriceAndNonce(env.signer, nil, env.header.BaseFee)
 
-		if err := miner.commitTransactions(env, okpayPlainTxs, emptyBlobTxs, interrupt); err != nil {
+		if err := miner.commitTransactions(env, okpayPlainTxs, emptyBlobTxs, interrupt, realtimeEnabled); err != nil {
 			return err
 		}
 	}
@@ -737,7 +751,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, prioPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, prioBlobTxs, env.header.BaseFee)
 
-		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt); err != nil {
+		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt, realtimeEnabled); err != nil {
 			return err
 		}
 	}
@@ -745,7 +759,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, normalPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, normalBlobTxs, env.header.BaseFee)
 
-		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt); err != nil {
+		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt, realtimeEnabled); err != nil {
 			return err
 		}
 	}

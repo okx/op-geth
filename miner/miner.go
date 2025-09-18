@@ -47,6 +47,8 @@ var (
 type Backend interface {
 	BlockChain() *core.BlockChain
 	TxPool() *txpool.TxPool
+	// For X Layer, realtime
+	RealtimeBackend
 }
 type BackendWithHistoricalState interface {
 	StateAtBlock(ctx context.Context, block *types.Block, reexec uint64, base *state.StateDB, readOnly bool, preferDisk bool) (*state.StateDB, tracers.StateReleaseFunc, error)
@@ -91,6 +93,10 @@ var DefaultConfig = Config{
 	// run 3 rounds.
 	Recommit: 2 * time.Second,
 
+	// For X Layer
+	OkPayPriorityEnable:        false,
+	OkPaySenderAccounts:        []common.Address{},
+	OkPayBlockPriorityTxsLimit: 0,
 	InterceptConfig: &OldBridgeInterceptConfig{
 		Enabled:               false,
 		BridgeContractAddress: "0x4B24266C13AFEf2bb60e2C69A4C08A482d81e3CA",

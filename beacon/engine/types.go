@@ -60,6 +60,9 @@ type PayloadAttributes struct {
 	// and contains encoded EIP-1559 parameters. See:
 	// https://github.com/ethereum-optimism/specs/blob/main/specs/protocol/holocene/exec-engine.md#eip1559params-encoding
 	EIP1559Params []byte `json:"eip1559Params,omitempty" gencodec:"optional"`
+
+	// For X Layer, realtime
+	RealtimeEnabled bool `json:"realtimeEnabled,omitempty" gencodec:"optional"`
 }
 
 // JSON type overrides for PayloadAttributes.
