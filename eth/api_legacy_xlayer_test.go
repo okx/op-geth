@@ -238,7 +238,7 @@ func TestNewMigrationConfig(t *testing.T) {
 	config1 := &ethconfig.Config{}
 	mc1, err := NewXlayerLegacyRPCService(config1)
 	if err != nil {
-		t.Errorf("Unexpected error for empty config: %v", err)
+		t.Errorf("Unexpected error for empty legacyRpc: %v", err)
 	}
 	if mc1 != nil {
 		t.Error("Expected nil XlayerLegacyRPCService when not configured")
@@ -288,7 +288,7 @@ func TestNewMigrationConfig(t *testing.T) {
 	}
 }
 
-// Test MigrationBlockChainAPI.GetBlockByNumber
+// Test XlayerHybridBlockChainAPI.GetBlockByNumber
 func TestMigrationBlockChainAPI_GetBlockByNumber(t *testing.T) {
 	t.Parallel()
 
@@ -308,7 +308,7 @@ func TestMigrationBlockChainAPI_GetBlockByNumber(t *testing.T) {
 		erigonService.blocks[i] = block
 	}
 
-	// Create migration config
+	// Create migration legacyRpc
 	client, _ := rpc.Dial(server.URL)
 	migrationBlock := uint64(100)
 	config := &XlayerLegacyRPCService{
@@ -343,7 +343,7 @@ func TestMigrationBlockChainAPI_GetBlockByNumber(t *testing.T) {
 	}
 }
 
-// Test MigrationBlockChainAPI.GetBlockByHash
+// Test XlayerHybridBlockChainAPI.GetBlockByHash
 func TestMigrationBlockChainAPI_GetBlockByHash(t *testing.T) {
 	t.Parallel()
 
@@ -361,7 +361,7 @@ func TestMigrationBlockChainAPI_GetBlockByHash(t *testing.T) {
 	})
 	erigonService.blocks[50] = erigonBlock
 
-	// Create migration config
+	// Create migration legacyRpc
 	client, _ := rpc.Dial(server.URL)
 	config := &XlayerLegacyRPCService{
 		MigrationBlock: 100,
@@ -392,7 +392,7 @@ func TestMigrationBlockChainAPI_GetBlockByHash(t *testing.T) {
 	}
 }
 
-// Test MigrationBlockChainAPI.GetStorageAt
+// Test XlayerHybridBlockChainAPI.GetStorageAt
 func TestMigrationBlockChainAPI_GetStorageAt(t *testing.T) {
 	t.Parallel()
 
@@ -406,7 +406,7 @@ func TestMigrationBlockChainAPI_GetStorageAt(t *testing.T) {
 	testValue := hexutil.Bytes{0x01, 0x02, 0x03}
 	erigonService.storage[fmt.Sprintf("%s:%s", testAddr.Hex(), testKey)] = testValue
 
-	// Create migration config
+	// Create migration legacyRpc
 	client, _ := rpc.Dial(server.URL)
 	config := &XlayerLegacyRPCService{
 		MigrationBlock: 100,
@@ -428,7 +428,7 @@ func TestMigrationBlockChainAPI_GetStorageAt(t *testing.T) {
 	}
 }
 
-// Test MigrationTransactionAPI
+// Test XlayerHybridTransactionAPI
 func TestMigrationTransactionAPI(t *testing.T) {
 	t.Parallel()
 
@@ -446,7 +446,7 @@ func TestMigrationTransactionAPI(t *testing.T) {
 		GasUsed:     21000,
 	}
 
-	// Create migration config
+	// Create migration legacyRpc
 	client, _ := rpc.Dial(server.URL)
 	config := &XlayerLegacyRPCService{
 		MigrationBlock: 100,
@@ -495,11 +495,11 @@ func TestMigrationTransactionAPI(t *testing.T) {
 func TestMigrationConfig_Close(t *testing.T) {
 	t.Parallel()
 
-	// Test closing nil config
+	// Test closing nil legacyRpc
 	var nilConfig *XlayerLegacyRPCService
 	nilConfig.Close() // Should not panic
 
-	// Test closing config with client
+	// Test closing legacyRpc with client
 	server, _ := createMockErigonServer(t)
 	defer server.Close()
 

@@ -267,7 +267,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	var filterSystem *filters.FilterSystem
 	var filterApi *filters.FilterAPI
 	if isMigrationConfigured {
-		filterSystem, filterApi = utils.RegisterMigrationFilterAPI(stack, backend, &cfg.Eth)
+		filterSystem, filterApi = utils.RegisterXlayerHybridFilterAPI(stack, backend, &cfg.Eth)
 	} else {
 		filterSystem, filterApi = utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
 	}

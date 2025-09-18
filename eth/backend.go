@@ -519,17 +519,7 @@ func (s *Ethereum) APIs() []rpc.API {
 
 	// For X Layer, wrap APIs with migration routing if configured
 	if s.xlayerLegacyRPCService != nil {
-		apis = WrapAPIsForMigration(apis, s.xlayerLegacyRPCService)
-		// Register filter here
-		filterSystem := filters.NewFilterSystem(s.APIBackend, filters.Config{
-			LogCacheSize: s.config.FilterLogCacheSize,
-		})
-		originalFilterApi := filters.NewFilterAPI(filterSystem)
-		filterApi := rpc.API{
-			Namespace: "eth",
-			Service:   NewMigrationFilterAPI(originalFilterApi, s.xlayerLegacyRPCService),
-		}
-		apis = append(apis, filterApi)
+		apis = WrapAPIsForXlayer(apis, s.xlayerLegacyRPCService)
 	}
 
 	// Append any Sequencer APIs as enabled
