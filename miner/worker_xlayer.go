@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -29,7 +30,8 @@ func (miner *Miner) applyTransaction_XLayer(env *environment, tx *types.Transact
 		gp   = env.gasPool.Gas()
 	)
 
-	receipt, innertxs, err := core.ApplyTransaction_XLayer(env.evm, env.gasPool, env.state, env.header, tx, &env.header.GasUsed)
+	// Do not finalize statedb to generate changeset
+	receipt, innertxs, err := core.ApplyTransaction_XLayer(env.evm, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, false)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
 		env.gasPool.SetGas(gp)
@@ -52,11 +54,39 @@ func (miner *Miner) applyTransaction_XLayer(env *environment, tx *types.Transact
 	return snap, receipt, innertxs, err
 }
 
-func (miner *Miner) SendTxInfoToRealtimeChannel(statedb *state.StateDB, revid int, blockTime uint64, tx *types.Transaction, receipt *types.Receipt, innerTxs []*types.InnerTx) {
+func (miner *Miner) RealtimeSendNewPendingBlock(statedb *state.StateDB, header *types.Header) {
 	if miner.backend.RealtimeEnabled() {
-		txChan := miner.backend.GetRealtimeTxInfoChan()
-		if txChan != nil {
-			txChan <- state.TxInfo{
+		blockInfoChan := miner.backend.GetRealtimeBlockInfoChan()
+		if blockInfoChan != nil {
+			blockInfoChan <- &realtimeTypes.BlockInfo{
+				Header:    header,
+				TxCount:   -1,
+				Hash:      common.Hash{},
+				Changeset: statedb.GenerateChangeset(),
+			}
+		}
+	}
+}
+
+func (miner *Miner) RealtimeSendConfirmedBlock(statedb *state.StateDB, block *types.Block) {
+	if miner.backend.RealtimeEnabled() {
+		blockInfoChan := miner.backend.GetRealtimeBlockInfoChan()
+		if blockInfoChan != nil {
+			blockInfoChan <- &realtimeTypes.BlockInfo{
+				Header:    block.Header(),
+				TxCount:   int64(len(block.Transactions())),
+				Hash:      block.Hash(),
+				Changeset: statedb.GenerateChangeset(),
+			}
+		}
+	}
+}
+
+func (miner *Miner) RealtimeSendTxInfo(statedb *state.StateDB, revid int, blockTime uint64, tx *types.Transaction, receipt *types.Receipt, innerTxs []*types.InnerTx) {
+	if miner.backend.RealtimeEnabled() {
+		txInfoChan := miner.backend.GetRealtimeTxInfoChan()
+		if txInfoChan != nil {
+			txInfoChan <- state.TxInfo{
 				BlockNumber: receipt.BlockNumber.Uint64(),
 				BlockTime:   blockTime,
 				Tx:          tx,

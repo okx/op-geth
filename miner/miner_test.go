@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/params"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/triedb"
 )
@@ -61,6 +62,11 @@ func (m *mockBackend) BlockChain() *core.BlockChain {
 func (m *mockBackend) TxPool() *txpool.TxPool {
 	return m.txPool
 }
+
+// For X Layer, realtime
+func (b *mockBackend) RealtimeEnabled() bool                                   { return false }
+func (b *mockBackend) GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo { return nil }
+func (b *mockBackend) GetRealtimeTxInfoChan() chan state.TxInfo                { return nil }
 
 type testBlockChain struct {
 	root          common.Hash

@@ -30,26 +30,16 @@ import (
 // database and uses the input parameters for its environment. It returns the
 // receipt for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction_XLayer(evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64) (*types.Receipt, []*types.InnerTx, error) {
+func ApplyTransaction_XLayer(evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, shouldFinalize bool) (*types.Receipt, []*types.InnerTx, error) {
 	msg, err := TransactionToMessage(tx, types.MakeSigner(evm.ChainConfig(), header.Number, header.Time), header.BaseFee)
 	if err != nil {
 		return nil, nil, err
 	}
 	// Create a new context to be used in the EVM environment
-	return ApplyTransactionWithEVM_XLayer(msg, gp, statedb, header.Number, header.Hash(), tx, usedGas, evm)
+	return ApplyTransactionWithEVM_XLayer(msg, gp, statedb, header.Number, header.Hash(), tx, usedGas, evm, shouldFinalize)
 }
 
-func afterApplyTransaction(env *vm.EVM, failed bool) []*types.InnerTx {
-	innerTxs := env.GetInnerTxMeta().InnerTxs
-	if failed {
-		for _, innerTx := range innerTxs {
-			innerTx.IsError = true
-		}
-	}
-	return innerTxs
-}
-
-func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (receipt *types.Receipt, innerTxs []*types.InnerTx, err error) {
+func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, shouldFinalize bool) (receipt *types.Receipt, innerTxs []*types.InnerTx, err error) {
 	txHash := tx.Hash().Hex()
 
 	// For X Layer, log transaction application start
@@ -78,7 +68,9 @@ func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.St
 	// Update the state with pending changes.
 	var root []byte
 	if evm.ChainConfig().IsByzantium(blockNumber) {
-		evm.StateDB.Finalise(true)
+		if shouldFinalize {
+			evm.StateDB.Finalise(true)
+		}
 	} else {
 		root = statedb.IntermediateRoot(evm.ChainConfig().IsEIP158(blockNumber)).Bytes()
 	}
@@ -100,4 +92,14 @@ func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.St
 	}
 
 	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce), innerTxs, nil
+}
+
+func afterApplyTransaction(env *vm.EVM, failed bool) []*types.InnerTx {
+	innerTxs := env.GetInnerTxMeta().InnerTxs
+	if failed {
+		for _, innerTx := range innerTxs {
+			innerTx.IsError = true
+		}
+	}
+	return innerTxs
 }

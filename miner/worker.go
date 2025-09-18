@@ -217,6 +217,12 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
+
+	// For X Layer, realtime
+	if params.realtimeEnabled {
+		miner.RealtimeSendConfirmedBlock(work.state, block)
+	}
+
 	return &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),
@@ -330,6 +336,12 @@ func (miner *Miner) prepareWork(genParams *generateParams, witness bool) (*envir
 	if miner.chainConfig.IsPrague(header.Number, header.Time) {
 		core.ProcessParentBlockHash(header.ParentHash, env.evm)
 	}
+
+	// For X Layer, realtime
+	if genParams.realtimeEnabled {
+		miner.RealtimeSendNewPendingBlock(env.state, header)
+	}
+
 	return env, nil
 }
 
@@ -439,8 +451,9 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction, r
 
 	// For X Layer, realtime
 	if realtimeEnabled {
-		miner.SendTxInfoToRealtimeChannel(env.state, snap, env.header.Time, tx, receipt, innertxs)
+		miner.RealtimeSendTxInfo(env.state, snap, env.header.Time, tx, receipt, innertxs)
 	}
+	env.state.Finalise(true)
 
 	// Log successful execution
 	monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
@@ -475,7 +488,7 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 
 	// For X Layer, realtime
 	if realtimeEnabled {
-		miner.SendTxInfoToRealtimeChannel(env.state, snap, env.header.Time, tx, receipt, innertxs)
+		miner.RealtimeSendTxInfo(env.state, snap, env.header.Time, tx, receipt, innertxs)
 	}
 
 	return nil
