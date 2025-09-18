@@ -25,7 +25,7 @@ export CGO_CFLAGS="-I/usr/local/include"
 export CGO_LDFLAGS="-L/usr/local/lib -lrocksdb -lstdc++ -lm -lz -lsnappy -llz4 -lzstd -lbz2 -luring"
 ```
 
-### Method 1: Using Build Tags (Recommended)
+### Native
 
 Build the project with the `rocksdb` build tag:
 
@@ -38,13 +38,16 @@ go build -tags rocksdb ./ethdb/rocksdb
 go test -tags rocksdb ./ethdb/rocksdb
 ```
 
-### Method 2: Default Build (Stub Implementation)
-
 If you build without the `rocksdb` tag, the stub implementation will be used, and attempts to use RocksDB will return an error:
 
 ```bash
 # This will build successfully but RocksDB won't be functional
 go build ./cmd/geth
+```
+
+### Docker
+```bash
+docker build -t op-geth-rocksdb -f Dockerfile.rocksdb .
 ```
 
 ## Usage
