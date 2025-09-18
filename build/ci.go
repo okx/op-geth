@@ -183,6 +183,7 @@ func doInstall(cmdline []string) {
 		arch       = flag.String("arch", "", "Architecture to cross build for")
 		cc         = flag.String("cc", "", "C compiler to cross build with")
 		staticlink = flag.Bool("static", false, "Create statically-linked executable")
+		buildTags  = flag.String("tags", "", "Build tags")
 	)
 	flag.CommandLine.Parse(cmdline)
 	env := build.Env()
@@ -194,15 +195,18 @@ func doInstall(cmdline []string) {
 		tc.Root = build.DownloadGo(csdb)
 	}
 	// Disable CLI markdown doc generation in release builds.
-	buildTags := []string{"urfave_cli_no_docs"}
+	buildTagsArray := []string{"urfave_cli_no_docs"}
+	if *buildTags != "" {
+		buildTagsArray = append(buildTagsArray, strings.Split(*buildTags, ",")...)
+	}
 
 	// Enable linking the CKZG library since we can make it work with additional flags.
 	if env.UbuntuVersion != "trusty" {
-		buildTags = append(buildTags, "ckzg")
+		buildTagsArray = append(buildTagsArray, "ckzg")
 	}
 
 	// Configure the build.
-	gobuild := tc.Go("build", buildFlags(env, *staticlink, buildTags)...)
+	gobuild := tc.Go("build", buildFlags(env, *staticlink, buildTagsArray)...)
 
 	// We use -trimpath to avoid leaking local paths into the built executables.
 	gobuild.Args = append(gobuild.Args, "-trimpath")
