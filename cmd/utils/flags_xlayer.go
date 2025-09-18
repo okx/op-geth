@@ -1,12 +1,13 @@
 package utils
 
 import (
+	"time"
+
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
@@ -169,24 +170,24 @@ func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setXLayerIntercept(ctx, cfg)
 	setInnerTxXLayer(ctx, cfg)
 	setMigrationXLayer(ctx, cfg)
-  setMonitor(ctx, &cfg.Monitor)
+	setMonitor(ctx, &cfg.Monitor)
 }
 
-// RegisterMigrationFilterAPI adds the eth log filtering RPC API to the node.
-func RegisterMigrationFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconfig.Config) *filters.FilterSystem {
+// RegisterXlayerLegacyFilterAPI adds the eth log filtering RPC API to the node.
+func RegisterXlayerLegacyFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconfig.Config) *filters.FilterSystem {
 	filterSystem := filters.NewFilterSystem(backend, filters.Config{
 		LogCacheSize: ethcfg.FilterLogCacheSize,
 	})
-	migrationRpcService, err := eth.NewXlayerLegacyRPCService(ethcfg)
+	xlayerLegacyRpcService, err := eth.NewXlayerLegacyRPCService(ethcfg)
 	if err != nil {
 		panic(err)
 	}
 	originalFilterApi := filters.NewFilterAPI(filterSystem)
-	migrationFilterApi := rpc.API{
+	xlayerLegacyFilterApi := rpc.API{
 		Namespace: "eth",
-		Service:   eth.NewMigrationFilterAPI(originalFilterApi, migrationRpcService),
+		Service:   eth.NewXlayerHybridFilterAPI(originalFilterApi, xlayerLegacyRpcService),
 	}
-	stack.RegisterAPIs([]rpc.API{migrationFilterApi})
+	stack.RegisterAPIs([]rpc.API{xlayerLegacyFilterApi})
 	return filterSystem
 }
 

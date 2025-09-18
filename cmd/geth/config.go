@@ -261,11 +261,11 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		})
 	}
 
-	// Configure log filter RPC API.
+	// Xlayer: Configure log filter RPC API.
 	isMigrationConfigured := cfg.Eth.XLayer.LegacyPp.MigrationBlock != nil && cfg.Eth.XLayer.LegacyPp.PPRPCUrl != ""
 	var filterSystem *filters.FilterSystem
 	if isMigrationConfigured {
-		filterSystem = utils.RegisterMigrationFilterAPI(stack, backend, &cfg.Eth)
+		filterSystem = utils.RegisterXlayerLegacyFilterAPI(stack, backend, &cfg.Eth)
 	} else {
 		filterSystem = utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
 	}

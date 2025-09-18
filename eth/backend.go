@@ -26,8 +26,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/eth/filters"
-
 	"github.com/holiman/uint256"
 
 	"github.com/ethereum/go-ethereum/accounts"
@@ -240,7 +238,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 		vmConfig.Tracer = t
 	}
-	// Override the chain config with provided settings.
+	// Override the chain legacyRpc with provided settings.
 	var overrides core.ChainOverrides
 	if config.OverridePrague != nil {
 		overrides.OverridePrague = config.OverridePrague
@@ -279,7 +277,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	if chainConfig := eth.blockchain.Config(); chainConfig.Optimism != nil { // config.Genesis.Config.ChainID cannot be used because it's based on CLI flags only, thus default to mainnet L1
+	if chainConfig := eth.blockchain.Config(); chainConfig.Optimism != nil { // legacyRpc.Genesis.Config.ChainID cannot be used because it's based on CLI flags only, thus default to mainnet L1
 		config.NetworkId = chainConfig.ChainID.Uint64() // optimism defaults eth network ID to chain ID
 		eth.networkID = config.NetworkId
 	}
@@ -457,19 +455,9 @@ func (s *Ethereum) APIs() []rpc.API {
 	// Append any APIs exposed explicitly by the consensus engine
 	apis = append(apis, s.engine.APIs(s.BlockChain())...)
 
-	// Wrap APIs with migration routing if configured
+	// Xlayer: Wrap APIs with migration routing if configured
 	if s.xlayerLegacyRPCService != nil {
-		apis = WrapAPIsForMigration(apis, s.xlayerLegacyRPCService)
-		// Register filter here
-		filterSystem := filters.NewFilterSystem(s.APIBackend, filters.Config{
-			LogCacheSize: s.config.FilterLogCacheSize,
-		})
-		originalFilterApi := filters.NewFilterAPI(filterSystem)
-		filterApi := rpc.API{
-			Namespace: "eth",
-			Service:   NewMigrationFilterAPI(originalFilterApi, s.xlayerLegacyRPCService),
-		}
-		apis = append(apis, filterApi)
+		apis = WrapAPIsForXlayer(apis, s.xlayerLegacyRPCService)
 	}
 
 	// Append any Sequencer APIs as enabled
