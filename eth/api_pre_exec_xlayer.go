@@ -70,14 +70,35 @@ type PreArgs struct {
 	AuthorizationList    []types.SetCodeAuthorization `json:"authorizationList"`
 }
 
-func (args PreArgs) ToLogString() string {
-	argsBytes, _ := json.Marshal(args)
-	return string(argsBytes)
+type CallTracerResult struct {
+	Calls        []CallTracerResult `json:"calls"`
+	From         string             `json:"from"`
+	Gas          string             `json:"gas"`
+	GasUsed      string             `json:"gasUsed"`
+	Input        string             `json:"input"`
+	Output       string             `json:"output,omitempty"`
+	To           string             `json:"to"`
+	Type         string             `json:"type"`
+	Value        string             `json:"value"`
+	Error        string             `json:"error,omitempty"`
+	RevertReason string             `json:"revertReason,omitempty"`
+}
+
+type StateAccount struct {
+	Balance string            `json:"balance"`
+	Code    string            `json:"code"`
+	Nonce   uint64            `json:"nonce"`
+	Storage map[string]string `json:"storage"`
 }
 
 type PreError struct {
 	Code int    `json:"code"`
 	Msg  string `json:"msg"`
+}
+
+func (args PreArgs) ToLogString() string {
+	argsBytes, _ := json.Marshal(args)
+	return string(argsBytes)
 }
 
 func toPreError(err error, result *core.ExecutionResult) PreError {
@@ -218,20 +239,12 @@ func (api *TxPreExecAPI) TransactionPreExec(ctx context.Context, origins []PreAr
 	}
 	blockNumber := big.NewInt(0).Set(header.Number)
 
-	// Setup context so it may be cancelled the call has completed
-	// or, in case of unmetered gas, setup a context with a timeout.
-	var cancel context.CancelFunc
-	// ETH RPC EVM Timeout default 5s
-	timeout := api.eth.APIBackend.RPCEVMTimeout()
-	if len(origins) > 0 {
-		timeout = time.Duration(len(origins)) * timeout
-	}
-	ctx, cancel = context.WithTimeout(ctx, timeout)
-	// Make sure the context is cancelled when the call has completed
-	// this makes sure resources are cleaned up.
-	defer cancel()
-
 	for i, origin := range origins {
+		// Setup context with timeout for each individual transaction
+		// ETH RPC EVM Timeout default 5s per transaction
+		timeout := api.eth.APIBackend.RPCEVMTimeout()
+		txCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
 		var gasUsed uint64
 		log.Info("TransactionPreExec", "requestID", requestID, "input index", i, "input args", origin.ToLogString())
 
@@ -254,7 +267,7 @@ func (api *TxPreExecAPI) TransactionPreExec(ctx context.Context, origins []PreAr
 			origin.Gas = correctedGas
 		}
 
-		rawRes, gasUsed, receipt, err := applyMessageWithTracer(ctx, api, state, origin, header, i, timeout)
+		rawRes, gasUsed, receipt, err := applyMessageWithTracer(txCtx, api, state, origin, header, i, timeout)
 		if err != nil {
 			log.Error("TransactionPreExec: applyMessageWithTracer failed", "requestID", requestID, "input args", origin.ToLogString(), "error", err.Error())
 			preError := toPreError(err, nil)
@@ -265,7 +278,6 @@ func (api *TxPreExecAPI) TransactionPreExec(ctx context.Context, origins []PreAr
 
 		txHash := common.BigToHash(big.NewInt(int64(i)))
 
-		// process tracer results into final API response
 		preRes, err := processTracerResults(rawRes, state, txHash, header, receipt, gasUsed, blockNumber)
 		if err != nil {
 			log.Error("TransactionPreExec: processTracerResults failed", "requestID", requestID, "input args", origin.ToLogString(), "error", err.Error())
@@ -281,24 +293,11 @@ func (api *TxPreExecAPI) TransactionPreExec(ctx context.Context, origins []PreAr
 	return preResList, nil
 }
 
-type CallTracerResult struct {
-	Calls        []CallTracerResult `json:"calls"`
-	From         string             `json:"from"`
-	Gas          string             `json:"gas"`
-	GasUsed      string             `json:"gasUsed"`
-	Input        string             `json:"input"`
-	Output       string             `json:"output,omitempty"`
-	To           string             `json:"to"`
-	Type         string             `json:"type"`
-	Value        string             `json:"value"`
-	Error        string             `json:"error,omitempty"`
-	RevertReason string             `json:"revertReason,omitempty"`
-}
-
 func convertCallTracerResultToInnerTxs(traceResult interface{}) (result []*PreExecInnerTx, err error) {
 	if traceResult == nil {
 		return nil, fmt.Errorf("call tracer result is nil")
 	}
+
 	traceResultStr, err := json.Marshal(traceResult)
 	if err != nil {
 		return nil, err
@@ -309,7 +308,13 @@ func convertCallTracerResultToInnerTxs(traceResult interface{}) (result []*PreEx
 	}
 
 	result = make([]*PreExecInnerTx, 0)
-	isError := false
+	convertCallToInnerTxsRecursive(callTx, 0, 0, "", false, &result)
+	return
+}
+
+// convertCallToInnerTxsRecursive recursively converts a CallTracerResult and all its nested calls to PreExecInnerTx
+func convertCallToInnerTxsRecursive(callTx CallTracerResult, depth int64, index int64, depthIndexRoot string, parentError bool, result *[]*PreExecInnerTx) {
+	isError := parentError
 	var errorMsg string
 	if callTx.Error != "" {
 		isError = true
@@ -319,9 +324,15 @@ func convertCallTracerResultToInnerTxs(traceResult interface{}) (result []*PreEx
 		isError = true
 		errorMsg = fmt.Sprintf("%s,%s", callTx.Error, callTx.RevertReason)
 	}
+
 	gasUsed := new(big.Int)
 	if len(callTx.GasUsed) > 2 && strings.HasPrefix(callTx.GasUsed, "0x") {
 		gasUsed, _ = gasUsed.SetString(callTx.GasUsed[2:], 16)
+	}
+
+	gas := new(big.Int)
+	if len(callTx.Gas) > 2 && strings.HasPrefix(callTx.Gas, "0x") {
+		gas, _ = gas.SetString(callTx.Gas[2:], 16)
 	}
 
 	valueWei := ""
@@ -331,12 +342,6 @@ func convertCallTracerResultToInnerTxs(traceResult interface{}) (result []*PreEx
 		valueWei = valueWeiInt.String()
 	}
 
-	gas := new(big.Int)
-	if len(callTx.Gas) > 2 && strings.HasPrefix(callTx.Gas, "0x") {
-		gas, _ = gas.SetString(callTx.Gas[2:], 16)
-	}
-
-	// Calculate ReturnGas = Gas - GasUsed
 	gasUint64 := gas.Uint64()
 	gasUsedUint64 := gasUsed.Uint64()
 	returnGas := uint64(0)
@@ -350,128 +355,60 @@ func convertCallTracerResultToInnerTxs(traceResult interface{}) (result []*PreEx
 		output = "0x"
 	}
 
+	// Create inner transaction
 	innerTx := &PreExecInnerTx{
-		Dept:          *big.NewInt(0),
-		InternalIndex: *big.NewInt(int64(0)),
+		Dept:          *big.NewInt(depth),
+		InternalIndex: *big.NewInt(index),
 		CallType:      strings.ToLower(callTx.Type),
-		Name:          strings.ToLower(callTx.Type),
 		TraceAddress:  "",
 		CodeAddress:   "",
-		From:          common.HexToAddress(callTx.From).Hex(), // Convert to checksummed address
-		To:            common.HexToAddress(callTx.To).Hex(),   // Convert to checksummed address
+		From:          common.HexToAddress(callTx.From).Hex(),
+		To:            common.HexToAddress(callTx.To).Hex(),
 		Input:         callTx.Input,
-		Output:        output, // Use processed output
+		Output:        output,
 		IsError:       isError,
-		GasUsed:       gasUsedUint64, // For historical reason, we use gasUint64 here
+		GasUsed:       gasUsedUint64,
 		Value:         valueWei,
 		ValueWei:      valueWei,
 		Error:         errorMsg,
 		ReturnGas:     returnGas,
 	}
-	result = append(result, innerTx)
-	if len(callTx.Calls) > 0 {
-		// convert calls to innerTxs
-		callInnerTxs := convertCallsToInnerTxs(callTx.Calls, 0, "", isError)
-		result = append(result, callInnerTxs...)
-	}
 
-	return
-}
-
-func convertCallsToInnerTxs(calls []CallTracerResult, lastDepth int64, lastDepthIndexRoot string, isError bool) (result []*PreExecInnerTx) {
-	result = make([]*PreExecInnerTx, 0)
-	depth := lastDepth + 1
-	for index, callTx := range calls {
-		var errorMsg string
-		if callTx.Error != "" {
-			isError = true
-			errorMsg = callTx.Error
-		}
-		if callTx.Error != "" && callTx.RevertReason != "" {
-			isError = true
-			errorMsg = fmt.Sprintf("%s,%s", callTx.Error, callTx.RevertReason)
-		}
-
-		gasUsed := new(big.Int)
-		if len(callTx.GasUsed) > 2 && strings.HasPrefix(callTx.GasUsed, "0x") {
-			gasUsed, _ = gasUsed.SetString(callTx.GasUsed[2:], 16)
-		}
-
-		gas := new(big.Int)
-		if len(callTx.Gas) > 2 && strings.HasPrefix(callTx.Gas, "0x") {
-			gas, _ = gas.SetString(callTx.Gas[2:], 16)
-		}
-
-		valueWei := ""
-		if len(callTx.Value) > 2 && strings.HasPrefix(callTx.Value, "0x") {
-			valueWeiInt := new(big.Int)
-			valueWeiInt, _ = valueWeiInt.SetString(callTx.Value[2:], 16)
-			valueWei = valueWeiInt.String()
-		}
-
-		// Calculate ReturnGas = Gas - GasUsed
-		gasUint64 := gas.Uint64()
-		gasUsedUint64 := gasUsed.Uint64()
-		returnGas := uint64(0)
-		if gasUint64 > gasUsedUint64 {
-			returnGas = gasUint64 - gasUsedUint64
-		}
-
-		// Handle empty output - ensure it's "0x" instead of ""
-		output := callTx.Output
-		if output == "" {
-			output = "0x"
-		}
-
-		innerTx := &PreExecInnerTx{
-			Dept:          *big.NewInt(depth),
-			InternalIndex: *big.NewInt(int64(index)),
-			CallType:      strings.ToLower(callTx.Type),
-			Name:          "",
-			TraceAddress:  "",
-			CodeAddress:   "",
-			From:          common.HexToAddress(callTx.From).Hex(), // Convert to checksummed address
-			To:            common.HexToAddress(callTx.To).Hex(),   // Convert to checksummed address
-			Input:         callTx.Input,
-			Output:        output, // Use processed output
-			IsError:       isError,
-			GasUsed:       gasUsedUint64,
-			Value:         valueWei,
-			ValueWei:      valueWei,
-			Error:         errorMsg,
-			ReturnGas:     returnGas,
-		}
-		// convert from/ to address
+	// Handle root vs nested call differences
+	isRoot := depth == 0
+	if isRoot {
+		innerTx.Name = strings.ToLower(callTx.Type)
+	} else {
 		if len(callTx.From) > 2 && strings.HasPrefix(callTx.From, "0x") {
 			innerTx.From = "0x000000000000000000000000" + callTx.From[2:]
 		}
-
 		if len(callTx.To) > 2 && strings.HasPrefix(callTx.To, "0x") {
 			innerTx.To = "0x000000000000000000000000" + callTx.To[2:]
 		}
 
-		// if CallType == "callcode",  CodeAddress = callTx.To
 		if strings.ToLower(callTx.Type) == "callcode" {
 			innerTx.CodeAddress = callTx.To
 		}
 
-		depthIndexRoot := fmt.Sprintf("%s_%d", lastDepthIndexRoot, index)
-		innerTx.Name = fmt.Sprintf("%s%s", innerTx.CallType, depthIndexRoot)
+		currentDepthIndexRoot := fmt.Sprintf("%s_%d", depthIndexRoot, index)
+		innerTx.Name = fmt.Sprintf("%s%s", innerTx.CallType, currentDepthIndexRoot)
+	}
 
-		result = append(result, innerTx)
-		if len(callTx.Calls) > 0 {
-			innerTxs := convertCallsToInnerTxs(callTx.Calls, depth, depthIndexRoot, isError)
-			result = append(result, innerTxs...)
+	// Add current transaction to result
+	*result = append(*result, innerTx)
+
+	// Recursively process nested calls
+	if len(callTx.Calls) > 0 {
+		for i, nestedCall := range callTx.Calls {
+			var nestedDepthIndexRoot string
+			if isRoot {
+				nestedDepthIndexRoot = ""
+			} else {
+				nestedDepthIndexRoot = fmt.Sprintf("%s_%d", depthIndexRoot, index)
+			}
+			convertCallToInnerTxsRecursive(nestedCall, depth+1, int64(i), nestedDepthIndexRoot, innerTx.IsError, result)
 		}
 	}
-	return result
-}
-
-type StateAccount struct {
-	Balance string            `json:"balance"`
-	Code    string            `json:"code"`
-	Nonce   uint64            `json:"nonce"`
-	Storage map[string]string `json:"storage"`
 }
 
 func convertPrestateTracerResultToStateDiff(traceResult interface{}) (result map[string]interface{}, err error) {
@@ -586,6 +523,8 @@ func applyMessageWithTracer(ctx context.Context, api *TxPreExecAPI, state *coreS
 	}()
 
 	evm.Context.BaseFee = big.NewInt(0)
+
+	// blocknumber and time are random to simulate real transactions with propogation delay
 	evm.Context.BlockNumber.Add(evm.Context.BlockNumber, big.NewInt(rand.Int63n(6)+6))
 	evm.Context.Time += uint64(rand.Int63n(60) + 30)
 	gp := new(core.GasPool).AddGas(MaxGasLimit)
