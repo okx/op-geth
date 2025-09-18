@@ -20,9 +20,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
 const (
@@ -135,14 +132,6 @@ func RevertReason(ctx context.Context, c ethClienter, tx *types.Transaction, blo
 	return unpackedMsg, nil
 }
 
-// WaitGRPCHealthy waits for a gRPC endpoint to be responding according to the
-// health standard in package grpc.health.v1
-func WaitGRPCHealthy(address string) error {
-	return Poll(DefaultInterval, DefaultDeadline, func() (bool, error) {
-		return grpcHealthyCondition(address)
-	})
-}
-
 func WaitTxReceipt(ctx context.Context, txHash common.Hash, timeout time.Duration, client *ethclient.Client) (*types.Receipt, error) {
 	if client == nil {
 		return nil, fmt.Errorf("client is nil")
@@ -222,33 +211,6 @@ func networkUpCondition() (bool, error) {
 
 func nodeUpCondition() (done bool, err error) {
 	return NodeUpCondition(DefaultL2NetworkURL)
-}
-
-func grpcHealthyCondition(address string) (bool, error) {
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	conn, err := grpc.DialContext(ctx, address, opts...)
-	if err != nil {
-		// we allow connection errors to wait for the container up
-		return false, nil
-	}
-	defer func() {
-		err = conn.Close()
-	}()
-
-	healthClient := grpc_health_v1.NewHealthClient(conn)
-	state, err := healthClient.Check(context.Background(), &grpc_health_v1.HealthCheckRequest{})
-	if err != nil {
-		// we allow connection errors to wait for the container up
-		return false, nil
-	}
-
-	done := state.Status == grpc_health_v1.HealthCheckResponse_SERVING
-
-	return done, nil
 }
 
 // WaitSignal blocks until an Interrupt or Kill signal is received, then it
