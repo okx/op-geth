@@ -19,7 +19,6 @@ package core
 import (
 	"context"
 	"fmt"
-	"github.com/bytedance/gopkg/util/logger"
 	"math/big"
 	"os"
 	"runtime"
@@ -28,6 +27,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/bytedance/gopkg/util/logger"
 
 	"github.com/bytedance/sonic"
 	"github.com/ethereum/go-ethereum/common"
@@ -240,7 +241,7 @@ func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common
 			log.Info("skip migrate for", "addr", addr)
 		}
 	}
-	log.Info("generateMigrateAlloc remove ignored addresses elapsed:", "elapsed", time.Since(start))
+	log.Info("generateMigrateAlloc remove ignored addresses", "elapsed", time.Since(start))
 
 	start = time.Now()
 	// Merge with genesisAlloc and handle conflicts
@@ -259,7 +260,7 @@ func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common
 
 		migrateAlloc[addr] = destAccount
 	}
-	log.Info("generateMigrateAlloc merge with genesisAlloc elapsed:", "elapsed", time.Since(start))
+	log.Info("generateMigrateAlloc merge with genesisAlloc", "elapsed", time.Since(start))
 
 	return migrateAlloc
 }
@@ -697,7 +698,7 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 	}
 
 	wg.Wait()
-	log.Info("prepare elapsed:", "elapsed", time.Since(start1))
+	log.Info("prepare finish", "elapsed", time.Since(start1))
 
 	start11 := time.Now()
 	slices.SortFunc(nodeKvs, func(a, b *NodeKV) int {
@@ -712,11 +713,11 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 		}
 		return 0
 	})
-	log.Info("sorting nodes elapsed:", "elapsed", time.Since(start11))
+	log.Info("sorting nodes finish", "elapsed", time.Since(start11))
 
 	start2 := time.Now()
 	calculateLevels(nodeKvs, 0)
-	log.Info("calculate level elapsed:", "elapsed", time.Since(start2))
+	log.Info("calculate level finish", "elapsed", time.Since(start2))
 
 	start3 := time.Now()
 	// 2. Calculate leaf node hashes concurrently
@@ -751,11 +752,11 @@ func calcSmtRoot(alloc types.GenesisAlloc) (*big.Int, error) {
 		}(i, end)
 	}
 	wg.Wait()
-	log.Info("calculate leaf hash elapsed:", "elapsed", time.Since(start3))
+	log.Info("calculate leaf hash finish", "elapsed", time.Since(start3))
 
 	start4 := time.Now()
 	root := NodeKey(calculateRoot(nodeKvs, 0, len(nodeKvs), 0))
-	log.Info("calculate root hash elapsed:", "elapsed", time.Since(start4))
+	log.Info("calculate root hash finish", "elapsed", time.Since(start4))
 
 	return root.ToBigInt(), nil
 }
@@ -765,16 +766,18 @@ func verifySMT(chainDataPath string, smtDataPath string, dbAlloc *types.GenesisA
 	log.Info("verifySMT called", "chainDataPath", chainDataPath, "smtDataPath", smtDataPath, "accounts", len(*dbAlloc))
 	smtBatchRootHashOrigin, err := getSmtBatchRootHashOrigin(chainDataPath, smtDataPath)
 	if err != nil {
+		log.Error("getSmtBatchRootHashOrigin failed", "error", err)
 		return err
 	}
-	log.Info("getSmtBatchRootHashOrigin", "smtBatchRootHashOrigin", smtBatchRootHashOrigin)
+	log.Info("getSmtBatchRootHashOrigin", "smtBatchRootHashOrigin", fmt.Sprintf("0x%s", smtBatchRootHashOrigin.Text(16)))
 
 	// Use dbAlloc directly for SMT verification
 	smtBatchRootHashRebuild, err := calcSmtRoot(*dbAlloc)
 	if err != nil {
+		log.Error("calcSmtRoot failed", "error", err)
 		return err
 	}
-	log.Info("verifySMT", "smtBatchRootHashOrigin", smtBatchRootHashOrigin, "smtBatchRootHashRebuild", smtBatchRootHashRebuild)
+	log.Info("verifySMT", "smtBatchRootHashOrigin", fmt.Sprintf("0x%s", smtBatchRootHashOrigin.Text(16)), "smtBatchRootHashRebuild", fmt.Sprintf("0x%s", smtBatchRootHashRebuild.Text(16)))
 
 	if smtBatchRootHashOrigin != nil {
 		if smtBatchRootHashOrigin.Text(16) == smtBatchRootHashRebuild.Text(16) {
@@ -787,6 +790,8 @@ func verifySMT(chainDataPath string, smtDataPath string, dbAlloc *types.GenesisA
 }
 
 func dumpGenesis(genesis *Genesis, outputPath string) {
+	start := time.Now()
+	log.Info("dumpGenesis start")
 	buf, err := sonic.MarshalIndent(genesis, "", "  ")
 	if err != nil {
 		log.Warn("Failed to marshal updated genesis", "error", err)
@@ -796,9 +801,8 @@ func dumpGenesis(genesis *Genesis, outputPath string) {
 		} else {
 			log.Info("Updated genesis written to file", "path", outputPath)
 		}
-	} else {
-		log.Info("Updated genesis not written to file, use --output-path to specify the output path")
 	}
+	log.Info("dumpGenesis finish", "elapsed", time.Since(start))
 }
 
 // SetupGenesisBlockWithMigrationData sets up the genesis block with migration data
