@@ -350,8 +350,8 @@ func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus b
 		} else {
 			trWorker.Go(func() error {
 
-				if len(acc.Storage) > 100000 {
-
+				if len(acc.Storage) > 1000000 {
+					log.Info("use stack trie for acc with large storage", "size", len(acc.Storage))
 					tr, err := cachingDB.OpenStorageStackTrie(common.Hash{}, addr, common.Hash{}, nil)
 					if err != nil {
 						return err
