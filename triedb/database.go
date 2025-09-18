@@ -18,8 +18,6 @@ package triedb
 
 import (
 	"errors"
-	"fmt"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -112,7 +110,6 @@ func NewDatabase(diskdb ethdb.Database, config *Config) *Database {
 	if config.PathDB != nil {
 		db.backend = pathdb.New(diskdb, config.PathDB, config.IsVerkle)
 	} else {
-		fmt.Printf("init hash db \n")
 		db.backend = hashdb.New(diskdb, config.HashDB)
 	}
 	return db
