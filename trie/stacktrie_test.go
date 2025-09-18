@@ -19,14 +19,49 @@ package trie
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math/big"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/trie/trienode"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/stretchr/testify/assert"
 )
+
+func TestStackTrie(t *testing.T) {
+	// Create a dummy owner from a specific address
+	dummyOwner := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")
+
+	nodeSet := trienode.NewNodeSet(dummyOwner)
+
+	// Create onTrieNode callback that adds to NodeSet
+	onTrieNode := func(path []byte, hash common.Hash, blob []byte) {
+		nodeSet.AddNode(path, trienode.New(hash, blob))
+	}
+
+	// Create StackTrie with the callback
+	st := NewStackTrie(onTrieNode)
+
+	// Insert your data
+	st.Update([]byte("key1"), []byte("value1"))
+	st.Update([]byte("key2"), []byte("value2"))
+	st.Update([]byte("key3"), []byte("value3"))
+	// ... more updates
+
+	// Hash the trie (this triggers onTrieNode for all nodes)
+	rootHash := st.Hash().String()
+	fmt.Println("rootHash:", rootHash)
+	//// Flush all nodes to database at once
+	//if err := db.Update(rootHash, common.Hash{}, nodeSet); err != nil {
+	//	return common.Hash{}, err
+	//}
+	//
+	//return rootHash, nil
+
+}
 
 func TestStackTrieInsertAndHash(t *testing.T) {
 	type KeyValueHash struct {

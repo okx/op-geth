@@ -36,7 +36,7 @@ func newEmptySecure() *StateTrie {
 }
 
 // makeTestStateTrie creates a large enough secure trie for testing.
-func makeTestStateTrie() (*testDb, *StateTrie, map[string][]byte) {
+func makeTestStateTrie() (*TestDb, *StateTrie, map[string][]byte) {
 	// Create an empty trie
 	triedb := newTestDatabase(rawdb.NewMemoryDatabase(), rawdb.HashScheme)
 	trie, _ := NewStateTrie(TrieID(types.EmptyRootHash), triedb)

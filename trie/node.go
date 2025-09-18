@@ -29,6 +29,7 @@ var indices = []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b
 
 type node interface {
 	cache() (hashNode, bool)
+	//blob() []byte
 	encode(w rlp.EncoderBuffer)
 	fstring(string) string
 }
@@ -81,6 +82,7 @@ func (n *fullNode) EncodeRLP(w io.Writer) error {
 
 // nodeFlag contains caching-related metadata about a node.
 type nodeFlag struct {
+	//blob  []byte
 	hash  hashNode // cached hash of the node (may be nil)
 	dirty bool     // whether the node has changes that must be written to the database
 }
@@ -91,6 +93,13 @@ func (n nodeFlag) copy() nodeFlag {
 		dirty: n.dirty,
 	}
 }
+
+//func (n *fullNode) blob() []byte  { return n.flags.blob }
+//func (n *shortNode) blob() []byte { return n.flags.blob }
+//func (n hashNode) blob() []byte {
+//	return n
+//}
+//func (n valueNode) blob() []byte { return n }
 
 func (n *fullNode) cache() (hashNode, bool)  { return n.flags.hash, n.flags.dirty }
 func (n *shortNode) cache() (hashNode, bool) { return n.flags.hash, n.flags.dirty }
