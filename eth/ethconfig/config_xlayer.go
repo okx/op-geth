@@ -1,10 +1,21 @@
 package ethconfig
 
-import "github.com/ethereum/go-ethereum/common"
+import (
+	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+)
 
 // XLayerConfig is the X Layer config used on the eth backend
 type XLayerConfig struct {
-	OkPay OkPayConfig `toml:",omitempty"`
+	OkPay    OkPayConfig     `toml:",omitempty"`
+	LegacyPp MigrationConfig `toml:",omitempty"` // The erigon RPC endpoint URL for pre-migration blocks
+}
+
+type MigrationConfig struct {
+	MigrationBlock *uint64       `toml:",omitempty"` // Block height threshold for migration routing
+	PPRPCUrl       string        `toml:",omitempty"` // XLayer-Erigon RPC endpoint URL
+	PPRPCTimeout   time.Duration `toml:",omitempty"` // Timeout for PP RPC calls (default: 10s)
 }
 
 type OkPayConfig struct {

@@ -47,6 +47,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/internal/syncx"
 	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
@@ -1867,6 +1868,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		if err != nil {
 			return nil, it.index, err
 		}
+		metrics.GetLogStatistics().ResetStatistics()
 
 		// If we are past Byzantium, enable prefetching to pull in trie node paths
 		// while processing transactions. Before Byzantium the prefetcher is mostly
@@ -1922,7 +1924,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		}
 		trieDiffNodes, trieBufNodes, _ := bc.triedb.Size()
 		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead)
-
+		_ = metrics.GetLogStatistics().SummaryCheckpoint()
 		// Print confirmation that a future fork is scheduled, but not yet active.
 		bc.logForkReadiness(block)
 
@@ -1975,6 +1977,20 @@ type blockProcessingResult struct {
 // processBlock executes and validates the given block. If there was no error
 // it writes the block and associated state to database.
 func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, start time.Time, setHead bool) (_ *blockProcessingResult, blockEndErr error) {
+	blockHash := block.Hash().Hex()
+	blockHeight := block.NumberU64()
+
+	// Log block insertion start
+	monitor.LogTransactionStart(
+		blockHash,
+		monitor.ServiceNameBlockchain,
+		monitor.StepBlockchainInsert.ID,
+		monitor.StepBlockchainInsert.Key,
+		blockHeight,
+		0, // block type
+		"", "", "", 0,
+	)
+
 	if bc.logger != nil && bc.logger.OnBlockStart != nil {
 		bc.logger.OnBlockStart(tracing.BlockEvent{
 			Block:     block,
@@ -1987,18 +2003,25 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 			bc.logger.OnBlockEnd(blockEndErr)
 		}()
 	}
-
 	// Process block using the parent state as reference point
 	pstart := time.Now()
 	res, err := bc.processor.Process(block, statedb, bc.vmConfig)
 	if err != nil {
+		monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainInsert.ID,
+			monitor.StepBlockchainInsert.Key, blockHeight, blockHash, block.Time(),
+			0, "failed", err.Error(), 0)
 		bc.reportBlock(block, res, err)
 		return nil, err
 	}
 	ptime := time.Since(pstart)
+	// Export to LogStatistics
+	ls := metrics.GetLogStatistics()
 
 	vstart := time.Now()
 	if err := bc.validator.ValidateState(block, statedb, res, false); err != nil {
+		monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainValidate.ID,
+			monitor.StepBlockchainValidate.Key, blockHeight, blockHash, block.Time(),
+			0, "failed", err.Error(), 0)
 		bc.reportBlock(block, res, err)
 		return nil, err
 	}
@@ -2075,6 +2098,35 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 
 	blockWriteTimer.Update(time.Since(wstart) - max(statedb.AccountCommits, statedb.StorageCommits) /* concurrent */ - statedb.SnapshotCommits - statedb.TrieDBCommits)
 	blockInsertTimer.UpdateSince(start)
+
+	// Export to LogStatistics
+	ls.CumulativeValue(metrics.BlockNumberTag, int64(block.NumberU64()))
+	ls.CumulativeValue(metrics.TxCounter, int64(block.Transactions().Len()))
+	ls.CumulativeValue(metrics.GasUsedCounter, int64(block.GasUsed()))
+	ls.CumulativeTiming(metrics.AccountReadMs, statedb.AccountReads)
+	ls.CumulativeTiming(metrics.StorageReadMs, statedb.StorageReads)
+	ls.CumulativeTiming(metrics.AccountUpdateMs, statedb.AccountUpdates)
+	ls.CumulativeTiming(metrics.StorageUpdateMs, statedb.StorageUpdates)
+	ls.CumulativeTiming(metrics.AccountHashMs, statedb.AccountHashes)
+	ls.CumulativeTiming(metrics.TrieUpdateMs, statedb.AccountUpdates+statedb.StorageUpdates)
+	ls.CumulativeTiming(metrics.EvmExecPureMs, ptime-(statedb.AccountReads+statedb.StorageReads))
+	ls.CumulativeTiming(metrics.ValidationPureMs, vtime-(triehash+trieUpdate))
+	ls.CumulativeTiming(metrics.CrossValidateMs, xvtime)
+	ls.CumulativeTiming(metrics.WriteBlockMs, time.Since(wstart))
+	ls.CumulativeTiming(metrics.AccountCommitMs, statedb.AccountCommits)
+	ls.CumulativeTiming(metrics.StorageCommitMs, statedb.StorageCommits)
+	ls.CumulativeTiming(metrics.SnapshotCommitMs, statedb.SnapshotCommits)
+	ls.CumulativeTiming(metrics.TrieDBCommitMs, statedb.TrieDBCommits)
+	ls.CumulativeTiming(metrics.TotalBuildMs, time.Since(start))
+	ls.CumulativeTiming(metrics.ExecuteMs, proctime)
+	ls.CumulativeTiming(metrics.ValidateMs, vtime-(triehash+trieUpdate))
+
+	// Update the metrics touched during block commit
+
+	// Log successful block finalization
+	monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainFinalize.ID,
+		monitor.StepBlockchainFinalize.Key, blockHeight, blockHash, block.Time(),
+		0, "finalized", "", res.GasUsed)
 
 	return &blockProcessingResult{usedGas: res.GasUsed, procTime: proctime, status: status}, nil
 }

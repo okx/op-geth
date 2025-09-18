@@ -70,6 +70,7 @@ var Defaults = Config{
 	RPCEVMTimeout:      5 * time.Second,
 	GPO:                FullNodeGPO,
 	RPCTxFeeCap:        1, // 1 ether
+	Monitor:            DefaultMonitorConfig(),
 }
 
 //go:generate go run github.com/fjl/gencodec -type Config -formats toml -out gen_config.go
@@ -201,6 +202,8 @@ type Config struct {
 
 	// For X Layer
 	XLayer XLayerConfig `toml:",omitempty"`
+	// Transaction monitoring configuration
+	Monitor MonitorConfig `toml:",omitempty"`
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain config.
