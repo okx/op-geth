@@ -247,16 +247,6 @@ func TestDebugTraceRPC(t *testing.T) {
 		log.Info("DebugTraceBlockByNumber result type: %T", traceResult)
 	})
 
-	// Test debug_traceBatchByNumber
-	t.Run("DebugTraceBlockByNumber", func(t *testing.T) {
-		// Use batch number 1 to avoid issues with empty batches
-		traceResult, err := operations.DebugTraceBlockByNumber(blockNum)
-		require.NoError(t, err)
-		require.NotNil(t, traceResult, "Trace result should not be nil")
-
-		log.Info("DebugTraceBatchByNumber result type: %T", traceResult)
-	})
-
 	// Test debug_traceTransaction
 	t.Run("DebugTraceTransaction", func(t *testing.T) {
 		blockInfo, err := operations.EthGetBlockByHash(blockHash, true)

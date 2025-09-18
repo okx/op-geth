@@ -29,18 +29,6 @@ func GetBlockNumber() (uint64, error) {
 	return transHexStringToUint64(result)
 }
 
-// func GetBatchNumber() (uint64, error) {
-// 	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "zkevm_batchNumber")
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	if response.Error != nil {
-// 		return 0, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
-// 	}
-
-// 	return transHexToUint64(response.Result)
-// }
-
 func GetEthSyncing(url string) (bool, error) {
 	if clientRPC == nil {
 		return false, fmt.Errorf("RPC client not initialized")
@@ -80,45 +68,6 @@ func GetNetVersion(url string) (uint64, error) {
 	}
 	return num, nil
 }
-
-// func GetBatchNumberByBlockNumber(l2Block *big.Int) (uint64, error) {
-// 	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "zkevm_batchNumberByBlockNumber", hex.EncodeBig(l2Block))
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	if response.Error != nil {
-// 		return 0, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
-// 	}
-// 	return transHexToUint64(response.Result)
-// }
-
-// func GetBatchSealTime(batchNum *big.Int) (uint64, error) {
-// 	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "zkevm_getBatchSealTime", hex.EncodeBig(batchNum))
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	if response.Error != nil {
-// 		return 0, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
-// 	}
-// 	return transHexToUint64(response.Result)
-// }
-
-// func GetBatchByNumber(batchNum *big.Int) (*types.Batch, error) {
-// 	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "zkevm_getBatchByNumber", hex.EncodeBig(batchNum))
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	if response.Error != nil {
-// 		return nil, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
-// 	}
-// 	result := types.Batch{}
-// 	err = json.Unmarshal(response.Result, &result)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return &result, nil
-// }
 
 func GetBlockByHash(hash common.Hash) (*types.Block, error) {
 	var result types.Block
