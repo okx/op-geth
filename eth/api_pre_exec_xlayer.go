@@ -231,12 +231,16 @@ func (api *TxPreExecAPI) TransactionPreExec(ctx context.Context, origins []PreAr
 	// this makes sure resources are cleaned up.
 	defer cancel()
 
-	for i := 0; i < len(origins); i++ {
+	for i, origin := range origins {
 		var gasUsed uint64
-		origin := origins[i]
 		log.Info("TransactionPreExec", "requestID", requestID, "input index", i, "input args", origin.ToLogString())
-		// check pre args
-		if err := preArgsCheck(state, origin); err != nil {
+
+		var prevArg *PreArgs
+		if i > 0 {
+			prevArg = &origins[i-1]
+		}
+		correctedGas, err := preArgsCheck(state, origin, prevArg, i)
+		if err != nil {
 			preError := PreError{
 				Code: CheckPreArgsErrCode,
 				Msg:  err.Error(),
@@ -244,184 +248,33 @@ func (api *TxPreExecAPI) TransactionPreExec(ctx context.Context, origins []PreAr
 			preResult := toPreResult(nil, nil, nil, preError, gasUsed, blockNumber)
 			preResList = append(preResList, preResult)
 			continue
-		}
-		// check whether sender's nonce decreases
-		if i > 0 && *origin.From == *origins[i-1].From && (uint64)(*origin.Nonce) <= (uint64)(*origins[i-1].Nonce) {
-			preError := PreError{
-				Code: CheckPreArgsErrCode,
-				Msg:  fmt.Sprintf("%v nonce decreases, tx index %d has nonce %d, tx index %d has nonce %d", origin.From.Hex(), i-1, (uint64)(*origins[i-1].Nonce), i, (uint64)(*origin.Nonce)),
-			}
-			preResult := toPreResult(nil, nil, nil, preError, gasUsed, blockNumber)
-			preResList = append(preResList, preResult)
-			continue
-		}
-		// check gas, if gas value is 0 or > 30000000, set it to 30000000
-		if origin.Gas == nil {
-			gas := uint64(MaxGasLimit)
-			origin.Gas = (*hexutil.Uint64)(&gas)
-		} else {
-			gas := uint64(*origin.Gas)
-			if gas == 0 || gas > uint64(MaxGasLimit) {
-				gas = uint64(MaxGasLimit)
-				origin.Gas = (*hexutil.Uint64)(&gas)
-			}
-		}
-		// get ChainID from ChainConfig
-		chainId := api.eth.APIBackend.ChainConfig().ChainID
-		txArgs := ethapi.TransactionArgs{
-			ChainID:              (*hexutil.Big)(chainId),
-			From:                 origin.From,
-			To:                   origin.To,
-			Gas:                  origin.Gas,
-			GasPrice:             origin.GasPrice,
-			MaxFeePerGas:         origin.MaxFeePerGas,
-			MaxPriorityFeePerGas: origin.MaxPriorityFeePerGas,
-			Value:                origin.Value,
-			Data:                 origin.Data,
-			Input:                origin.Input,
-			AuthorizationList:    origin.AuthorizationList,
 		}
 
-		if err := txArgs.CallDefaults(api.eth.APIBackend.RPCGasCap(), header.BaseFee, api.eth.APIBackend.ChainConfig().ChainID); err != nil {
-			log.Error("TransactionPreExec: tx args call defaults failed", "requestID", requestID, "input args", origin.ToLogString(), "error", err.Error())
-			preError := PreError{
-				Code: CheckPreArgsErrCode,
-				Msg:  err.Error(),
-			}
+		if correctedGas != nil {
+			origin.Gas = correctedGas
+		}
+
+		rawRes, gasUsed, receipt, err := applyMessageWithTracer(ctx, api, state, origin, header, i, timeout)
+		if err != nil {
+			log.Error("TransactionPreExec: applyMessageWithTracer failed", "requestID", requestID, "input args", origin.ToLogString(), "error", err.Error())
+			preError := toPreError(err, nil)
 			preResult := toPreResult(nil, nil, nil, preError, gasUsed, blockNumber)
 			preResList = append(preResList, preResult)
 			continue
 		}
-		msg := txArgs.ToMessage(header.BaseFee, true, true)
-		tx := txArgs.ToTransaction(types.LegacyTxType)
 
 		txHash := common.BigToHash(big.NewInt(int64(i)))
-		traceConfig := []byte(`
-			{
-				"prestateTracer": {
-					"diffMode": true
-				},
-				"callTracer": null
-			}
-		`)
 
-		txctx := &tracers.Context{
-			BlockHash:   header.Hash(),
-			BlockNumber: big.NewInt(0).Set(header.Number),
-			TxIndex:     0,
-			TxHash:      txHash,
-		}
-		tracer, err := tracers.DefaultDirectory.New("muxTracer", txctx, traceConfig, api.eth.APIBackend.ChainConfig())
+		// process tracer results into final API response
+		preRes, err := processTracerResults(rawRes, state, txHash, header, receipt, gasUsed, blockNumber)
 		if err != nil {
-			log.Error("TransactionPreExec: generate muxTracer failed", "requestID", requestID, "input args", origin.ToLogString(), "error", err.Error())
-			return nil, err
-		}
-
-		hookedState := coreState.NewHookedState(state, tracer.Hooks)
-		blockContext := core.NewEVMBlockContext(header, api.eth.BlockChain(), nil, api.eth.APIBackend.ChainConfig(), state)
-		evm := vm.NewEVM(blockContext, hookedState, api.eth.APIBackend.ChainConfig(), vm.Config{NoBaseFee: true, Tracer: tracer.Hooks})
-
-		go func() {
-			<-ctx.Done()
-			evm.Cancel()
-		}()
-		evm.Context.BaseFee = big.NewInt(0)
-		evm.Context.BlockNumber.Add(evm.Context.BlockNumber, big.NewInt(rand.Int63n(6)+6))
-		evm.Context.Time += uint64(rand.Int63n(60) + 30)
-		gp := new(core.GasPool).AddGas(MaxGasLimit)
-		state.SetTxContext(txHash, i)
-
-		receipt, err := core.ApplyTransactionWithEVM(msg, gp, state, evm.Context.BlockNumber, txctx.BlockHash, tx, &gasUsed, evm)
-		if err != nil {
-			log.Error("TransactionPreExec: core apply transaction with evm failed", "requestID", requestID, "input args", origin.ToLogString(), "error", err.Error())
+			log.Error("TransactionPreExec: processTracerResults failed", "requestID", requestID, "input args", origin.ToLogString(), "error", err.Error())
 			preError := toPreError(err, nil)
 			preResult := toPreResult(nil, nil, nil, preError, gasUsed, blockNumber)
 			preResList = append(preResList, preResult)
 			continue
 		}
-		// If the timer caused an abort, return an appropriate error message
-		if evm.Cancelled() {
-			log.Error("TransactionPreExec: evm execution aborted timeout", "requestID", requestID, "input args", origin.ToLogString())
-			preError := PreError{
-				Code: UnKnownErrCode,
-				Msg:  fmt.Sprintf("execution aborted (timeout = %v)", timeout),
-			}
-			preResult := toPreResult(nil, nil, nil, preError, gasUsed, blockNumber)
-			preResList = append(preResList, preResult)
-			continue
-		}
-		rawRes, err := tracer.GetResult()
-		if err != nil {
-			log.Error("TransactionPreExec: tracer get result failed", "requestID", requestID, "input args", origin.ToLogString(), "error", err.Error())
-			preError := toPreError(err, nil)
-			preResult := toPreResult(nil, nil, nil, preError, gasUsed, blockNumber)
-			preResList = append(preResList, preResult)
-			continue
-		}
-		var res map[string]interface{}
-		if err := json.Unmarshal(rawRes, &res); err != nil {
-			preError := toPreError(err, nil)
-			preResult := toPreResult(nil, nil, nil, preError, gasUsed, blockNumber)
-			preResList = append(preResList, preResult)
-			continue
-		}
-		// convert callTracer result to inner txs
-		innerTxs := make([]*PreExecInnerTx, 0)
-		if t, exist := res["callTracer"]; exist {
-			convertedInnerTxs, err := convertCallTracerResultToInnerTxs(t)
-			if err != nil {
-				log.Error("TransactionPreExec: convert CallTracer result to innerTxs failed", "requestID", requestID, "input args", origin.ToLogString(), "error", err.Error())
-				preError := PreError{
-					Code: UnKnownErrCode,
-					Msg:  err.Error(),
-				}
-				preResult := toPreResult(nil, nil, nil, preError, gasUsed, blockNumber)
-				preResList = append(preResList, preResult)
-				continue
-			} else {
-				// innerTxs are set only when there are deep calls (contract to contract calls) or failed calls
-				hasDeepCalls := false
-				hasFailedCalls := false
-				for _, innerTx := range convertedInnerTxs {
-					if innerTx.Dept.Int64() > 0 {
-						hasDeepCalls = true
-					}
-					if innerTx.IsError || innerTx.Error != "" {
-						hasFailedCalls = true
-					}
-				}
-				if hasDeepCalls || hasFailedCalls {
-					innerTxs = convertedInnerTxs
-				}
-			}
 
-		}
-		// convert prestateTracer result to state diff
-		stateDiff := make(map[string]interface{}, 0)
-		if t, exist := res["prestateTracer"]; exist {
-			stateDiff, err = convertPrestateTracerResultToStateDiff(t)
-			if err != nil {
-				log.Error("TransactionPreExec: convert PrestateTracer result to stateDiff failed", "requestID", requestID, "input args", origin.ToLogString(), "error", err.Error())
-				preError := PreError{
-					Code: UnKnownErrCode,
-					Msg:  err.Error(),
-				}
-				preResult := toPreResult(nil, nil, nil, preError, gasUsed, blockNumber)
-				preResList = append(preResList, preResult)
-				continue
-			}
-		}
-
-		preRes := toPreResult(innerTxs, state.GetLogs(txHash, header.Number.Uint64(), header.Hash()), stateDiff, PreError{}, gasUsed, blockNumber)
-		if receipt != nil && receipt.Status == types.ReceiptStatusFailed {
-			preRes.Error = toPreError(err, nil)
-		}
-		if preRes.Error.Msg == "" && len(innerTxs) != 0 && innerTxs[0].Error != "" {
-			preRes.Error = PreError{
-				Code: RevertedErrCode,
-				Msg:  innerTxs[0].Error,
-			}
-		}
 		preResList = append(preResList, preRes)
 		log.Info("TransactionPreExec execute finished", "requestID", requestID, "input index", i, "result", preRes.ToLogString(), "runtime", time.Since(start))
 	}
@@ -674,17 +527,173 @@ func convertPrestateTracerResultToStateDiff(traceResult interface{}) (result map
 	return
 }
 
-func preArgsCheck(state *coreState.StateDB, arg PreArgs) error {
+func applyMessageWithTracer(ctx context.Context, api *TxPreExecAPI, state *coreState.StateDB, origin PreArgs, header *types.Header, index int, timeout time.Duration) (json.RawMessage, uint64, *types.Receipt, error) {
+	// get ChainID from ChainConfig
+	chainId := api.eth.APIBackend.ChainConfig().ChainID
+	txArgs := ethapi.TransactionArgs{
+		ChainID:              (*hexutil.Big)(chainId),
+		From:                 origin.From,
+		To:                   origin.To,
+		Gas:                  origin.Gas,
+		GasPrice:             origin.GasPrice,
+		MaxFeePerGas:         origin.MaxFeePerGas,
+		MaxPriorityFeePerGas: origin.MaxPriorityFeePerGas,
+		Value:                origin.Value,
+		Data:                 origin.Data,
+		Input:                origin.Input,
+		AuthorizationList:    origin.AuthorizationList,
+	}
+
+	if err := txArgs.CallDefaults(api.eth.APIBackend.RPCGasCap(), header.BaseFee, api.eth.APIBackend.ChainConfig().ChainID); err != nil {
+		return nil, 0, nil, err
+	}
+
+	msg := txArgs.ToMessage(header.BaseFee, true, true)
+	tx := txArgs.ToTransaction(types.LegacyTxType)
+
+	txHash := common.BigToHash(big.NewInt(int64(index)))
+	traceConfig := []byte(`
+		{
+			"prestateTracer": {
+				"diffMode": true
+			},
+			"callTracer": null
+		}
+	`)
+
+	txctx := &tracers.Context{
+		BlockHash:   header.Hash(),
+		BlockNumber: big.NewInt(0).Set(header.Number),
+		TxIndex:     0,
+		TxHash:      txHash,
+	}
+	tracer, err := tracers.DefaultDirectory.New("muxTracer", txctx, traceConfig, api.eth.APIBackend.ChainConfig())
+	if err != nil {
+		return nil, 0, nil, err
+	}
+
+	hookedState := coreState.NewHookedState(state, tracer.Hooks)
+	blockContext := core.NewEVMBlockContext(header, api.eth.BlockChain(), nil, api.eth.APIBackend.ChainConfig(), state)
+	evm := vm.NewEVM(blockContext, hookedState, api.eth.APIBackend.ChainConfig(), vm.Config{NoBaseFee: true, Tracer: tracer.Hooks})
+
+	// Setup timeout context
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	go func() {
+		<-timeoutCtx.Done()
+		evm.Cancel()
+	}()
+
+	evm.Context.BaseFee = big.NewInt(0)
+	evm.Context.BlockNumber.Add(evm.Context.BlockNumber, big.NewInt(rand.Int63n(6)+6))
+	evm.Context.Time += uint64(rand.Int63n(60) + 30)
+	gp := new(core.GasPool).AddGas(MaxGasLimit)
+	state.SetTxContext(txHash, index)
+
+	var gasUsed uint64
+	receipt, err := core.ApplyTransactionWithEVM(msg, gp, state, evm.Context.BlockNumber, txctx.BlockHash, tx, &gasUsed, evm)
+	if err != nil {
+		return nil, gasUsed, nil, err
+	}
+
+	// If the timer caused an abort, return an appropriate error message
+	if evm.Cancelled() {
+		return nil, gasUsed, nil, fmt.Errorf("execution aborted (timeout = %v)", timeout)
+	}
+
+	rawRes, err := tracer.GetResult()
+	if err != nil {
+		return nil, gasUsed, nil, err
+	}
+
+	return rawRes, gasUsed, receipt, nil
+}
+
+func processTracerResults(rawRes json.RawMessage, state *coreState.StateDB, txHash common.Hash, header *types.Header, receipt *types.Receipt, gasUsed uint64, blockNumber *big.Int) (PreResult, error) {
+	var res map[string]interface{}
+	if err := json.Unmarshal(rawRes, &res); err != nil {
+		preError := toPreError(err, nil)
+		return toPreResult(nil, nil, nil, preError, gasUsed, blockNumber), nil
+	}
+
+	// convert callTracer result to inner txs
+	innerTxs := make([]*PreExecInnerTx, 0)
+	if t, exist := res["callTracer"]; exist {
+		convertedInnerTxs, err := convertCallTracerResultToInnerTxs(t)
+		if err != nil {
+			preError := PreError{
+				Code: UnKnownErrCode,
+				Msg:  err.Error(),
+			}
+			return toPreResult(nil, nil, nil, preError, gasUsed, blockNumber), nil
+		}
+		// innerTxs are set only when there are deep calls (contract to contract calls) or failed calls
+		hasDeepCalls := false
+		hasFailedCalls := false
+		for _, innerTx := range convertedInnerTxs {
+			if innerTx.Dept.Int64() > 0 {
+				hasDeepCalls = true
+			}
+			if innerTx.IsError || innerTx.Error != "" {
+				hasFailedCalls = true
+			}
+		}
+		if hasDeepCalls || hasFailedCalls {
+			innerTxs = convertedInnerTxs
+		}
+	}
+
+	// convert prestateTracer result to state diff
+	stateDiff := make(map[string]interface{}, 0)
+	if t, exist := res["prestateTracer"]; exist {
+		var err error
+		stateDiff, err = convertPrestateTracerResultToStateDiff(t)
+		if err != nil {
+			preError := PreError{
+				Code: UnKnownErrCode,
+				Msg:  err.Error(),
+			}
+			return toPreResult(nil, nil, nil, preError, gasUsed, blockNumber), nil
+		}
+	}
+
+	// Create the final result
+	preRes := toPreResult(innerTxs, state.GetLogs(txHash, header.Number.Uint64(), header.Hash()), stateDiff, PreError{}, gasUsed, blockNumber)
+
+	// Handle receipt status failures
+	if receipt != nil && receipt.Status == types.ReceiptStatusFailed {
+		preRes.Error = toPreError(nil, nil)
+	}
+
+	// Handle inner transaction errors
+	if preRes.Error.Msg == "" && len(innerTxs) != 0 && innerTxs[0].Error != "" {
+		preRes.Error = PreError{
+			Code: RevertedErrCode,
+			Msg:  innerTxs[0].Error,
+		}
+	}
+
+	return preRes, nil
+}
+
+func preArgsCheck(state *coreState.StateDB, arg PreArgs, prevArg *PreArgs, index int) (*hexutil.Uint64, error) {
 	if arg.From == nil {
-		return fmt.Errorf("from is nil")
+		return nil, fmt.Errorf("from is nil")
 	}
 
 	if arg.To == nil {
-		return fmt.Errorf("to is nil")
+		return nil, fmt.Errorf("to is nil")
 	}
 
 	if arg.Nonce == nil {
-		return fmt.Errorf("%s, nonce is nil", arg.From.Hex())
+		return nil, fmt.Errorf("%s, nonce is nil", arg.From.Hex())
+	}
+
+	// check whether sender's nonce decreases
+	if prevArg != nil && *arg.From == *prevArg.From && (uint64)(*arg.Nonce) <= (uint64)(*prevArg.Nonce) {
+		return nil, fmt.Errorf("%v nonce decreases, tx index %d has nonce %d, tx index %d has nonce %d",
+			arg.From.Hex(), index-1, (uint64)(*prevArg.Nonce), index, (uint64)(*arg.Nonce))
 	}
 
 	msgFrom := *arg.From
@@ -692,12 +701,24 @@ func preArgsCheck(state *coreState.StateDB, arg PreArgs) error {
 	stNonce := state.GetNonce(msgFrom)
 
 	if stNonce > msgNonce {
-		return fmt.Errorf("%w: address %v, tx: %d state: %d", core.ErrNonceTooLow,
+		return nil, fmt.Errorf("%w: address %v, tx: %d state: %d", core.ErrNonceTooLow,
 			msgFrom.Hex(), msgNonce, stNonce)
 	} else if stNonce+1 < stNonce {
-		return fmt.Errorf("%w: address %v, nonce: %d", core.ErrNonceMax,
+		return nil, fmt.Errorf("%w: address %v, nonce: %d", core.ErrNonceMax,
 			msgFrom.Hex(), stNonce)
 	}
 
-	return nil
+	// check gas, if gas value is 0 or > 30000000, return corrected gas value
+	if arg.Gas == nil {
+		gas := uint64(MaxGasLimit)
+		return (*hexutil.Uint64)(&gas), nil
+	} else {
+		gas := uint64(*arg.Gas)
+		if gas == 0 || gas > uint64(MaxGasLimit) {
+			gas = uint64(MaxGasLimit)
+			return (*hexutil.Uint64)(&gas), nil
+		}
+	}
+
+	return nil, nil
 }
