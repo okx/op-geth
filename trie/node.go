@@ -81,7 +81,6 @@ func (n *fullNode) EncodeRLP(w io.Writer) error {
 
 // nodeFlag contains caching-related metadata about a node.
 type nodeFlag struct {
-	//blob  []byte
 	hash  hashNode // cached hash of the node (may be nil)
 	dirty bool     // whether the node has changes that must be written to the database
 }
