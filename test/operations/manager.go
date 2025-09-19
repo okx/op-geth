@@ -21,8 +21,8 @@ const (
 	DefaultL1AdminAddress           = "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"
 	DefaultL1AdminPrivateKey        = "0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2"
 
-	DefaultL2NetworkURL        = "http://localhost:8123"
-	DefaultL2SeqURL            = "http://localhost:8124"
+	DefaultL2NetworkURL        = "http://localhost:8124"
+	DefaultL2SeqURL            = "http://localhost:8123"
 	DefaultL2ChainID    uint64 = 195
 
 	DefaultL2MetricsPrometheusURL = "http://127.0.0.1:9092/debug/metrics/prometheus"
