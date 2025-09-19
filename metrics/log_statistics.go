@@ -49,8 +49,10 @@ const (
 	ProposePrepareMs
 	ProposeSelectBuildMs
 	ProposeExecTxMs
-	ProposeRequestsMs
+	ProposePragueMs
 	ProposeAssembleMs
+	ProposeForcedInclusionMs
+	ProposeFetchTxMs
 )
 
 // Statistics exposes accumulation helpers and summary output.
@@ -213,10 +215,11 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 func (l *statisticsInstance) ProposeCheckpoint() string {
 	total := l.durations[ProposeTotalMs]
 	prep := l.durations[ProposePrepareMs]
-	selectBuild := l.durations[ProposeSelectBuildMs]
 	execTx := l.durations[ProposeExecTxMs]
-	requests := l.durations[ProposeRequestsMs]
+	pragueMs := l.durations[ProposePragueMs]
 	assemble := l.durations[ProposeAssembleMs]
+
+	fetchTx := l.durations[ProposeFetchTxMs]
 
 	block := l.counters[BlockNumberTag]
 	tx := l.counters[TxCounter]
@@ -233,15 +236,15 @@ func (l *statisticsInstance) ProposeCheckpoint() string {
 	triedbCommit := l.durations[TrieDBCommitMs]
 
 	line := fmt.Sprintf(
-		"ProposeBlock<%d>, Txs<%d>, GasUsed<%d> BlockTime<total[%s]> { prepare[%s], selectBuild[%s], execTx[%s], requests[%s], assemble[%s] } State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s] } Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] }",
+		"ProposeBlock<%d>, Txs<%d>, GasUsed<%d> BlockTime<[%s]> { Exec { Prepare[%s], FetchTx[%s], execute[%s], Prague[%s], assemble[%s] } , State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
 		block,
 		tx,
 		gasUsed,
 		common.PrettyDuration(total),
 		common.PrettyDuration(prep),
-		common.PrettyDuration(selectBuild),
+		common.PrettyDuration(fetchTx),
 		common.PrettyDuration(execTx),
-		common.PrettyDuration(requests),
+		common.PrettyDuration(pragueMs),
 		common.PrettyDuration(assemble),
 		common.PrettyDuration(accRead),
 		common.PrettyDuration(storRead),
