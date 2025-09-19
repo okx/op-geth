@@ -350,38 +350,17 @@ func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus b
 		} else {
 			trWorker.Go(func() error {
 
-				if len(acc.Storage) > 1000000 {
-					log.Info("use stack trie for acc with large storage", "size", len(acc.Storage))
-					tr, err := cachingDB.OpenStorageStackTrie(common.Hash{}, addr, common.Hash{}, nil)
-					if err != nil {
-						return err
-					}
+				log.Info("use stack trie for acc with large storage", "size", len(acc.Storage))
+				tr, err := cachingDB.OpenStorageStackTrie(common.Hash{}, addr, common.Hash{}, nil)
+				if err != nil {
+					return err
+				}
 
-					root, nodes, err := tr.UpdateStorageBatch(addr, acc.Storage)
-					sa.Root = root
-					nodesChan <- &nodes
-					if len(nodes.Nodes) > 100_0000 {
-						log.Info("large trie", "addr", addr, "root", root, "nodes num", len(nodes.Nodes))
-					}
-				} else {
-					tr, err := cachingDB.OpenStorageTrie(common.Hash{}, addr, common.Hash{}, nil)
-					if err != nil {
-						return err
-					}
-
-					for k, v := range acc.Storage {
-						err = tr.UpdateStorage(addr, k[:], common.TrimLeftZeroes(v[:]))
-						if err != nil {
-							return err
-						}
-					}
-
-					root, nodes := tr.Commit(true)
-					sa.Root = root
-					nodesChan <- nodes
-					if len(nodes.Nodes) > 100_0000 {
-						log.Info("large trie", "addr", addr, "root", root, "nodes num", len(nodes.Nodes))
-					}
+				root, nodes, err := tr.UpdateStorageBatch(addr, acc.Storage)
+				sa.Root = root
+				nodesChan <- &nodes
+				if len(nodes.Nodes) > 100_0000 {
+					log.Info("large trie", "addr", addr, "root", root, "nodes num", len(nodes.Nodes))
 				}
 
 				return nil

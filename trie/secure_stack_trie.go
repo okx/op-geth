@@ -120,31 +120,34 @@ func (t *StateStackTrie) hashKey(key []byte) []byte {
 	return t.hashKeyBuf[:]
 }
 
+type KeyHashPair struct {
+	HashKey   [32]byte
+	EncodeVal [32]byte
+}
+
 func (t *StateStackTrie) UpdateStorageBatch(_ common.Address, storage map[common.Hash]common.Hash) (common.Hash, trienode.NodeSet, error) {
+	keyHashPairs := make([]KeyHashPair, 0, len(storage))
 
-	rawStorage := make(map[[32]byte][]byte, len(storage))
-
-	hashKeys := make([][32]byte, 0, len(storage))
-	for k, v := range storage {
-
+	for k, val := range storage {
+		encodeV, _ := rlp.EncodeToBytes(common.TrimLeftZeroes(val[:]))
 		hk := t.hashKey(k[:])
-		v, _ := rlp.EncodeToBytes(common.TrimLeftZeroes(v[:]))
+		tmpHashKey := [32]byte{}
+		copy(tmpHashKey[:], hk)
 
-		rawHashKey := [32]byte{}
-		copy(rawHashKey[:], hk[:32])
-
-		rawStorage[rawHashKey] = v
-
-		hashKeys = append(hashKeys, rawHashKey)
-
+		tmpEncVal := [32]byte{}
+		copy(tmpEncVal[:], encodeV)
+		keyHashPairs = append(keyHashPairs, KeyHashPair{
+			HashKey:   tmpHashKey,
+			EncodeVal: tmpEncVal,
+		})
 	}
 
-	sort.Slice(hashKeys, func(i, j int) bool {
-		return bytes.Compare(hashKeys[i][:], hashKeys[j][:]) < 0
+	sort.Slice(keyHashPairs, func(i, j int) bool {
+		return bytes.Compare(keyHashPairs[i].HashKey[:], keyHashPairs[j].HashKey[:]) < 0
 	})
 
-	for _, key := range hashKeys {
-		if err := t.trie.Update(key[:], rawStorage[key]); err != nil {
+	for _, pair := range keyHashPairs {
+		if err := t.trie.Update(pair.HashKey[:], pair.EncodeVal[:]); err != nil {
 			panic(err)
 		}
 	}
