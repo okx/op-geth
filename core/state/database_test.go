@@ -6,22 +6,80 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/ethereum/go-ethereum/triedb/hashdb"
+	"github.com/stretchr/testify/assert"
+	"math/rand"
 	"testing"
 )
+
+func generateRandomKeyValuePairs(n int) map[common.Hash]common.Hash {
+	result := make(map[common.Hash]common.Hash, n)
+
+	for i := 0; i < n; i++ {
+		var key common.Hash
+		rand.Read(key[:])
+
+		var value common.Hash
+		rand.Read(value[:])
+
+		result[key] = value
+	}
+
+	return result
+}
+
+func TestStackTrieCompatibility(t *testing.T) {
+	config := &triedb.Config{
+		Preimages: false,
+		IsVerkle:  false,
+		HashDB:    hashdb.Defaults,
+	}
+
+	storage := generateRandomKeyValuePairs(1000)
+	owner := common.HexToHash("0x1234567890123456789012345678901234567890123456789012345678901234")
+	addr := common.Address(owner[:20])
+
+	triedbWrite := triedb.NewDatabase(rawdb.NewMemoryDatabase(), config)
+	cachingDB := NewDatabase(triedbWrite, nil)
+	tr, err := cachingDB.OpenStorageStackTrie(common.Hash{}, addr, common.Hash{}, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	root, _, err := tr.UpdateStorageBatch(addr, storage)
+	if err != nil {
+		panic(err)
+	}
+
+	regularTriedbWrite := triedb.NewDatabase(rawdb.NewMemoryDatabase(), config)
+	cachingRegularDB := NewDatabase(regularTriedbWrite, nil)
+	regularTrie, err := cachingRegularDB.OpenStorageTrie(common.Hash{}, addr, common.Hash{}, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	for key, v := range storage {
+		err = regularTrie.UpdateStorage(addr, key[:], common.TrimLeftZeroes(v[:]))
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	regularTrieRootHash, _ := regularTrie.Commit(true)
+	assert.Equal(t, regularTrieRootHash, root)
+}
 
 // goos: darwin
 // goarch: arm64
 // pkg: github.com/ethereum/go-ethereum/core/state
 // cpu: Apple M2 Max
-// BenchmarkStackTrieInsertion
 // BenchmarkStackTrieInsertion/Size_1000
-// BenchmarkStackTrieInsertion/Size_1000-12         	     736	   1655859 ns/op	  607383 B/op	    9131 allocs/op
+// BenchmarkStackTrieInsertion/Size_1000-12         	     739	   1617923 ns/op	  582738 B/op	    9122 allocs/op
 // BenchmarkStackTrieInsertion/Size_10000
-// BenchmarkStackTrieInsertion/Size_10000-12        	      69	  16987653 ns/op	 5987054 B/op	   91794 allocs/op
+// BenchmarkStackTrieInsertion/Size_10000-12        	      70	  16953160 ns/op	 5805821 B/op	   92059 allocs/op
 // BenchmarkStackTrieInsertion/Size_100000
-// BenchmarkStackTrieInsertion/Size_100000-12       	       6	 175602243 ns/op	63707266 B/op	  916970 allocs/op
+// BenchmarkStackTrieInsertion/Size_100000-12       	       6	 177203236 ns/op	61306298 B/op	  917144 allocs/op
 // BenchmarkStackTrieInsertion/Size_1000000
-// BenchmarkStackTrieInsertion/Size_1000000-12      	       1	1932725916 ns/op	606781832 B/op	 9085183 allocs/op
+// BenchmarkStackTrieInsertion/Size_1000000-12      	       1	1964037625 ns/op	582744808 B/op	 9085699 allocs/op
 func BenchmarkStackTrieInsertion(b *testing.B) {
 	config := &triedb.Config{
 		Preimages: false,
@@ -63,15 +121,14 @@ func BenchmarkStackTrieInsertion(b *testing.B) {
 // goarch: arm64
 // pkg: github.com/ethereum/go-ethereum/core/state
 // cpu: Apple M2 Max
-// BenchmarkRegularTrieInsertion
-// BenchmarkRegularTrieInsertion/Size_1000
-// BenchmarkRegularTrieInsertion/Size_1000-12         	     496	   2471376 ns/op	 2085254 B/op	   27792 allocs/op
-// BenchmarkRegularTrieInsertion/Size_10000
-// BenchmarkRegularTrieInsertion/Size_10000-12        	      62	  18114384 ns/op	20124467 B/op	  275523 allocs/op
-// BenchmarkRegularTrieInsertion/Size_100000
-// BenchmarkRegularTrieInsertion/Size_100000-12       	       6	 179106090 ns/op	207246184 B/op	 2741874 allocs/op
-// BenchmarkRegularTrieInsertion/Size_1000000
-// BenchmarkRegularTrieInsertion/Size_1000000-12      	       1	2398303500 ns/op	2098971800 B/op	27043820 allocs/op
+//BenchmarkRegularTrieInsertion/Size_1000
+//BenchmarkRegularTrieInsertion/Size_1000-12         	     482	   2429196 ns/op	 2080139 B/op	   27682 allocs/op
+//BenchmarkRegularTrieInsertion/Size_10000
+//BenchmarkRegularTrieInsertion/Size_10000-12        	      70	  16680217 ns/op	20157853 B/op	  275211 allocs/op
+//BenchmarkRegularTrieInsertion/Size_100000
+//BenchmarkRegularTrieInsertion/Size_100000-12       	       6	 180554403 ns/op	207196216 B/op	 2741910 allocs/op
+//BenchmarkRegularTrieInsertion/Size_1000000                    						
+//BenchmarkRegularTrieInsertion/Size_1000000-12      	       1	2423703250 ns/op	2099059016 B/op	27041567 allocs/op
 func BenchmarkRegularTrieInsertion(b *testing.B) {
 	config := &triedb.Config{
 		Preimages: false,

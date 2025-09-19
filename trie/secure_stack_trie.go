@@ -122,7 +122,7 @@ func (t *StateStackTrie) hashKey(key []byte) []byte {
 
 type KeyHashPair struct {
 	HashKey   [32]byte
-	EncodeVal [32]byte
+	EncodeVal []byte
 }
 
 func (t *StateStackTrie) UpdateStorageBatch(_ common.Address, storage map[common.Hash]common.Hash) (common.Hash, trienode.NodeSet, error) {
@@ -134,11 +134,12 @@ func (t *StateStackTrie) UpdateStorageBatch(_ common.Address, storage map[common
 		tmpHashKey := [32]byte{}
 		copy(tmpHashKey[:], hk)
 
-		tmpEncVal := [32]byte{}
+		tmpEncVal := make([]byte, len(encodeV))
 		copy(tmpEncVal[:], encodeV)
+
 		keyHashPairs = append(keyHashPairs, KeyHashPair{
 			HashKey:   tmpHashKey,
-			EncodeVal: tmpEncVal,
+			EncodeVal: tmpEncVal[:],
 		})
 	}
 
