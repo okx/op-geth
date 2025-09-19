@@ -283,6 +283,14 @@ type BlockChain struct {
 	logger     *tracing.Hooks
 
 	lastForkReadyAlert time.Time // Last time there was a fork readiness print out
+
+	// payloadCache caches block execution results from miner
+	payloadCache *PayloadCache
+}
+
+// SetPayloadCache sets the payload cache for the blockchain
+func (bc *BlockChain) SetPayloadCache(cache *PayloadCache) {
+	bc.payloadCache = cache
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -2002,17 +2010,50 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 			bc.logger.OnBlockEnd(blockEndErr)
 		}()
 	}
-	// Process block using the parent state as reference point
+	// Try to use cached payload result first
+	var res *ProcessResult
+	var err error
+	var cachedState *state.StateDB
+	var ptime time.Duration
 	pstart := time.Now()
-	res, err := bc.processor.Process(block, statedb, bc.vmConfig)
-	if err != nil {
-		monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainInsert.ID,
-			monitor.StepBlockchainInsert.Key, blockHeight, blockHash, block.Time(),
-			0, "failed", err.Error(), 0)
-		bc.reportBlock(block, res, err)
-		return nil, err
+
+	if bc.payloadCache != nil {
+		if cached, ok := bc.payloadCache.Get(block.Hash()); ok {
+			// Use cached result
+			res = cached.ProcessResult
+			copyStart := time.Now()
+			cachedState = CopyStateDB(cached.StateDB)
+			copyTime := time.Since(copyStart)
+			ptime = time.Since(pstart)
+
+			// Update metrics
+			metrics.PayloadCacheTimeSavedTimer.Update(ptime)
+			metrics.PayloadCacheCopyTimeTimer.Update(copyTime)
+
+			log.Debug("Using cached payload result",
+				"block", block.NumberU64(),
+				"hash", block.Hash(),
+				"saved_time", ptime,
+				"copy_time", copyTime)
+		}
 	}
-	ptime := time.Since(pstart)
+
+	// If not cached, process normally
+	if res == nil {
+		res, err = bc.processor.Process(block, statedb, bc.vmConfig)
+		if err != nil {
+			monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainInsert.ID,
+				monitor.StepBlockchainInsert.Key, blockHeight, blockHash, block.Time(),
+				0, "failed", err.Error(), 0)
+			bc.reportBlock(block, res, err)
+			return nil, err
+		}
+		ptime = time.Since(pstart)
+	} else {
+		// Use cached state instead of the original statedb
+		statedb = cachedState
+	}
+	ptime = time.Since(pstart)
 	// Export to a fresh LogStatistics instance (no global singleton)
 	ls := metrics.NewLogStatistics()
 

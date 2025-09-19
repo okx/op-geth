@@ -78,6 +78,11 @@ type Config struct {
 	OkPayBlockPriorityTxsLimit uint64           `toml:",omitempty"`
 
 	InterceptConfig *OldBridgeInterceptConfig
+
+	// Payload cache configuration
+	EnablePayloadCache bool          `toml:",omitempty"` // Enable payload cache to avoid re-execution
+	PayloadCacheSize   int           `toml:",omitempty"` // Max number of cached payloads (default 20)
+	PayloadCacheTTL    time.Duration `toml:",omitempty"` // Time-to-live for cached entries (default 30s)
 }
 
 // DefaultConfig contains default settings for miner.
@@ -96,6 +101,11 @@ var DefaultConfig = Config{
 		BridgeContractAddress: "0x4B24266C13AFEf2bb60e2C69A4C08A482d81e3CA",
 		TargetTokenAddress:    "0x5FbDB2315678afecb367f032d93F642f64180aa3",
 	},
+
+	// Payload cache defaults
+	EnablePayloadCache: false,            // Enable by default
+	PayloadCacheSize:   20,               // Cache up to 20 payloads
+	PayloadCacheTTL:    30 * time.Second, // 30 seconds TTL
 }
 
 // Miner is the main object which takes care of submitting new work to consensus
@@ -116,13 +126,15 @@ type Miner struct {
 	lifeCtxCancel context.CancelFunc
 	lifeCtx       context.Context
 
+	// payloadCache caches block execution results
+	payloadCache *core.PayloadCache
 	// (stats are passed per-call; no miner-level statistics field)
 }
 
 // New creates a new miner with provided config.
 func New(eth Backend, config Config, engine consensus.Engine) *Miner {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Miner{
+	miner := &Miner{
 		backend:     eth,
 		config:      &config,
 		chainConfig: eth.BlockChain().Config(),
@@ -134,6 +146,32 @@ func New(eth Backend, config Config, engine consensus.Engine) *Miner {
 		lifeCtxCancel: cancel,
 		lifeCtx:       ctx,
 	}
+
+	// Initialize payload cache based on configuration
+	if config.EnablePayloadCache {
+		cacheConfig := &core.PayloadCacheConfig{
+			Size: config.PayloadCacheSize,
+			TTL:  config.PayloadCacheTTL,
+		}
+		// Use defaults if not specified
+		if cacheConfig.Size == 0 {
+			cacheConfig.Size = 20
+		}
+		if cacheConfig.TTL == 0 {
+			cacheConfig.TTL = 30 * time.Second
+		}
+		miner.payloadCache = core.NewPayloadCache(cacheConfig)
+		log.Info("Payload cache enabled", "size", cacheConfig.Size, "ttl", cacheConfig.TTL)
+	} else {
+		log.Info("Payload cache disabled")
+	}
+
+	return miner
+}
+
+// PayloadCache returns the miner's payload cache
+func (miner *Miner) PayloadCache() *core.PayloadCache {
+	return miner.payloadCache
 }
 
 // Pending returns the currently pending block and associated receipts, logs
