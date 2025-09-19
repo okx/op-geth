@@ -2015,6 +2015,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	var err error
 	var cachedState *state.StateDB
 	var ptime time.Duration
+	var cacheHit bool
 	pstart := time.Now()
 
 	if bc.payloadCache != nil {
@@ -2025,12 +2026,14 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 			cachedState = CopyStateDB(cached.StateDB)
 			copyTime := time.Since(copyStart)
 			ptime = time.Since(pstart)
+			cacheHit = true
 
 			// Update metrics
 			metrics.PayloadCacheTimeSavedTimer.Update(ptime)
 			metrics.PayloadCacheCopyTimeTimer.Update(copyTime)
 
-			log.Debug("Using cached payload result",
+			log.Info("Using cached payload result",
+				"cache", true,
 				"block", block.NumberU64(),
 				"hash", block.Hash(),
 				"saved_time", ptime,
@@ -2049,6 +2052,11 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 			return nil, err
 		}
 		ptime = time.Since(pstart)
+		log.Debug("Processed block without cache",
+			"cache", false,
+			"block", block.NumberU64(),
+			"hash", block.Hash(),
+			"process_time", ptime)
 	} else {
 		// Use cached state instead of the original statedb
 		statedb = cachedState
@@ -2056,6 +2064,11 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	ptime = time.Since(pstart)
 	// Export to a fresh LogStatistics instance (no global singleton)
 	ls := metrics.NewLogStatistics()
+
+	// Record cache hit status
+	if cacheHit {
+		ls.CumulativeValue(metrics.PayloadCacheHitCounter, 1)
+	}
 
 	vstart := time.Now()
 	if err := bc.validator.ValidateState(block, statedb, res, false); err != nil {

@@ -18,6 +18,7 @@ const (
 	// Counters (per-block)
 	TxCounter
 	GasUsedCounter
+	PayloadCacheHitCounter
 
 	// Timings (per-block)
 	TotalBuildMs
@@ -147,6 +148,8 @@ func (l *statisticsInstance) CombinedSummary(pstat Statistics) string {
 	// Insert (this instance)
 	tx := l.counters[TxCounter]
 	gasUsed := l.counters[GasUsedCounter]
+	cacheHit := l.counters[PayloadCacheHitCounter]
+
 	exec := l.durations[ExecuteMs]
 	validate := l.durations[ValidateMs]
 	xvalidate := l.durations[CrossValidateMs]
@@ -164,6 +167,10 @@ func (l *statisticsInstance) CombinedSummary(pstat Statistics) string {
 	snapCommit := l.durations[SnapshotCommitMs]
 	triedbCommit := l.durations[TrieDBCommitMs]
 
+	cacheStatus := "false"
+	if cacheHit > 0 {
+		cacheStatus = "true"
+	}
 	// Propose (access propose stats directly, no copy)
 	var pTotal, pPrepare, pExec, pPrague, pAssemble time.Duration
 	var pAccRead, pStorRead, pAccUpdate, pStorUpdate, pAccHash time.Duration
@@ -181,10 +188,11 @@ func (l *statisticsInstance) CombinedSummary(pstat Statistics) string {
 	}
 
 	line := fmt.Sprintf(
-		"Block<%d>, Txs<%d> GasUsed<%d>, BlockTime<%s> { Propose[%s] { Prepare[%s], execute[%s], Prague[%s], assemble[%s] , State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s] } }, Insert[%s] { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] , Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
+		"Block<%d>, Txs<%d> GasUsed<%d>, Cache<%s>, ,BlockTime<%s> { Propose[%s] { Prepare[%s], execute[%s], Prague[%s], assemble[%s] , State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s] } }, Insert[%s] { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] , Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
 		block,
 		tx,
 		gasUsed,
+		cacheStatus,
 		common.PrettyDuration(blockDuration+pTotal),
 		common.PrettyDuration(pTotal),
 		common.PrettyDuration(pPrepare),
