@@ -254,7 +254,8 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 
 	//
 	proposeStats.ProposeCheckpoint()
-	return &newPayloadResult{
+
+	result := &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),
 		sidecars: work.sidecars,
@@ -263,6 +264,31 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		requests: requests,
 		witness:  work.witness,
 	}
+
+	// Cache the payload execution result if enabled
+	if miner.config.EnablePayloadCache && miner.payloadCache != nil && result.block != nil {
+		cached := &core.CachedPayloadResult{
+			ProcessResult: &core.ProcessResult{
+				Receipts: work.receipts,
+				Requests: requests,
+				Logs:     allLogs,
+				GasUsed:  block.GasUsed(),
+			},
+			StateDB:     work.state,
+			BlockHash:   block.Hash(),
+			BlockNumber: block.Number(),
+			ParentHash:  block.ParentHash(),
+			Sidecars:    work.sidecars,
+			Witness:     work.witness,
+		}
+		miner.payloadCache.Add(block.Hash(), cached)
+		log.Debug("Cached payload execution result",
+			"hash", block.Hash(),
+			"number", block.NumberU64(),
+			"parent", block.ParentHash())
+	}
+
+	return result
 }
 
 // prepareWork constructs the sealing task according to the given parameters,

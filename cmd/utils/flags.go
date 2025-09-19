@@ -597,6 +597,24 @@ var (
 		Usage:    "0x prefixed public address for the pending block producer (not used for actual block production)",
 		Category: flags.MinerCategory,
 	}
+	MinerEnablePayloadCacheFlag = &cli.BoolFlag{
+		Name:     "miner.enablepayloadcache",
+		Usage:    "Enable payload cache to avoid re-execution of transactions",
+		Value:    ethconfig.Defaults.Miner.EnablePayloadCache,
+		Category: flags.MinerCategory,
+	}
+	MinerPayloadCacheSizeFlag = &cli.IntFlag{
+		Name:     "miner.payloadcachesize",
+		Usage:    "Maximum number of payloads to cache",
+		Value:    ethconfig.Defaults.Miner.PayloadCacheSize,
+		Category: flags.MinerCategory,
+	}
+	MinerPayloadCacheTTLFlag = &cli.DurationFlag{
+		Name:     "miner.payloadcachettl",
+		Usage:    "Time-to-live for cached payload entries",
+		Value:    ethconfig.Defaults.Miner.PayloadCacheTTL,
+		Category: flags.MinerCategory,
+	}
 
 	// Account settings
 	PasswordFileFlag = &cli.PathFlag{
@@ -1719,6 +1737,16 @@ func setMiner(ctx *cli.Context, cfg *miner.Config) {
 	}
 	if ctx.IsSet(RollupComputePendingBlock.Name) {
 		cfg.RollupComputePendingBlock = ctx.Bool(RollupComputePendingBlock.Name)
+	}
+	// Payload cache flags
+	if ctx.IsSet(MinerEnablePayloadCacheFlag.Name) {
+		cfg.EnablePayloadCache = ctx.Bool(MinerEnablePayloadCacheFlag.Name)
+	}
+	if ctx.IsSet(MinerPayloadCacheSizeFlag.Name) {
+		cfg.PayloadCacheSize = ctx.Int(MinerPayloadCacheSizeFlag.Name)
+	}
+	if ctx.IsSet(MinerPayloadCacheTTLFlag.Name) {
+		cfg.PayloadCacheTTL = ctx.Duration(MinerPayloadCacheTTLFlag.Name)
 	}
 }
 

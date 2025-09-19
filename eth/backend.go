@@ -370,6 +370,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 	eth.miner.SetPrioAddresses(config.TxPool.Locals)
 
+	// Connect the payload cache between miner and blockchain
+	if eth.miner.PayloadCache() != nil {
+		eth.blockchain.SetPayloadCache(eth.miner.PayloadCache())
+		log.Info("Connected payload cache between miner and blockchain")
+	}
+
 	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, config.RollupDisableTxPoolAdmission, eth, nil}
 	if eth.APIBackend.allowUnprotectedTxs {
 		log.Info("Unprotected transactions allowed")
