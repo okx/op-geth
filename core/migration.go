@@ -62,6 +62,8 @@ const (
 	CodeBucket       = "Code"
 )
 
+var ERIGON_SCALABLE_ADDRESS = common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+
 // Empty code hash constant
 var EmptyCodeHash = common.Hash{}
 
@@ -299,8 +301,17 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 	start := time.Now()
 	dbAlloc := make(types.GenesisAlloc)
 
+	var total uint64
+
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
+		var skipNums uint64 = 0
 		return tx.ForEach(PlainStateBucket, nil, func(k, v []byte) error {
+			if skipNums > 0 {
+				skipNums--
+				return nil
+			}
+			total++
+
 			// Process accounts (keys with length 20)
 			if len(k) == 20 {
 				addr := common.BytesToAddress(k)
@@ -331,24 +342,36 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 
 			// Process storage (keys with length > 28)
 			if len(k) > 28 {
-				addr := common.BytesToAddress(k[:20])
+				var acctStorageCount uint64 = 0
 
-				storageKey := common.BytesToHash(k[28:])
-				storageValue := common.BytesToHash(v)
+				addr := common.BytesToAddress(k[:20])
 
 				if account, exists := dbAlloc[addr]; exists {
 					if account.Storage == nil {
 						account.Storage = make(map[common.Hash]common.Hash)
 					}
-					account.Storage[storageKey] = storageValue
-					dbAlloc[addr] = account
-				} else {
-					dbAlloc[addr] = types.Account{
-						Balance: big.NewInt(0),
-						Storage: make(map[common.Hash]common.Hash),
+
+					storageKey := common.BytesToHash(k[28:])
+					storageValue := common.BytesToHash(v)
+
+					if addr == ERIGON_SCALABLE_ADDRESS {
+						logger.Info("start load scalable acct", "address", addr, "incarnation", k[20:28])
+						scalableStorageCount, err := processScalableAddressStorageConcurrently(db, k[:28], &account)
+						acctStorageCount = scalableStorageCount
+						if err != nil {
+							logger.Error("processing scalable address storage", "error", err)
+						}
+						skipNums = acctStorageCount - 1
+					} else {
+						account.Storage[storageKey] = storageValue
+						dbAlloc[addr] = account
+
 					}
-					dbAlloc[addr].Storage[storageKey] = storageValue
+
+				} else {
+					logger.Error("account not exist for storage", "addr", addr)
 				}
+
 			}
 			return nil
 		})
