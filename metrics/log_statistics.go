@@ -97,18 +97,6 @@ func NewLogStatistics() Statistics {
 	}
 }
 
-// StartTiming returns a stop function that, when invoked, accumulates the
-// elapsed time into the provided tag on the given Statistics. Typical usage:
-//
-//	stop := metrics.StartTiming(stats, metrics.TotalBuildMs)
-//	defer stop()
-func StartTiming(s Statistics, tag LogTag) func() {
-	start := time.Now()
-	return func() {
-		s.CumulativeTiming(tag, time.Since(start))
-	}
-}
-
 type statisticsInstance struct {
 	durations map[LogTag]time.Duration // per-block durations
 	counters  map[LogTag]int64         // per-block counters

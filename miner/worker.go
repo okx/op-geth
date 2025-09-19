@@ -131,10 +131,6 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		miner.proposeStats.ResetStatistics()
 	}
 	proposeStats := miner.proposeStats
-	// Counters first
-	if params != nil {
-		// block number not known yet; set after assemble. Tx/Gas also updated at end.
-	}
 
 	startBuildTime := time.Now()
 	prepStart := time.Now()
@@ -158,11 +154,7 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		work.gasPool = new(core.GasPool).AddGas(gasLimit)
 	}
 
-	// Header/state housekeeping before tx selection
-	vstart := time.Now()
 	misc.EnsureCreate2Deployer(miner.chainConfig, work.header.Time, work.state)
-	proposeStats.CumulativeTiming(metrics.ProposePrepareMs, time.Since(vstart))
-
 	for _, tx := range params.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
