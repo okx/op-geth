@@ -282,10 +282,13 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 			Witness:     work.witness,
 		}
 		miner.payloadCache.Add(block.Hash(), cached)
-		log.Debug("Cached payload execution result",
+		log.Info("Cached payload execution result",
+			"cache_store", true,
 			"hash", block.Hash(),
 			"number", block.NumberU64(),
-			"parent", block.ParentHash())
+			"parent", block.ParentHash(),
+			"txs", len(work.receipts),
+			"gasUsed", block.GasUsed())
 	}
 
 	return result

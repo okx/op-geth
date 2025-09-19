@@ -19,6 +19,7 @@ const (
 	// Counters (per-block)
 	TxCounter
 	GasUsedCounter
+	PayloadCacheHitCounter
 
 	// Timings (per-block)
 	TotalBuildMs
@@ -163,6 +164,7 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 	// Current block values
 	tx := l.counters[TxCounter]
 	gasUsed := l.counters[GasUsedCounter]
+	cacheHit := l.counters[PayloadCacheHitCounter]
 
 	exec := l.durations[ExecuteMs]
 	validate := l.durations[ValidateMs]
@@ -181,11 +183,16 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 	snapCommit := l.durations[SnapshotCommitMs]
 	triedbCommit := l.durations[TrieDBCommitMs]
 
+	cacheStatus := "false"
+	if cacheHit > 0 {
+		cacheStatus = "true"
+	}
 	line := fmt.Sprintf(
-		"Block<%d>, Txs<%d> GasUsed<%d>, BlockTime<%s> { Exec { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] }, Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
+		"Block<%d>, Txs<%d> GasUsed<%d>, Cache<%s>, BlockTime<%s> { Exec { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] }, Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
 		block,
 		tx,
 		gasUsed,
+		cacheStatus,
 		common.PrettyDuration(blockDuration),
 		common.PrettyDuration(exec), common.PrettyDuration(validate), common.PrettyDuration(xvalidate), common.PrettyDuration(evmPure), common.PrettyDuration(valPure),
 		common.PrettyDuration(writeBlk),

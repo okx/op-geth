@@ -59,17 +59,52 @@ PayloadCache 提供了以下 Prometheus 指标：
 
 ### 日志
 
-启用 Debug 日志查看缓存操作：
+#### 日志级别设置
+
+使用 `--verbosity` 参数设置日志级别：
 
 ```bash
-./geth --log.level debug
+# 日志级别说明：
+# 0 = silent（静默）
+# 1 = error（错误）
+# 2 = warn（警告）  
+# 3 = info（信息，默认）
+# 4 = debug（调试）
+# 5 = detail（详细）
+
+# 启用 Debug 日志查看缓存操作：
+./geth --verbosity 4
 ```
 
-相关日志示例：
+#### 缓存日志标记
+
+缓存操作会在日志中显示明显的标记：
+
+**区块处理时（insertChain）：**
 ```
-DEBUG[09-19|10:30:45] Added payload to cache                  hash=0x1234... number=100 parent=0x5678...
-DEBUG[09-19|10:30:46] Using cached payload result             block=100 hash=0x1234... saved_time=150ms copy_time=10ms
-INFO [09-19|10:30:47] Payload cache enabled                   size=20 ttl=30s
+# 缓存命中：
+INFO Using cached payload result           cache=true block=12345 hash=0x... saved_time=250ms copy_time=5ms
+
+# 缓存未命中：
+DEBUG Processed block without cache         cache=false block=12345 hash=0x... process_time=300ms
+```
+
+**区块生成时（propose）：**
+```
+# 存储到缓存：
+INFO Cached payload execution result       cache_store=true hash=0x... number=12345 txs=50 gasUsed=1000000
+```
+
+**区块统计摘要：**
+```
+# 摘要行显示 Cache<true/false>：
+Block<12345>, Txs<50> GasUsed<1000000>, Cache<true>, BlockTime<100ms> ...
+```
+
+**缓存初始化：**
+```
+INFO Payload cache enabled                 size=20 ttl=30s
+INFO Connected payload cache between miner and blockchain
 ```
 
 ## 性能测试
