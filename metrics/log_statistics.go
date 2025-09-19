@@ -233,7 +233,7 @@ func (l *statisticsInstance) ProposeCheckpoint() string {
 	triedbCommit := l.durations[TrieDBCommitMs]
 
 	line := fmt.Sprintf(
-		"ProposeBlock<%d>, Txs<%d>, GasUsed<%d> Propose { total[%s], prepare[%s], selectBuild[%s], execTx[%s], requests[%s], assemble[%s] } State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s] } Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] }",
+		"ProposeBlock<%d>, Txs<%d>, GasUsed<%d> BlockTime<total[%s]> { prepare[%s], selectBuild[%s], execTx[%s], requests[%s], assemble[%s] } State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s] } Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] }",
 		block,
 		tx,
 		gasUsed,
