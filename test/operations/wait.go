@@ -1,0 +1,232 @@
+package operations
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"math/big"
+	"net/http"
+	"os"
+	"os/signal"
+	"time"
+
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/log"
+)
+
+const (
+	// DefaultInterval is a time interval
+	DefaultInterval = 1 * time.Second
+	// DefaultDeadline is a time interval
+	DefaultDeadline = 2 * time.Minute
+	// DefaultTxMinedDeadline is a time interval
+	DefaultTxMinedDeadline = 5 * time.Second
+)
+
+var (
+	// ErrTimeoutReached is thrown when the timeout is reached and
+	// because the condition is not matched
+	ErrTimeoutReached = fmt.Errorf("timeout has been reached")
+)
+
+// Wait handles polliing until conditions are met.
+type Wait struct{}
+
+// NewWait is the Wait constructor.
+func NewWait() *Wait {
+	return &Wait{}
+}
+
+// Poll retries the given condition with the given interval until it succeeds
+// or the given deadline expires.
+func Poll(interval, deadline time.Duration, condition ConditionFunc) error {
+	timeout := time.After(deadline)
+	tick := time.NewTicker(interval)
+
+	for {
+		select {
+		case <-timeout:
+			log.Info("timeout reached after %v", deadline)
+			return ErrTimeoutReached
+		case <-tick.C:
+			ok, err := condition()
+			if err != nil {
+				return err
+			}
+			if ok {
+				return nil
+			}
+		}
+	}
+}
+
+type ethClienter interface {
+	ethereum.TransactionReader
+	ethereum.ContractCaller
+	bind.DeployBackend
+}
+
+// WaitTxToBeMined waits until a tx has been mined or the given timeout expires.
+func WaitTxToBeMined(parentCtx context.Context, client ethClienter, tx *types.Transaction, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(parentCtx, timeout)
+	defer cancel()
+	receipt, err := bind.WaitMined(ctx, client, tx)
+	if errors.Is(err, context.DeadlineExceeded) {
+		return err
+	} else if err != nil {
+		log.Error("error waiting tx %s to be mined: %v", tx.Hash(), err)
+		return err
+	}
+	if receipt.Status == types.ReceiptStatusFailed {
+		// Get revert reason
+		reason, reasonErr := RevertReason(ctx, client, tx, receipt.BlockNumber)
+		if reasonErr != nil {
+			reason = reasonErr.Error()
+		}
+		return errors.New(fmt.Sprintf("transaction has failed, reason: %s, receipt: %+v. tx: %+v, gas: %v", reason, receipt, tx, tx.Gas()))
+	}
+	log.Debug("Transaction successfully mined: %v", tx.Hash())
+	return nil
+}
+
+// RevertReason returns the revert reason for a tx that has a receipt with failed status
+func RevertReason(ctx context.Context, c ethClienter, tx *types.Transaction, blockNumber *big.Int) (string, error) {
+	if tx == nil {
+		return "", nil
+	}
+
+	signer := types.MakeSigner(GetTestChainConfig(DefaultL2ChainID), big.NewInt(1), 0)
+
+	sender, err := types.Sender(signer, tx)
+	if err != nil {
+		return "", err
+	}
+
+	msg := ethereum.CallMsg{
+		From: sender,
+		To:   tx.To(),
+		Gas:  tx.Gas(),
+
+		Value: tx.Value(),
+		Data:  tx.Data(),
+	}
+	hex, err := c.CallContract(ctx, msg, blockNumber)
+	if err != nil {
+		return "", err
+	}
+
+	unpackedMsg, err := abi.UnpackRevert(hex)
+	if err != nil {
+		log.Warn("failed to get the revert message for tx %v: %v", tx.Hash(), err)
+		return "", errors.New("execution reverted")
+	}
+
+	return unpackedMsg, nil
+}
+
+func WaitTxReceipt(ctx context.Context, txHash common.Hash, timeout time.Duration, client *ethclient.Client) (*types.Receipt, error) {
+	if client == nil {
+		return nil, fmt.Errorf("client is nil")
+	}
+	var receipt *types.Receipt
+	pollErr := Poll(DefaultInterval, timeout, func() (bool, error) {
+		var err error
+		receipt, err = client.TransactionReceipt(ctx, txHash)
+		if err != nil {
+			if errors.Is(err, ethereum.NotFound) {
+				time.Sleep(time.Second)
+				return false, nil
+			} else {
+				return false, err
+			}
+		}
+		return true, nil
+	})
+	if pollErr != nil {
+		return nil, pollErr
+	}
+	return receipt, nil
+}
+
+// NodeUpCondition check if the container is up and running
+func NodeUpCondition(target string) (bool, error) {
+	var jsonStr = []byte(`{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":1}`)
+	req, err := http.NewRequest(
+		"POST", target,
+		bytes.NewBuffer(jsonStr))
+	if err != nil {
+		return false, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		// we allow connection errors to wait for the container up
+		return false, nil
+	}
+
+	if res.Body != nil {
+		defer func() {
+			err = res.Body.Close()
+		}()
+	}
+
+	body, err := io.ReadAll(res.Body)
+
+	if err != nil {
+		return false, err
+	}
+
+	r := struct {
+		Result bool
+	}{
+		Result: true,
+	}
+	err = json.Unmarshal(body, &r)
+	if err != nil {
+		return false, err
+	}
+
+	done := !r.Result
+
+	return done, nil
+}
+
+// ConditionFunc is a generic function
+type ConditionFunc func() (done bool, err error)
+
+func networkUpCondition() (bool, error) {
+	return NodeUpCondition(DefaultL1NetworkURL)
+}
+
+func nodeUpCondition() (done bool, err error) {
+	return NodeUpCondition(DefaultL2NetworkURL)
+}
+
+// WaitSignal blocks until an Interrupt or Kill signal is received, then it
+// executes the given cleanup functions and returns.
+func WaitSignal(cleanupFuncs ...func()) {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt)
+
+	for sig := range signals {
+		switch sig {
+		case os.Interrupt, os.Kill:
+			log.Info("terminating application gracefully...")
+			for _, cleanup := range cleanupFuncs {
+				cleanup()
+			}
+			return
+		}
+	}
+}

@@ -1,0 +1,92 @@
+---
+description: Database cursor rules for X Layer op-geth database-related code. These rules help maintain consistency and best practices across all database operations, interfaces, and implementations.
+
+globs:
+
+- "ethdb/**/*.go"
+- "ethdb/leveldb/**/*.go"
+- "ethdb/leveldb/leveldb.go"
+- "ethdb/pebble/**/*.go"
+- "ethdb/pebble/pebble.go"
+- "ethdb/memorydb/**/*.go"
+- "ethdb/memorydb/memorydb.go"
+- "ethdb/remotedb/**/*.go"
+- "ethdb/dbtest/**/*.go"
+- "core/state/database.go"
+- "core/vm/interface.go"
+- "core/rawdb/**/*.go"
+- "core/rawdb/accessors_*.go"
+- "core/rawdb/database.go"
+- "core/rawdb/schema.go"
+- "core/rawdb/freezer*.go"
+- "core/rawdb/freezer_memory.go"
+- "core/rawdb/chain_freezer.go"
+- "core/rawdb/ancient_*.go"
+- "core/rawdb/chain_iterator.go"
+- "core/rawdb/key_length_iterator.go"
+- "core/rawdb/table.go"
+- "core/state/**/*.go"
+- "core/state/statedb.go"
+- "core/state/database.go"
+- "core/state/snapshot/**/*.go"
+- "triedb/**/*.go"
+- "triedb/database/**/*.go"
+- "triedb/pathdb/**/*.go"
+- "triedb/hashdb/**/*.go"
+- "node/database.go"
+- "node/node.go"
+- "cmd/utils/flags.go"
+- "cmd/geth/config.go"
+- "cmd/geth/dbcmd.go"
+- "cmd/dbdiff/main.go"
+- "cmd/geth/chaincmd.go"
+- "cmd/geth/dbcmd.go"
+- "core/rawdb/*_test.go"
+- "core/rawdb/ancienttest/**/*.go"
+- "core/rawdb/accessors_inner_tx_xlayer.go"
+- "core/types/innertx_xlayer.go"
+- "core/state_processor_xlayer.go"
+- "core/vm/evm_xlayer.go"
+
+alwaysApply: false
+---
+
+# X Layer Database Rules
+
+When working with the underlying X Layer op-geth execution layer database, you are an expert in the underly database with full understanding of how the implementation of the database functions. This includes pebbledb, leveldb, rocksdb and mdbx. When interacting with the database, prioritize ensuring performance, scalability and stability.
+
+You are also an expert in Sparse Merkle Trees (SMT), with deep understanding of their implementation in blockchain state management and how they are updated with the underlying triedb implementation and stored in the underlying databases.
+
+When responding to queries:
+
+- Always analyze the query by considering the underlying database design tradeoffs.
+- Provide clear, concise explanations of the approaches while considering the inherent underlying database design.
+- Always consider the relationship between database operations and blockchain state management, ensuring optimal performance.
+- Added X Layer specific database extensions.
+
+Interface-Driven Development
+
+- Always use database interfaces (ethdb.Database, ethdb.Batch, etc.) rather than concrete implementations
+- Prefer composition over inheritance when extending database functionality
+- Use dependency injection for database dependencies
+
+Performance Considerations
+
+- Use batch operations for multiple database writes
+- Implement proper error handling for all database operations
+- Consider memory usage and I/O efficiency in database operations
+- Use appropriate database engines (LevelDB vs PebbleDB) based on use case
+
+Security and Data Integrity
+
+- Always validate data before database operations
+- Use proper transaction boundaries for atomic operations
+- Implement proper error handling and rollback mechanisms
+- Follow X Layer specific security requirements for blockchain data
+
+Testing and Validation
+
+- Use the database test suite for interface compliance
+- Implement comprehensive tests for custom database operations
+- Validate data integrity in database operations
+- Test performance characteristics of database operations
