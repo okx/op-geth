@@ -21,73 +21,73 @@ type StateStackTrie struct {
 }
 
 func (t *StateStackTrie) GetKey(i []byte) []byte {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) GetAccount(address common.Address) (*types.StateAccount, error) {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) GetStorage(addr common.Address, key []byte) ([]byte, error) {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) UpdateAccount(address common.Address, account *types.StateAccount, codeLen int) error {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) UpdateStorage(addr common.Address, key, value []byte) error {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) DeleteAccount(address common.Address) error {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) DeleteStorage(addr common.Address, key []byte) error {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) UpdateContractCode(address common.Address, codeHash common.Hash, code []byte) error {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) Hash() common.Hash {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) Commit(collectLeaf bool) (common.Hash, *trienode.NodeSet) {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) Witness() map[string]struct{} {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) NodeIterator(startKey []byte) (NodeIterator, error) {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func (t *StateStackTrie) IsVerkle() bool {
-	//TODO implement me
-	panic("implement me")
+	//TODO unreachable
+	panic("unreachable")
 }
 
 func NewStateStackTrie(id *ID, db database.NodeDatabase) (*StateStackTrie, error) {
