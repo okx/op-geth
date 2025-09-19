@@ -43,6 +43,14 @@ const (
 	StorageCommitMs
 	SnapshotCommitMs
 	TrieDBCommitMs
+
+	// Propose-stage timings
+	ProposeTotalMs
+	ProposePrepareMs
+	ProposeSelectBuildMs
+	ProposeExecTxMs
+	ProposeRequestsMs
+	ProposeAssembleMs
 )
 
 // Statistics exposes accumulation helpers and summary output.
@@ -55,6 +63,7 @@ type Statistics interface {
 	GetTag(tag LogTag) string
 	GetStatistics(tag LogTag) int64
 	SummaryCheckpoint() string
+	ProposeCheckpoint() string
 	ResetStatistics()
 }
 
@@ -73,6 +82,29 @@ func GetLogStatistics() Statistics {
 		}
 	})
 	return instance
+}
+
+// NewLogStatistics returns a fresh, independent statistics collector.
+// Useful for measuring separate phases (e.g., propose stage) without
+// interfering with the singleton used for block insertion.
+func NewLogStatistics() Statistics {
+	return &statisticsInstance{
+		durations: make(map[LogTag]time.Duration),
+		counters:  make(map[LogTag]int64),
+		tags:      make(map[LogTag]string),
+	}
+}
+
+// StartTiming returns a stop function that, when invoked, accumulates the
+// elapsed time into the provided tag on the given Statistics. Typical usage:
+//
+//	stop := metrics.StartTiming(stats, metrics.TotalBuildMs)
+//	defer stop()
+func StartTiming(s Statistics, tag LogTag) func() {
+	start := time.Now()
+	return func() {
+		s.CumulativeTiming(tag, time.Since(start))
+	}
 }
 
 type statisticsInstance struct {
@@ -172,5 +204,55 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 	)
 	log.Info(line)
 
+	return line
+}
+
+// ProposeCheckpoint prints a compact summary for the propose stage using
+// the same tags, intended for an independently created collector
+// (via NewLogStatistics) so it does not interfere with block insertion stats.
+func (l *statisticsInstance) ProposeCheckpoint() string {
+	total := l.durations[ProposeTotalMs]
+	prep := l.durations[ProposePrepareMs]
+	selectBuild := l.durations[ProposeSelectBuildMs]
+	execTx := l.durations[ProposeExecTxMs]
+	requests := l.durations[ProposeRequestsMs]
+	assemble := l.durations[ProposeAssembleMs]
+
+	block := l.counters[BlockNumberTag]
+	tx := l.counters[TxCounter]
+	gasUsed := l.counters[GasUsedCounter]
+
+	accRead := l.durations[AccountReadMs]
+	storRead := l.durations[StorageReadMs]
+	accUpdate := l.durations[AccountUpdateMs]
+	storUpdate := l.durations[StorageUpdateMs]
+	accHash := l.durations[AccountHashMs]
+	accCommit := l.durations[AccountCommitMs]
+	storCommit := l.durations[StorageCommitMs]
+	snapCommit := l.durations[SnapshotCommitMs]
+	triedbCommit := l.durations[TrieDBCommitMs]
+
+	line := fmt.Sprintf(
+		"ProposeBlock<%d>, Txs<%d>, GasUsed<%d> Propose { total[%s], prepare[%s], selectBuild[%s], execTx[%s], requests[%s], assemble[%s] } State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s] } Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] }",
+		block,
+		tx,
+		gasUsed,
+		common.PrettyDuration(total),
+		common.PrettyDuration(prep),
+		common.PrettyDuration(selectBuild),
+		common.PrettyDuration(execTx),
+		common.PrettyDuration(requests),
+		common.PrettyDuration(assemble),
+		common.PrettyDuration(accRead),
+		common.PrettyDuration(storRead),
+		common.PrettyDuration(accUpdate),
+		common.PrettyDuration(storUpdate),
+		common.PrettyDuration(accHash),
+		common.PrettyDuration(accCommit),
+		common.PrettyDuration(storCommit),
+		common.PrettyDuration(snapCommit),
+		common.PrettyDuration(triedbCommit),
+	)
+	log.Info(line)
 	return line
 }
