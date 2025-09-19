@@ -69,6 +69,7 @@ func (eth *Ethereum) InitRealtime() {
 				// Init realtime cache
 				eth.realtimeCache = realtimeCache.NewRealtimeCache(context.Background(), eth.blockchain, eth.config.XLayer.Realtime.CacheDumpPath, eth.config.XLayer.Realtime.CacheHeightThreshold)
 				eth.finishChan = make(chan realtimeTypes.FinishedEntry)
+				eth.blockchain.SetRealtimeFinishChan(eth.finishChan)
 
 				if eth.config.XLayer.Realtime.EnableSubscribe {
 					eth.realtimeSub = realtimeSub.NewRealtimeSubscription()

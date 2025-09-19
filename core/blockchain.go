@@ -53,6 +53,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/ethereum/go-ethereum/triedb/hashdb"
@@ -283,6 +284,9 @@ type BlockChain struct {
 	logger     *tracing.Hooks
 
 	lastForkReadyAlert time.Time // Last time there was a fork readiness print out
+
+	// For X Layer, realtime
+	realtimeFinishChan chan realtimeTypes.FinishedEntry
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -2566,6 +2570,13 @@ func (bc *BlockChain) SetCanonical(head *types.Block) (common.Hash, error) {
 	}
 	if timestamp := time.Unix(int64(head.Time()), 0); time.Since(timestamp) > time.Minute {
 		context = append(context, []interface{}{"age", common.PrettyAge(timestamp)}...)
+	}
+	// For X Layer, realtime
+	if bc.realtimeFinishChan != nil {
+		bc.realtimeFinishChan <- realtimeTypes.FinishedEntry{
+			Height: head.Number().Uint64(),
+			Root:   head.Header().Root,
+		}
 	}
 	log.Info("Chain head was updated", context...)
 	return head.Hash(), nil
