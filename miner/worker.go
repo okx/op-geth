@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -582,6 +583,21 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 	return nil
 }
 
+var txsLimit int
+
+func init() {
+	l := os.Getenv("MINER_TXS_LIMIT")
+	if l != "" {
+		n, err := fmt.Sscanf(l, "%d", &txsLimit)
+		if err != nil || n != 1 || txsLimit < 0 {
+			txsLimit = 5500
+		}
+		log.Info("Using miner transaction limit", "limit", txsLimit)
+	} else {
+		txsLimit = 5500
+	}
+}
+
 // fillTransactions retrieves the pending transactions from the txpool and fills them
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
@@ -602,6 +618,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	if env.header.ExcessBlobGas != nil {
 		filter.BlobFee = uint256.MustFromBig(eip4844.CalcBlobFee(miner.chainConfig, env.header))
 	}
+
 	filter.OnlyPlainTxs, filter.OnlyBlobTxs = true, false
 	pendingPlainTxs := miner.txpool.Pending(filter)
 
