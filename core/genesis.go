@@ -237,7 +237,6 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool)
 }
 
 func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool) (common.Hash, common.Hash, error) {
-	fmt.Printf("USE STACK TRIE>>>>>>")
 	if triedb.IsVerkle() {
 		return common.Hash{}, common.Hash{}, errors.New("not supported yet")
 	}
