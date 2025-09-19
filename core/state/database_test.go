@@ -121,14 +121,14 @@ func BenchmarkStackTrieInsertion(b *testing.B) {
 // goarch: arm64
 // pkg: github.com/ethereum/go-ethereum/core/state
 // cpu: Apple M2 Max
-//BenchmarkRegularTrieInsertion/Size_1000
-//BenchmarkRegularTrieInsertion/Size_1000-12         	     482	   2429196 ns/op	 2080139 B/op	   27682 allocs/op
-//BenchmarkRegularTrieInsertion/Size_10000
-//BenchmarkRegularTrieInsertion/Size_10000-12        	      70	  16680217 ns/op	20157853 B/op	  275211 allocs/op
-//BenchmarkRegularTrieInsertion/Size_100000
-//BenchmarkRegularTrieInsertion/Size_100000-12       	       6	 180554403 ns/op	207196216 B/op	 2741910 allocs/op
-//BenchmarkRegularTrieInsertion/Size_1000000                    						
-//BenchmarkRegularTrieInsertion/Size_1000000-12      	       1	2423703250 ns/op	2099059016 B/op	27041567 allocs/op
+// BenchmarkRegularTrieInsertion/Size_1000
+// BenchmarkRegularTrieInsertion/Size_1000-12         	     482	   2429196 ns/op	 2080139 B/op	   27682 allocs/op
+// BenchmarkRegularTrieInsertion/Size_10000
+// BenchmarkRegularTrieInsertion/Size_10000-12        	      70	  16680217 ns/op	20157853 B/op	  275211 allocs/op
+// BenchmarkRegularTrieInsertion/Size_100000
+// BenchmarkRegularTrieInsertion/Size_100000-12       	       6	 180554403 ns/op	207196216 B/op	 2741910 allocs/op
+// BenchmarkRegularTrieInsertion/Size_1000000
+// BenchmarkRegularTrieInsertion/Size_1000000-12      	       1	2423703250 ns/op	2099059016 B/op	27041567 allocs/op
 func BenchmarkRegularTrieInsertion(b *testing.B) {
 	config := &triedb.Config{
 		Preimages: false,
