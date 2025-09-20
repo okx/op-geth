@@ -50,6 +50,14 @@ go build ./cmd/geth
 docker build -t op-geth-rocksdb -f Dockerfile.rocksdb .
 ```
 
+## Benchmarking
+```bash
+# clear caches
+echo 1 | sudo tee /proc/sys/vm/drop_caches
+# run benchmark
+go test -tags rocksdb -benchmem -run=^$ -bench ^BenchmarkRocksDB$ github.com/ethereum/go-ethereum/ethdb/rocksdb
+```
+
 ## Usage
 
 Once built with RocksDB support, you can use it by specifying the database engine:
