@@ -17,7 +17,10 @@
 package pebble
 
 import (
+	"fmt"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -52,5 +55,15 @@ func BenchmarkPebbleDB(b *testing.B) {
 		return &Database{
 			db: db,
 		}
+	})
+}
+
+func BenchmarkPebbleDBDisk(b *testing.B) {
+	dbtest.BenchDatabaseSuite(b, func() ethdb.KeyValueStore {
+		db, err := New(fmt.Sprintf("/tmp/bench-pebble-%d-%d", os.Getpid(), time.Now().UnixNano()), 1<<30, 16, "", false, false)
+		if err != nil {
+			b.Fatal(err)
+		}
+		return db
 	})
 }

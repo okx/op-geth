@@ -55,7 +55,14 @@ docker build -t op-geth-rocksdb -f Dockerfile.rocksdb .
 # clear caches
 echo 1 | sudo tee /proc/sys/vm/drop_caches
 # run benchmark
-go test -tags rocksdb -benchmem -run=^$ -bench ^BenchmarkRocksDB$ github.com/ethereum/go-ethereum/ethdb/rocksdb
+go test -tags rocksdb -benchmem -run=^$ -bench ^BenchmarkRocksDBDisk$ github.com/ethereum/go-ethereum/ethdb/rocksdb
+```
+
+To benchmark in-memory database, mount a tmpfs and run BenchmarkRocksDB benchmark:
+```bash
+sudo mkdir -p /mnt/tmpfs
+sudo mount -t tmpfs -o size=16G tmpfs /mnt/tmpfs
+go test -benchmem -run=^$ -tags rocksdb -bench ^BenchmarkRocksDB$ github.com/ethereum/go-ethereum/ethdb/rocksdb
 ```
 
 ## Usage

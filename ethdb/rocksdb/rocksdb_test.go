@@ -43,7 +43,22 @@ func TestRocksDBSuite(t *testing.T) {
 	})
 }
 
+// Before running this benchmark, mount a tmpfs:
+// sudo mkdir -p /mnt/tmpfs
+// sudo mount -t tmpfs -o size=16G tmpfs /mnt/tmpfs
+// Then run:
+// go test -benchmem -run=^$ -tags rocksdb -bench ^BenchmarkRocksDB$ github.com/ethereum/go-ethereum/ethdb/rocksdb
 func BenchmarkRocksDB(b *testing.B) {
+	dbtest.BenchDatabaseSuite(b, func() ethdb.KeyValueStore {
+		db, err := New(fmt.Sprintf("/mnt/tmpfs/bench-rocksdb-%d-%d", os.Getpid(), time.Now().UnixNano()), 16, 16, "", false)
+		if err != nil {
+			b.Fatal(err)
+		}
+		return db
+	})
+}
+
+func BenchmarkRocksDBDisk(b *testing.B) {
 	dbtest.BenchDatabaseSuite(b, func() ethdb.KeyValueStore {
 		db, err := New(fmt.Sprintf("/tmp/bench-rocksdb-%d-%d", os.Getpid(), time.Now().UnixNano()), 16, 16, "", false)
 		if err != nil {
