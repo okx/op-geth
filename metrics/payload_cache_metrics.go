@@ -28,7 +28,4 @@ var (
 	// Performance metrics
 	PayloadCacheTimeSavedTimer = NewRegisteredTimer("payloadcache/time/saved", nil)
 	PayloadCacheCopyTimeTimer  = NewRegisteredTimer("payloadcache/time/copy", nil)
-
-	// Memory metrics
-	PayloadCacheMemoryGauge = NewRegisteredGauge("payloadcache/memory", nil)
 )
