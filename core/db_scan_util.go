@@ -48,11 +48,9 @@ func processScalableAddressStorageConcurrently(db kv.RoDB, prefix []byte, acct *
 	numWorkers := 32
 	keyRanges := generateKeyRanges(numWorkers)
 
-	// Create channels for results
 	var wg sync.WaitGroup
 	results := make(chan []StorageEntry, numWorkers)
 
-	// Start workers
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func(workerID int) {
@@ -60,11 +58,9 @@ func processScalableAddressStorageConcurrently(db kv.RoDB, prefix []byte, acct *
 			start := time.Now()
 			keyRange := keyRanges[workerID]
 
-			// Create a new transaction for this worker using db.View
 			if err := db.View(context.Background(), func(workerTx kv.Tx) error {
 				chunkStorage := make([]StorageEntry, 0, 1<<20)
 
-				// Get cursor for this worker
 				startKey := make([]byte, 60)
 				copy(startKey, prefix[0:28])
 				copy(startKey[28:], keyRange.Start)

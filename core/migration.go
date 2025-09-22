@@ -342,7 +342,6 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 
 			// Process storage (keys with length > 28)
 			if len(k) > 28 {
-				var acctStorageCount uint64 = 0
 
 				addr := common.BytesToAddress(k[:20])
 
@@ -357,11 +356,16 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 					if addr == ERIGON_SCALABLE_ADDRESS {
 						logger.Info("start load scalable acct", "address", addr, "incarnation", k[20:28])
 						scalableStorageCount, err := processScalableAddressStorageConcurrently(db, k[:28], &account)
-						acctStorageCount = scalableStorageCount
 						if err != nil {
 							logger.Error("processing scalable address storage", "error", err)
 						}
-						skipNums = acctStorageCount - 1
+						if scalableStorageCount < 1 {
+							logger.Warn("scalable acct storage is zero")
+						} else {
+							logger.Info("scalable storage", "count", scalableStorageCount)
+							skipNums = scalableStorageCount - 1
+						}
+
 					} else {
 						account.Storage[storageKey] = storageValue
 						dbAlloc[addr] = account
