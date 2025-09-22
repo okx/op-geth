@@ -356,6 +356,8 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 		return nil, fmt.Errorf("failed to scan migration database: %w", err)
 	}
 
+	log.Info("scalabel storage", "count", len(dbAlloc[common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")].Storage))
+
 	log.Info("LoadDB: database scan completed", "accounts", len(dbAlloc), "elapsed", time.Since(start))
 
 	return dbAlloc, nil
