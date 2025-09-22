@@ -19,6 +19,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"github.com/google/btree"
 	"math/big"
 	"os"
 	"runtime"
@@ -393,9 +394,42 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 		return nil, fmt.Errorf("failed to scan migration database: %w", err)
 	}
 
+	log.Info("scalabel storage", "count", len(dbAlloc[SCALABEL_ADDR].Storage))
+
+	tr := btree.New(2) // 2 is the B-tree degree
+
+	for key, val := range dbAlloc[SCALABEL_ADDR].Storage {
+		tr.ReplaceOrInsert(Item{key.Hex(), val.Hex()})
+	}
+
+	count := 0
+	tr.Ascend(func(item btree.Item) bool {
+		fmt.Println("top:", count, item)
+		count++
+		return count < 5
+	})
+
+	count = 0
+	tr.Descend(func(item btree.Item) bool {
+		fmt.Println("bot:", count, item)
+		count++
+		return count < 5
+	})
+
 	log.Info("LoadDB: database scan completed", "accounts", len(dbAlloc), "elapsed", time.Since(start))
 
 	return dbAlloc, nil
+}
+
+var SCALABEL_ADDR = common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+
+func (a Item) Less(b btree.Item) bool {
+	return a.Key < b.(Item).Key
+}
+
+type Item struct {
+	Key   string
+	Value string
 }
 
 func getSmtBatchRootHashOrigin(chainDataPath, smtDataPath string) (*big.Int, error) {
