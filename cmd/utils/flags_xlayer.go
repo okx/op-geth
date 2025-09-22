@@ -155,7 +155,7 @@ var (
 		Usage: "Kafka sync group id",
 		Value: "",
 	}
-	RealtimeSubscribeWesocket = &cli.BoolFlag{
+	RealtimeSubscribeWebsocket = &cli.BoolFlag{
 		Name:  "realtime.subscribe-wesocket",
 		Usage: "Subscribe wesocket",
 		Value: false,
@@ -206,7 +206,7 @@ var (
 		RealtimeKafkaSyncErrorTopic,
 		RealtimeKafkaSyncClientID,
 		RealtimeKafkaSyncGroupID,
-		RealtimeSubscribeWesocket,
+		RealtimeSubscribeWebsocket,
 		RealtimeStreamerUrl,
 		RealtimeStreamerUseTLS,
 		RealtimeStreamerTimeout,
@@ -256,7 +256,7 @@ func setXLayerIntercept(ctx *cli.Context, cfg *ethconfig.Config) {
 
 func setInnerTxXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.IsSet(InnerTxFlag.Name) {
-		cfg.EnableInnerTx = ctx.Bool(InnerTxFlag.Name)
+		cfg.XLayer.EnableInnerTx = ctx.Bool(InnerTxFlag.Name)
 	}
 }
 
@@ -328,7 +328,7 @@ func setRealtimeXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 				ClientID:         ctx.String(RealtimeKafkaSyncClientID.Name),
 				GroupID:          groupID,
 			},
-			SubscribeWesocket: ctx.Bool(RealtimeSubscribeWesocket.Name),
+			SubscribeWebsocket: ctx.Bool(RealtimeSubscribeWebsocket.Name),
 			WSConn: streamclient.StreamClientConfig{
 				RealtimeStreamerUrl:     ctx.String(RealtimeStreamerUrl.Name),
 				RealtimeStreamerUseTLS:  ctx.Bool(RealtimeStreamerUseTLS.Name),

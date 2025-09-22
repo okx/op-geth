@@ -226,7 +226,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			EnablePreimageRecording: config.EnablePreimageRecording,
 
 			// For X Layer
-			EnableInnerTxs: config.EnableInnerTx,
+			EnableInnerTxs: config.XLayer.EnableInnerTx,
 		}
 		cacheConfig = &core.CacheConfig{
 			TrieCleanLimit:      config.TrieCleanCache,
