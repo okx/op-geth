@@ -124,9 +124,7 @@ type Ethereum struct {
 	nodeCloser func() error
 
 	// For X Layer, realtime
-	kafkaEnabled       bool
 	kafkaProducer      *realtimeKafka.KafkaProducer
-	kafkaConsumer      *realtimeKafka.KafkaConsumer
 	realtimeCache      *realtimeCache.RealtimeCache
 	kafkaBlockInfoChan chan *realtimeTypes.BlockInfo
 	kafkaTxInfoChan    chan state.TxInfo

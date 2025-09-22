@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	// Kafka tx message cache size
+	// Tx message cache size
 	DefaultTxMsgSliceSize = 100
 
 	DefaultPendingBlockSize = 100
@@ -85,7 +85,7 @@ type RealtimeCache struct {
 	CacheDumpPath   string
 	HeightThreshold uint64
 
-	// highestConfirmHeight is the highest confirmed block height closed from kafka
+	// highestConfirmHeight is the highest confirmed block height
 	highestConfirmHeight atomic.Uint64
 
 	// highestExecutionHeight is the highest executed height on the RPC node
@@ -216,7 +216,7 @@ func (cache *RealtimeCache) TryCloseBlockFromConfirmedBlockMsg(blockNum uint64, 
 	return cache.tryCloseBlock(pendingContext)
 }
 
-func (cache *RealtimeCache) HandlePendingBlocks(kafkaCache *KafkaCache) error {
+func (cache *RealtimeCache) HandlePendingBlocks(messageCache *MessageCache) error {
 	// Pending blocks must be handled in order
 	for _, context := range cache.pendingBlocks.Items() {
 		nextHeight := cache.GetHighestConfirmHeight() + 1
@@ -224,7 +224,7 @@ func (cache *RealtimeCache) HandlePendingBlocks(kafkaCache *KafkaCache) error {
 			break
 		}
 
-		txMsgs := kafkaCache.TxMsgCache.Pop(context.blockNum)
+		txMsgs := messageCache.TxMsgCache.Pop(context.blockNum)
 		err := cache.tryApplyBlockTxMsgs(context, txMsgs)
 		if err != nil {
 			return err

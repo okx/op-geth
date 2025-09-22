@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/realtime"
 	"github.com/ethereum/go-ethereum/realtime/kafka"
+	"github.com/ethereum/go-ethereum/realtime/relayer/streamclient"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -101,12 +102,12 @@ var (
 	// Realtime feature
 	RealtimeEnableFlag = &cli.BoolFlag{
 		Name:  "realtime.enable-flag",
-		Usage: "Kafka sync enable flag",
-		Value: true,
+		Usage: "Realtime enable flag",
+		Value: false,
 	}
 	RealtimeRpcFlag = &cli.BoolFlag{
 		Name:  "realtime.rpc-flag",
-		Usage: "Enable rpc flag",
+		Usage: "Realtime is rpc mode flag",
 		Value: false,
 	}
 	RealtimeEnableSubscribeFlag = &cli.BoolFlag{
@@ -118,6 +119,11 @@ var (
 		Name:  "realtime.cache-height-threshold",
 		Usage: "Cache height threshold to clear",
 		Value: 10,
+	}
+	RealtimeSubscribeKafka = &cli.BoolFlag{
+		Name:  "realtime.subscribe-kafka",
+		Usage: "Subscribe kafka",
+		Value: false,
 	}
 	RealtimeKafkaSyncBootstrapServers = &cli.StringFlag{
 		Name:  "realtime.kafka-sync-bootstrap-servers",
@@ -149,6 +155,26 @@ var (
 		Usage: "Kafka sync group id",
 		Value: "",
 	}
+	RealtimeSubscribeWesocket = &cli.BoolFlag{
+		Name:  "realtime.subscribe-wesocket",
+		Usage: "Subscribe wesocket",
+		Value: false,
+	}
+	RealtimeStreamerUrl = &cli.StringFlag{
+		Name:  "realtime.streamer-url",
+		Usage: "Streamer url",
+		Value: "",
+	}
+	RealtimeStreamerUseTLS = &cli.BoolFlag{
+		Name:  "realtime.streamer-use-tls",
+		Usage: "Streamer use tls",
+		Value: false,
+	}
+	RealtimeStreamerTimeout = &cli.DurationFlag{
+		Name:  "realtime.streamer-timeout",
+		Usage: "Streamer timeout",
+		Value: 200 * time.Second,
+	}
 	RealtimeCacheDumpPath = &cli.StringFlag{
 		Name:  "realtime.cache-dump-path",
 		Usage: "Cache dump path",
@@ -173,12 +199,17 @@ var (
 		RealtimeRpcFlag,
 		RealtimeEnableSubscribeFlag,
 		RealtimeCacheHeightThreshold,
+		RealtimeSubscribeKafka,
 		RealtimeKafkaSyncBootstrapServers,
 		RealtimeKafkaSyncBlockTopic,
 		RealtimeKafkaSyncTxTopic,
 		RealtimeKafkaSyncErrorTopic,
 		RealtimeKafkaSyncClientID,
 		RealtimeKafkaSyncGroupID,
+		RealtimeSubscribeWesocket,
+		RealtimeStreamerUrl,
+		RealtimeStreamerUseTLS,
+		RealtimeStreamerTimeout,
 		RealtimeCacheDumpPath,
 	}
 )
@@ -288,6 +319,7 @@ func setRealtimeXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 			EnableSubscribe:      ctx.Bool(RealtimeEnableSubscribeFlag.Name),
 			CacheHeightThreshold: ctx.Uint64(RealtimeCacheHeightThreshold.Name),
 			CacheDumpPath:        ctx.String(RealtimeCacheDumpPath.Name),
+			SubscribeKafka:       ctx.Bool(RealtimeSubscribeKafka.Name),
 			Kafka: kafka.KafkaConfig{
 				BootstrapServers: strings.Split(ctx.String(RealtimeKafkaSyncBootstrapServers.Name), ","),
 				BlockTopic:       ctx.String(RealtimeKafkaSyncBlockTopic.Name),
@@ -295,6 +327,12 @@ func setRealtimeXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 				ErrorTopic:       ctx.String(RealtimeKafkaSyncErrorTopic.Name),
 				ClientID:         ctx.String(RealtimeKafkaSyncClientID.Name),
 				GroupID:          groupID,
+			},
+			SubscribeWesocket: ctx.Bool(RealtimeSubscribeWesocket.Name),
+			WSConn: streamclient.StreamClientConfig{
+				RealtimeStreamerUrl:     ctx.String(RealtimeStreamerUrl.Name),
+				RealtimeStreamerUseTLS:  ctx.Bool(RealtimeStreamerUseTLS.Name),
+				RealtimeStreamerTimeout: ctx.Duration(RealtimeStreamerTimeout.Name),
 			},
 		},
 	}

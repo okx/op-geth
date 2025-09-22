@@ -8,14 +8,14 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
-// -------------- Kafka Cache --------------
-type KafkaCache struct {
+// -------------- Message Cache --------------
+type MessageCache struct {
 	NewBlockMsgCache       *BlockMessageCache
 	ConfirmedBlockMsgCache *BlockMessageCache
 	TxMsgCache             *TransactionMessageCache
 }
 
-func NewKafkaCache(maxCacheSize int) (*KafkaCache, error) {
+func NewMessageCache(maxCacheSize int) (*MessageCache, error) {
 	newBlockCache, err := NewBlockMessageCache(maxCacheSize)
 	if err != nil {
 		return nil, err
@@ -28,20 +28,20 @@ func NewKafkaCache(maxCacheSize int) (*KafkaCache, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &KafkaCache{
+	return &MessageCache{
 		NewBlockMsgCache:       newBlockCache,
 		ConfirmedBlockMsgCache: confirmedBlockCache,
 		TxMsgCache:             txCache,
 	}, nil
 }
 
-func (cache *KafkaCache) Clear() {
+func (cache *MessageCache) Clear() {
 	cache.NewBlockMsgCache.Clear()
 	cache.ConfirmedBlockMsgCache.Clear()
 	cache.TxMsgCache.Clear()
 }
 
-func (cache *KafkaCache) Flush(executionHeight uint64) {
+func (cache *MessageCache) Flush(executionHeight uint64) {
 	if executionHeight == 0 {
 		return
 	}
@@ -51,7 +51,7 @@ func (cache *KafkaCache) Flush(executionHeight uint64) {
 	cache.TxMsgCache.Flush(executionHeight)
 }
 
-func (cache *KafkaCache) GetLowestNewBlockHeight() uint64 {
+func (cache *MessageCache) GetLowestNewBlockHeight() uint64 {
 	return cache.NewBlockMsgCache.GetLowestBlockHeight()
 }
 

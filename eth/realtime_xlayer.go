@@ -17,11 +17,11 @@ import (
 )
 
 func (eth *Ethereum) RealtimeEnabled() bool {
-	return eth.config.XLayer.Realtime.Enable && eth.kafkaEnabled
+	return eth.config.XLayer.Realtime.Enable
 }
 
 func (eth *Ethereum) GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo {
-	if eth.RealtimeEnabled() {
+	if eth.config.XLayer.Realtime.Enable {
 		return eth.kafkaBlockInfoChan
 	}
 	return nil
@@ -41,12 +41,12 @@ func (eth *Ethereum) GetFinishChan() chan realtimeTypes.FinishedEntry {
 func (eth *Ethereum) InitRealtime() {
 	if eth.config.XLayer.Realtime.Enable {
 		if !eth.config.XLayer.Realtime.RealtimeRpc {
+			// Sequencer execution mode
 			kafkaProducer, err := realtimeKafka.NewKafkaProducer(eth.config.XLayer.Realtime.Kafka, context.Background(), nil)
 			if err != nil {
-				eth.kafkaEnabled = false
+				eth.kafkaProducer = nil
 				log.Warn("[Realtime] Failed to initialize kafka producer", "error", err)
 			} else {
-				eth.kafkaEnabled = true
 				eth.kafkaProducer = kafkaProducer
 				eth.kafkaBlockInfoChan = make(chan *realtimeTypes.BlockInfo, realtimeKafka.DefaultKafkaBufferSize)
 				eth.kafkaTxInfoChan = make(chan state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
@@ -57,24 +57,13 @@ func (eth *Ethereum) InitRealtime() {
 				}
 			}
 		} else {
-			// Init kafka consumer
-			kafkaConsumer, err := realtimeKafka.NewKafkaConsumer(eth.config.XLayer.Realtime.Kafka, true)
-			if err != nil {
-				eth.kafkaEnabled = false
-				log.Warn("[Realtime] Failed to initialize kafka consumer", "error", err)
-			} else {
-				eth.kafkaEnabled = true
-				eth.kafkaConsumer = kafkaConsumer
-
-				// Init realtime cache
-				eth.realtimeCache = realtimeCache.NewRealtimeCache(context.Background(), eth.blockchain, eth.config.XLayer.Realtime.CacheDumpPath, eth.config.XLayer.Realtime.CacheHeightThreshold)
-				eth.finishChan = make(chan realtimeTypes.FinishedEntry)
-				eth.blockchain.SetRealtimeFinishChan(eth.finishChan)
-
-				if eth.config.XLayer.Realtime.EnableSubscribe {
-					eth.realtimeSub = realtimeSub.NewRealtimeSubscription()
-					eth.realtimeSub.Start(context.Background())
-				}
+			// Rpc execution mode
+			eth.realtimeCache = realtimeCache.NewRealtimeCache(context.Background(), eth.blockchain, eth.config.XLayer.Realtime.CacheDumpPath, eth.config.XLayer.Realtime.CacheHeightThreshold)
+			eth.finishChan = make(chan realtimeTypes.FinishedEntry)
+			eth.blockchain.SetRealtimeFinishChan(eth.finishChan)
+			if eth.config.XLayer.Realtime.EnableSubscribe {
+				eth.realtimeSub = realtimeSub.NewRealtimeSubscription()
+				eth.realtimeSub.Start(context.Background())
 			}
 		}
 	}
@@ -82,8 +71,8 @@ func (eth *Ethereum) InitRealtime() {
 
 func (eth *Ethereum) StartRealtime() {
 	if eth.RealtimeEnabled() {
-		go realtime.ListenKafkaConsumer(context.Background(), eth.kafkaConsumer, eth.realtimeCache, eth.finishChan, eth.realtimeSub, eth.config.XLayer.Realtime.RealtimeRpc)
-		go realtime.ListenKafkaProducer(context.Background(), eth.kafkaProducer, eth.kafkaBlockInfoChan, eth.kafkaTxInfoChan, eth.config.XLayer.Realtime.RealtimeRpc)
+		go realtime.ListenRealtimeConsumer(context.Background(), &eth.config.XLayer.Realtime, eth.realtimeCache, eth.finishChan, eth.realtimeSub, eth.config.XLayer.Realtime.RealtimeRpc)
+		go realtime.ListenRealtimeProducer(context.Background(), eth.kafkaProducer, eth.kafkaBlockInfoChan, eth.kafkaTxInfoChan, eth.config.XLayer.Realtime.RealtimeRpc)
 	}
 }
 
