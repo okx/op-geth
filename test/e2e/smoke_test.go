@@ -21,7 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/ethereum/go-ethereum/test/operations"
 	"github.com/stretchr/testify/require"
