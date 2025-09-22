@@ -1,81 +1,81 @@
-# 区块构建结果缓存复用方案
+# Block Build Result Caching and Reuse
 
-## 1. 背景与问题
+## 1. Background and Problem
 
-### 1.1 现状分析
+### 1.1 Current Situation
 
-在当前的op-geth实现中，同一个区块会经历两次完整的交易执行：
+In the current op-geth implementation, each block is fully executed twice:
 
-1. **Propose阶段** (`miner/worker.go::generateWork`)
-   - 基于父区块状态执行所有交易
-   - 生成`newPayloadResult`，包含完整的执行结果
-   - 产生区块、receipts、logs等数据
+1. **Propose stage** (`miner/worker.go::generateWork`)
+   - Execute all transactions against the parent state
+   - Produce a `newPayloadResult` containing the full execution outcome
+   - Create the block, receipts, logs, etc.
 
-2. **InsertChain阶段** (`core/blockchain.go::processBlock`)  
-   - 再次基于相同的父区块状态重新执行所有交易
-   - 重新生成相同的执行结果
-   - 进行状态验证
+2. **InsertChain stage** (`core/blockchain.go::processBlock`)
+   - Re-execute all transactions against the same parent state
+   - Reproduce the same execution results
+   - Validate state
 
-### 1.2 性能影响
+### 1.2 Performance Impact
 
-这种重复执行带来了显著的性能开销：
-- CPU：重复执行EVM指令
-- 内存：重复的状态读写操作
-- I/O：重复的数据库访问
-- 时间：整体区块处理时间增加30-50%
+This duplicate execution incurs significant cost:
+- CPU: redundant EVM execution
+- Memory: repeated state read/write operations
+- I/O: redundant database access
+- Time: overall block processing time increases by 30–50%
 
-## 2. 核心洞察
+## 2. Core Insight
 
-### 2.1 关键发现
+### 2.1 Key Finding
 
-经过深入分析，我们发现了一个关键事实：
-- **区块的parent是固定的**：一个区块的ParentHash在创建时就确定，不会改变
-- **执行基准始终一致**：InsertChain总是基于区块声明的ParentHash来获取父状态
-- **结果可复用**：两次执行的输入完全相同，因此结果也必然相同
+After analyzing the pipeline, we rely on these facts:
+- **A block’s parent is fixed**: the `ParentHash` is determined at block creation and never changes
+− **Execution baseline is always consistent**: InsertChain always obtains the parent state using the block’s declared `ParentHash`
+− **Results are reusable**: the inputs for both executions are identical, therefore the results are identical
 
-### 2.2 并发场景分析
+### 2.2 Concurrency Scenario Analysis
 
-考虑以下并发场景：
-1. 当前链头是区块100
-2. Propose 101（基于100）但还未落盘
-3. Propose 102时`CurrentBlock()`仍是100，所以102也基于100
-4. 101完成insertChain，链头变为101
-5. 102尝试insertChain，形成兄弟区块竞争
+Consider this sequence:
+1. Head is block 100
+2. Propose 101 (based on 100) but not yet inserted
+3. When proposing 102, `CurrentBlock()` is still 100, so 102 is also based on 100
+4. 101 finishes InsertChain and becomes head
+5. 102 attempts InsertChain, competing as a sibling block
 
-在这种情况下：
-- 101和102都基于100，形成短分叉
-- 102的缓存仍然有效，因为它始终基于其声明的parent（100）执行
-- 无论是否发生重组，缓存的正确性都得到保证
+In this case:
+- 101 and 102 are both based on 100, forming a short fork
+- 102’s cache entry remains valid because its execution baseline is always its declared parent (100)
+- Cache correctness is maintained regardless of reorgs
 
-### 2.3 代码验证
+### 2.3 Code Verification
 
 ```go
-// Propose阶段 - miner/worker.go:376
+// Propose stage - miner/worker.go:376
 state, err := miner.chain.StateAt(parent.Root)
 
-// InsertChain阶段 - core/blockchain.go:1865-1867  
+// InsertChain stage - core/blockchain.go:1865-1867
 parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 statedb, err := state.New(parent.Root, bc.statedb)
 ```
 
-两处都是基于相同的parent.Root创建状态，执行基准完全一致。
+Both places create state from the same `parent.Root`; the execution baseline is identical.
 
-## 3. 解决方案设计
+## 3. Solution Design
 
-### 3.1 架构概览
+### 3.1 Architecture Overview
 
 ```
 ┌─────────────────┐
 │  Miner/Worker   │
 │  (generateWork) │
 └────────┬────────┘
-         │ 生成newPayloadResult
+         │ produce newPayloadResult
          ▼
 ┌─────────────────┐
-│  PayloadCache   │◄──── LRU缓存存储
-│  (区块哈希索引) │
+│  PayloadCache   │◄──── LRU-backed store
+│ (keyed by hash) │
 └────────┬────────┘
-         │ 复用缓存结果
+         │ reuse cached result
          ▼
 ┌─────────────────┐
 │   BlockChain    │
@@ -83,42 +83,38 @@ statedb, err := state.New(parent.Root, bc.statedb)
 └─────────────────┘
 ```
 
-### 3.2 缓存数据结构
+### 3.2 Cache Data Structures
 
 ```go
 // core/payload_cache.go
 type CachedPayloadResult struct {
-    // 核心执行结果
-    ProcessResult *ProcessResult  // 包含receipts, requests, logs, gasUsed
-    StateDB       *state.StateDB  // 执行后的最终状态
-    
-    // 元数据
-    BlockHash     common.Hash     // 区块哈希作为缓存键
-    BlockNumber   *big.Int        // 区块高度
-    Timestamp     time.Time       // 缓存时间戳
-    
-    // 可选数据
-    Sidecars      []*types.BlobTxSidecar  // Blob交易相关
-    Witness       *stateless.Witness      // 无状态见证数据
+    // Core execution results
+    ProcessResult *ProcessResult  // receipts, requests, logs, gasUsed
+    StateDB       *state.StateDB  // final state after execution
+
+    // Metadata
+    BlockHash     common.Hash     // block hash as cache key
+    BlockNumber   *big.Int        // block height
+    Timestamp     time.Time       // TTL tracking
 }
 
 type PayloadCache struct {
     cache *lru.Cache[common.Hash, *CachedPayloadResult]
     mu    sync.RWMutex
-    
-    // 配置
-    maxSize int           // 最大缓存条目数
-    ttl     time.Duration // 过期时间
-    
-    // 统计
+
+    // Configuration
+    maxSize int           // maximum entries
+    ttl     time.Duration // expiration
+
+    // Statistics
     hits    uint64
     misses  uint64
 }
 ```
 
-## 4. 实施方案
+## 4. Implementation Plan
 
-### 4.1 缓存管理器
+### 4.1 Cache Manager
 
 ```go
 // core/payload_cache.go
@@ -133,7 +129,7 @@ func NewPayloadCache(size int, ttl time.Duration) *PayloadCache {
 func (pc *PayloadCache) Add(blockHash common.Hash, result *CachedPayloadResult) {
     pc.mu.Lock()
     defer pc.mu.Unlock()
-    
+
     result.Timestamp = time.Now()
     pc.cache.Add(blockHash, result)
 }
@@ -141,30 +137,30 @@ func (pc *PayloadCache) Add(blockHash common.Hash, result *CachedPayloadResult) 
 func (pc *PayloadCache) Get(blockHash common.Hash) (*CachedPayloadResult, bool) {
     pc.mu.RLock()
     defer pc.mu.RUnlock()
-    
+
     if result, ok := pc.cache.Get(blockHash); ok {
-        // 检查是否过期
+        // TTL validation
         if time.Since(result.Timestamp) < pc.ttl {
             atomic.AddUint64(&pc.hits, 1)
             return result, true
         }
-        // 过期则删除
+        // Expired, remove
         pc.cache.Remove(blockHash)
     }
-    
+
     atomic.AddUint64(&pc.misses, 1)
     return nil, false
 }
 ```
 
-### 4.2 写入缓存（Propose阶段）
+### 4.2 Write to Cache (Propose)
 
-修改 `miner/worker.go::generateWork`：
+Modify `miner/worker.go::generateWork`:
 
 ```go
 func (miner *Miner) generateWork(params *generateParams, witness bool) *newPayloadResult {
-    // ... 现有执行逻辑 ...
-    
+    // ... existing execution logic ...
+
     result := &newPayloadResult{
         block:    block,
         fees:     totalFees(block, work.receipts),
@@ -174,8 +170,8 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
         requests: requests,
         witness:  work.witness,
     }
-    
-    // 缓存执行结果
+
+    // Cache execution result
     if miner.payloadCache != nil && miner.config.EnablePayloadCache {
         cached := &CachedPayloadResult{
             ProcessResult: &ProcessResult{
@@ -192,39 +188,39 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
         }
         miner.payloadCache.Add(block.Hash(), cached)
     }
-    
+
     return result
 }
 ```
 
-### 4.3 读取缓存（InsertChain阶段）
+### 4.3 Read from Cache (InsertChain)
 
-修改 `core/blockchain.go::processBlock`：
+Modify `core/blockchain.go::processBlock`:
 
 ```go
 func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, start time.Time, setHead bool) (*blockProcessingResult, error) {
-    // 尝试使用缓存
+    // Try cache first
     if bc.payloadCache != nil && bc.config.EnablePayloadCache {
         if cached, ok := bc.payloadCache.Get(block.Hash()); ok {
-            // 使用缓存的执行结果
+            // Use cached execution result
             res := cached.ProcessResult
-            
-            // StateDB复用策略（深拷贝）
+
+            // StateDB reuse policy (deep copy)
             cachedState := cached.StateDB.Copy()
-            
-            // 仍然执行验证以确保正确性
+
+            // Still validate to ensure correctness
             if err := bc.validator.ValidateState(block, cachedState, res, false); err != nil {
-                // 验证失败，回退到正常流程
+                // Validation failed, fall back
                 log.Warn("Cached payload validation failed", "block", block.NumberU64(), "err", err)
                 bc.payloadCache.Remove(block.Hash())
                 goto NORMAL_PROCESS
             }
-            
-            // 记录性能提升
-            log.Debug("Used cached payload", 
-                "block", block.NumberU64(), 
+
+            // Record perf improvement
+            log.Debug("Used cached payload",
+                "block", block.NumberU64(),
                 "saved_time", time.Since(start))
-            
+
             return &blockProcessingResult{
                 state:    cachedState,
                 receipts: res.Receipts,
@@ -233,46 +229,35 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
             }, nil
         }
     }
-    
+
 NORMAL_PROCESS:
-    // 原有的执行流程
+    // Original processing path
     res, err := bc.processor.Process(block, statedb, bc.vmConfig)
-    // ... 继续原有逻辑 ...
+    // ... continue original logic ...
 }
 ```
 
-## 5. StateDB复用策略
+## 5. StateDB Reuse Strategy
 
-### 5.1 深拷贝方案（推荐）
+### 5.1 Deep Copy (Recommended)
 
-**优点**：
-- 安全，无并发问题
-- 实现简单，使用现有的Copy()方法
+**Pros**
+- Safe, no concurrency risks
+- Simple to implement via `Copy()`
 
-**缺点**：
-- 有一定内存开销
-- 拷贝操作需要时间
+**Cons**
+- Memory overhead
+- Copy time cost
 
-**实现**：
+**Implementation**
 ```go
 cachedState := cached.StateDB.Copy()
 ```
+## 6. Forks and Reorg Handling
 
-### 5.2 只读快照方案（可选）
+### 6.1 Sibling Block Scenario
 
-**优点**：
-- 内存效率高
-- 无拷贝开销
-
-**缺点**：
-- 需要确保InsertChain流程不修改状态
-- 实现复杂度较高
-
-## 6. 分叉与重组处理
-
-### 6.1 兄弟区块场景
-
-当多个区块基于同一个parent时（如上述101和102都基于100）：
+When multiple blocks are based on the same parent (e.g., both 101 and 102 on 100):
 
 ```
         ┌─── Block 101 (height: 101, parent: 100)
@@ -282,172 +267,119 @@ Block 100 ─┤
         └─── Block 102 (height: 101, parent: 100)
 ```
 
-**缓存行为**：
-- 101和102的缓存都独立有效
-- 每个缓存都正确反映了基于区块100的执行结果
-- InsertChain时直接使用对应的缓存
+**Cache behavior**
+- 101 and 102 caches are independent and valid
+- Each cache accurately reflects execution based on block 100
+- InsertChain consumes the matching cache entry
 
-### 6.2 重组（Reorg）处理
+### 6.2 Reorg Handling
 
-当发生重组时：
-1. 旧链区块的缓存自然过期（TTL机制）
-2. 新链区块如果有缓存则直接使用
-3. 缓存的正确性不受重组影响
+On reorgs:
+1. Old chain entries naturally expire (TTL)
+2. New chain entries are reused if present
+3. Cache correctness is unaffected by reorgs
 
-### 6.3 缓存清理策略
+### 6.3 Cache Cleanup Strategy
 
 ```go
 func (bc *BlockChain) handleReorg(oldChain, newChain types.Blocks) {
-    // 主动清理被重组掉的区块缓存
+    // Proactively remove reorged-out blocks
     for _, block := range oldChain {
         bc.payloadCache.Remove(block.Hash())
     }
 }
 ```
 
-## 7. 配置参数
+## 7. Configuration
 
 ```toml
 # config.toml
 [Miner]
-# 启用Payload缓存
+# Enable payload cache
 EnablePayloadCache = true
 
-# 缓存容量（区块数）
+# Cache capacity (number of blocks)
 PayloadCacheSize = 20
 
-# 缓存TTL（秒）
+# Cache TTL (seconds)
 PayloadCacheTTL = 30
+```
+or in cli 
 
-# StateDB复用模式: "copy" | "snapshot"
-StateDBReuseMode = "copy"
+```
+--miner.enablepayloadcache=true
+--miner.payloadcachesize=20
+--miner.payloadcachettl=30s
 ```
 
-## 7. 性能预期
+## 7. Performance Expectations
 
-### 7.1 理论分析
+### 7.1 Theoretical Analysis
 
-| 场景 | 命中率 | 性能提升 | 说明 |
-|------|--------|----------|------|
-| Sequencer模式 | 85-95% | 40-45% | 自己提议的区块立即插入 |
-| 验证节点 | 50-70% | 20-30% | 取决于网络延迟 |
-| 高负载 | 70-80% | 30-35% | 交易多时收益更明显 |
+| Scenario | Hit Rate | Perf Gain | Notes |
+|----------|----------|-----------|-------|
+| Sequencer | 85–95% | 40–45% | Locally proposed blocks inserted immediately |
+| Validator | 50–70% | 20–30% | Depends on network latency |
+| High load | 70–80% | 30–35% | More transactions amplify benefits |
 
-### 7.2 性能指标
+### 7.2 Key Metrics
 
-- **交易执行时间**：减少40-50%
-- **CPU使用率**：降低25-35%
-- **内存增加**：缓存20个区块约200MB
-- **缓存查找开销**：< 1ms
+- Execution time reduction: 40–50%
+- CPU usage reduction: 25–35%
+- Memory overhead: ~200MB for 20 cached blocks
+- Cache lookup overhead: < 1ms
 
-## 8. 监控指标
+## 8. Observability
 
-### 8.1 核心指标
+### 8.1 Core Metrics
 
 ```go
-// 缓存效果
-payload_cache_hit_rate         // 命中率
-payload_cache_size              // 当前缓存大小
-payload_cache_evictions         // 淘汰次数
+// Cache effectiveness
+payloadcache/hitrate            // hit rate
+payloadcache/size               // current cache size
+payloadcache/evict              // evictions
 
-// 性能指标  
-block_process_time_saved        // 节省的处理时间
-block_process_cache_used        // 使用缓存的区块数
-
-// 资源使用
-payload_cache_memory_bytes      // 缓存内存占用
-statedb_copy_duration          // StateDB复制耗时
+// Performance
+payloadcache/time/saved         // time saved via cache
+payloadcache/time/copy          // StateDB copy time
 ```
 
-### 8.2 监控面板
+### 8.2 Dashboarding
 
-建议在Grafana中添加专门的缓存监控面板，包括：
-- 缓存命中率趋势图
-- 性能提升对比图
-- 内存使用情况
-- 异常情况告警
+Recommended Grafana panels:
+- Cache hit rate trend
+- Performance improvement vs. baseline
+- Anomaly alerts
 
-## 9. 风险评估与缓解
+## 9. Risks and Mitigations
 
-### 9.1 潜在风险
+### 9.1 Potential Risks
 
-| 风险 | 影响 | 缓解措施 |
-|------|------|----------|
-| 内存泄漏 | 内存持续增长 | LRU淘汰 + TTL过期 |
-| 状态不一致 | 共识失败 | 保留ValidateState验证 |
-| 缓存雪崩 | 性能急剧下降 | 渐进式过期 + 预热机制 |
-| 分叉处理 | 兄弟区块竞争 | 缓存始终基于声明的parent，正确性有保证 |
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Memory leak | Unbounded memory | LRU eviction + TTL expiry |
+| State inconsistency | Consensus failure | Keep `ValidateState` in place |
+| Cache avalanche | Sharp perf drop | Progressive expiry + warmup |
+| Fork handling | Sibling competition | Cache bound to declared parent |
 
-### 9.2 降级策略
+### 9.2 Degradation Strategy
 
-1. **配置开关**：可通过配置实时启用/禁用
-2. **自动降级**：命中率低于20%时自动禁用
-3. **内存保护**：内存压力大时自动清理缓存
+1. Config switch: runtime enable/disable
+2. Auto degrade: disable if hit rate < 20%
+3. Memory guard: aggressively clean under pressure
 
-## 10. 实施计划
+## 10. Conclusion
 
-### Phase 1：基础实现（第1周）
-- [ ] 实现PayloadCache基础结构
-- [ ] 添加配置管理
-- [ ] 实现基础监控指标
+By introducing a cache between Propose and InsertChain, we avoid redundant transaction execution. Since both stages share the same execution baseline, the cache is simple and reliable. We expect a 30–45% performance gain, especially in sequencer mode with frequent block production.
 
-### Phase 2：集成测试（第2周）
-- [ ] 集成到Worker和BlockChain
-- [ ] 实现StateDB复用机制
-- [ ] 单元测试和集成测试
+## Appendix A: Code Map
 
-### Phase 3：性能测试（第3周）
-- [ ] 性能基准测试
-- [ ] 内存泄漏测试
-- [ ] 并发压力测试
+- Propose: `miner/worker.go::generateWork`
+- InsertChain: `core/blockchain.go::processBlock`
+- StateProcessor: `core/state_processor.go::Process`
+- BlockValidator: `core/block_validator.go::ValidateState`
 
-### Phase 4：生产部署（第4周）
-- [ ] 灰度发布计划
-- [ ] 监控告警配置
-- [ ] 性能调优
-
-## 11. 测试计划
-
-### 11.1 单元测试
-
-```go
-func TestPayloadCache(t *testing.T) {
-    // 测试缓存基本功能
-    // 测试过期机制
-    // 测试并发安全
-}
-
-func TestStateDBReuse(t *testing.T) {
-    // 测试StateDB深拷贝
-    // 测试状态一致性
-}
-```
-
-### 11.2 集成测试
-
-- 正常区块流程测试
-- 分叉场景测试
-- 高并发场景测试
-- 内存压力测试
-
-### 11.3 性能测试
-
-- 使用标准测试集对比优化前后性能
-- 长时间运行测试内存稳定性
-- 模拟生产环境负载测试
-
-## 12. 结论
-
-本方案通过在Propose和InsertChain之间建立缓存机制，避免了重复执行交易的开销。由于两个阶段的执行基准始终一致，缓存方案简单可靠，预计可带来30-45%的性能提升，特别适合Sequencer模式下的高频区块生产场景。
-
-## 附录A：相关代码位置
-
-- Propose阶段：`miner/worker.go::generateWork`
-- InsertChain阶段：`core/blockchain.go::processBlock`
-- StateProcessor：`core/state_processor.go::Process`
-- BlockValidator：`core/block_validator.go::ValidateState`
-
-## 附录B：参考资料
+## Appendix B: References
 
 - [Ethereum Yellow Paper](https://ethereum.github.io/yellowpaper/paper.pdf)
 - [go-ethereum State Processing](https://github.com/ethereum/go-ethereum/wiki/Design-Rationale)

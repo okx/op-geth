@@ -270,8 +270,6 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 			BlockHash:   block.Hash(),
 			BlockNumber: block.Number(),
 			ParentHash:  block.ParentHash(),
-			Sidecars:    work.sidecars,
-			Witness:     work.witness,
 		}
 		miner.payloadCache.Add(block.Hash(), cached)
 		log.Info("Cached payload execution result",

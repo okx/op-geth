@@ -24,7 +24,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -44,10 +43,6 @@ type CachedPayloadResult struct {
 
 	// Metadata
 	Timestamp time.Time // Cache timestamp for TTL
-
-	// Optional data
-	Sidecars []*types.BlobTxSidecar // Blob transaction sidecars
-	Witness  *stateless.Witness     // Stateless witness data
 }
 
 // PayloadCacheConfig contains configuration for the payload cache
