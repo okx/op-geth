@@ -43,7 +43,7 @@ func generateKeyRanges(numChunks int) []KeyRange {
 	return keyRanges
 }
 
-func processScalableAddressStorageConcurrently(db kv.RoDB, prefix []byte, acct *types.Account) (uint64, error) {
+func processScalableAddressStorageConcurrently(db kv.RoDB, prefix []byte, acct types.Account) (uint64, error) {
 
 	numWorkers := 32
 	keyRanges := generateKeyRanges(numWorkers)
