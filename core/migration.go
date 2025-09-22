@@ -365,15 +365,7 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 						} else {
 							logger.Info("scalable storage", "count", scalableStorageCount)
 							account.Storage = storage
-							count := 0
-							for key, value := range account.Storage {
-								if count > 100 {
-									break
-								}
-								fmt.Println("key", key.Hex(), "value", value.Hex())
-								count++
-							}
-
+							dbAlloc[addr] = account
 							skipNums = scalableStorageCount - 1
 						}
 
