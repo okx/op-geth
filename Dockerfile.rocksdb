@@ -10,7 +10,7 @@ RUN apk add --no-cache gcc g++ musl-dev linux-headers git make bash perl zstd-st
 
 # Install RocksDB
 RUN git clone -b v10.4.2 https://github.com/facebook/rocksdb.git
-RUN cd rocksdb && make -j static_lib
+RUN cd rocksdb && make -j8 static_lib
 RUN cd rocksdb && cp librocksdb.a /usr/lib/
 RUN cd rocksdb && cp -r include/rocksdb /usr/include/
 ENV CGO_CFLAGS="-I/usr/include"
