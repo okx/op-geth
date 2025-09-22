@@ -91,8 +91,9 @@ func GetLogStatistics() Statistics {
 // interfering with the singleton used for block insertion.
 func NewLogStatistics() Statistics {
 	return &statisticsInstance{
-		counters: make(map[LogTag]int64),
-		tags:     make(map[LogTag]string),
+		durations: make(map[LogTag]time.Duration),
+		counters:  make(map[LogTag]int64),
+		tags:      make(map[LogTag]string),
 	}
 }
 
