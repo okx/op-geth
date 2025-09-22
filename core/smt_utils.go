@@ -23,8 +23,6 @@ import (
 	"strconv"
 	"strings"
 	"unsafe"
-
-	poseidon "github.com/okx/poseidongold/go"
 )
 
 const (
@@ -49,7 +47,6 @@ type Side int
 var (
 	LeafCapacity   = [4]uint64{1, 0, 0, 0}
 	BranchCapacity = [4]uint64{0, 0, 0, 0}
-	hashFunc       = poseidon.HashWithResult
 )
 
 func Hash(in [8]uint64, capacity [4]uint64) [4]uint64 {
