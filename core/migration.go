@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/triedb"
+	"github.com/google/btree"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	erigonlog "github.com/ledgerwatch/log/v3"
@@ -356,15 +357,42 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 		return nil, fmt.Errorf("failed to scan migration database: %w", err)
 	}
 
-	log.Info("scalabel storage", "count", len(dbAlloc[common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")].Storage))
-	
-	log.Info("scalabel", "key: 0xaf721a472942175b88d490a4dee63167fbb7e57092fb15af592567af68ee5c4d", "val", dbAlloc[common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")].Storage[common.HexToHash("0xaf721a472942175b88d490a4dee63167fbb7e57092fb15af592567af68ee5c4d")])
-	log.Info("scalabel", "key: 0x6ebff01b04d5e789c9ad764abcb51e040b2ea6809d451992fb0e6ed354093a3d", "val", dbAlloc[common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")].Storage[common.HexToHash("0x6ebff01b04d5e789c9ad764abcb51e040b2ea6809d451992fb0e6ed354093a3d")])
-	log.Info("scalabel", "key: 0x3c42e3ab59300f0a2744d04a144466bcdf5f01b791997375be98c11c0032dfd4", "val", dbAlloc[common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")].Storage[common.HexToHash("0x3c42e3ab59300f0a2744d04a144466bcdf5f01b791997375be98c11c0032dfd4")])
+	log.Info("scalabel storage", "count", len(dbAlloc[SCALABEL_ADDR].Storage))
+
+	tr := btree.New(2) // 2 is the B-tree degree
+
+	for key, val := range dbAlloc[SCALABEL_ADDR].Storage {
+		tr.ReplaceOrInsert(Item{key.Hex(), val.Hex()})
+	}
+
+	count := 0
+	tr.Ascend(func(item btree.Item) bool {
+		fmt.Println("top:", count, item)
+		count++
+		return count < 5
+	})
+
+	count = 0
+	tr.Descend(func(item btree.Item) bool {
+		fmt.Println("bot:", count, item)
+		count++
+		return count < 5
+	})
 
 	log.Info("LoadDB: database scan completed", "accounts", len(dbAlloc), "elapsed", time.Since(start))
 
 	return dbAlloc, nil
+}
+
+var SCALABEL_ADDR = common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+
+func (a Item) Less(b btree.Item) bool {
+	return a.Key < b.(Item).Key
+}
+
+type Item struct {
+	Key   string
+	Value string
 }
 
 func getSmtBatchRootHashOrigin(chainDataPath, smtDataPath string) (*big.Int, error) {
