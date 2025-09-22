@@ -358,6 +358,14 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 
 	log.Info("scalabel storage", "count", len(dbAlloc[common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")].Storage))
 
+	count := 0
+	for key, value := range dbAlloc[common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")].Storage {
+		if count > 100 {
+			break
+		}
+		fmt.Println("key", key.Hex(), "value", value.Hex())
+		count++
+	}
 	log.Info("LoadDB: database scan completed", "accounts", len(dbAlloc), "elapsed", time.Since(start))
 
 	return dbAlloc, nil
