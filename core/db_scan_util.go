@@ -5,7 +5,6 @@ import (
 	"context"
 	"github.com/bytedance/gopkg/util/logger"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"sync"
 	"time"
@@ -43,7 +42,7 @@ func generateKeyRanges(numChunks int) []KeyRange {
 	return keyRanges
 }
 
-func processScalableAddressStorageConcurrently(db kv.RoDB, prefix []byte, acct types.Account) (uint64, error) {
+func processScalableAddressStorageConcurrently(db kv.RoDB, prefix []byte) (map[common.Hash]common.Hash, uint64, error) {
 
 	numWorkers := 32
 	keyRanges := generateKeyRanges(numWorkers)
@@ -117,14 +116,14 @@ func processScalableAddressStorageConcurrently(db kv.RoDB, prefix []byte, acct t
 		chunkCount++
 	}
 
-	acct.Storage = make(map[common.Hash]common.Hash, int(totalStorage))
+	storage := make(map[common.Hash]common.Hash, int(totalStorage))
 
 	for _, chunk := range allChunks {
 		for _, entry := range chunk {
-			acct.Storage[entry.Key] = entry.Value
+			storage[entry.Key] = entry.Value
 		}
 	}
 
 	logger.Info("Scalable address total storage items", "count", totalStorage, "chunk count", chunkCount, "elapsed", time.Since(start))
-	return totalStorage, nil
+	return storage, totalStorage, nil
 }
