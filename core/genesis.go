@@ -401,7 +401,11 @@ func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus b
 	// get the storage root of the L2ToL1MessagePasser contract
 	var storageRootMessagePasser common.Hash
 	if isIsthmus {
-		storageRootMessagePasser = allocMap[params.OptimismL2ToL1MessagePasser].Root
+		messagePasserAccount, exists := allocMap[params.OptimismL2ToL1MessagePasser]
+		if !exists {
+			return common.Hash{}, common.Hash{}, errors.New("L2ToL1MessagePasser not found: " + params.OptimismL2ToL1MessagePasser.Hex())
+		}
+		storageRootMessagePasser = messagePasserAccount.Root
 	}
 
 	if err = dbWorker.Wait(); err != nil {
