@@ -3,8 +3,8 @@ package test
 import "time"
 
 const (
-	DefaultL2NetworkRealtimeURL          = "http://localhost:8124"
-	DefaultL2NetworkNoRealtimeURL        = "http://localhost:8128"
+	DefaultL2NetworkRealtimeURL          = "http://localhost:8128"
+	DefaultL2NetworkNoRealtimeURL        = "http://localhost:8124"
 	DefaultL2NetworkWSURL                = "ws://localhost:8548"
 	DefaultL2ChainID              uint64 = 195
 
