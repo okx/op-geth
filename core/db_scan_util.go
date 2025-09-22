@@ -1,13 +1,15 @@
 package core
 
 import (
-	"bytes"
 	"context"
+	"math/big"
+	"runtime"
+	"sync"
+	"time"
+
 	"github.com/bytedance/gopkg/util/logger"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
-	"sync"
-	"time"
 )
 
 type KeyRange struct {
@@ -20,32 +22,73 @@ type StorageEntry struct {
 	Value common.Hash
 }
 
-// for storage key, it is of 32 bytes. we split the storage key space into chunks lexically
-func generateKeyRanges(numChunks int) []KeyRange {
-	keyRanges := make([]KeyRange, numChunks)
-
-	for i := 0; i < numChunks; i++ {
-		startKey := make([]byte, 32)
-		startKey[0] = byte(i * (256 / numChunks))
-
-		var endKey []byte
-		if i == numChunks-1 {
-			endKey = bytes.Repeat([]byte{0xFF}, 32)
-		} else {
-			endKey = make([]byte, 32)
-			endKey[0] = byte((i + 1) * (256 / numChunks))
-		}
-
-		keyRanges[i] = KeyRange{Start: startKey, End: endKey}
+// generatePowerOfTwoKeyRanges splits the 256-bit space into numChunks
+// equal ranges, each of size 2^(256 - log2(numChunks)).
+// numChunks must be a power of two.
+func generatePowerOfTwoKeyRanges(numChunks int) []KeyRange {
+	// check that numChunks is a power of two
+	if numChunks <= 0 || (numChunks&(numChunks-1)) != 0 {
+		panic("numChunks must be a power of two")
 	}
 
-	return keyRanges
+	bitShift := 256 - log2(numChunks)
+	chunkSize := new(big.Int).Lsh(big.NewInt(1), uint(bitShift)) // 2^(256 - m)
+
+	ranges := make([]KeyRange, numChunks)
+
+	ranges[0].Start = make([]byte, 32)
+	ranges[0].End = intToBytes32(chunkSize)
+	for i := 1; i < numChunks; i++ {
+		end := new(big.Int).Mul(big.NewInt(int64(i+1)), chunkSize)
+		if i == numChunks-1 {
+			end = end.Sub(end, big.NewInt(1))
+		}
+		
+		tmp := make([]byte, 32)
+		copy(tmp, ranges[i-1].End)
+		ranges[i] = KeyRange{
+			Start: tmp,
+			End:   intToBytes32(end),
+		}
+	}
+	return ranges
+}
+
+func log2(n int) int {
+	// assumes n is a power of two
+	p := 0
+	for n > 1 {
+		n >>= 1
+		p++
+	}
+	return p
+}
+
+func intToBytes32(x *big.Int) []byte {
+	b := x.Bytes()
+	if len(b) > 32 {
+		panic("overflow")
+	}
+	padded := make([]byte, 32)
+	copy(padded[32-len(b):], b)
+	return padded
+}
+
+func largestPowerOfTwo(n int) int {
+	if n <= 0 {
+		return 1
+	}
+	power := 1
+	for power*2 <= n {
+		power *= 2
+	}
+	return power
 }
 
 func processScalableAddressStorageConcurrently(db kv.RoDB, prefix []byte) (map[common.Hash]common.Hash, uint64, error) {
 
-	numWorkers := 32
-	keyRanges := generateKeyRanges(numWorkers)
+	numWorkers := runtime.NumCPU()
+	keyRanges := generatePowerOfTwoKeyRanges(numWorkers)
 
 	var wg sync.WaitGroup
 	results := make(chan []StorageEntry, numWorkers)
