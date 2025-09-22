@@ -319,6 +319,7 @@ helps reduce storage requirements for nodes that don't need full historical data
 // initGenesis will initialise the given JSON format genesis file and writes it as
 // the zero'd block (i.e. genesis) or will fail hard if it can't succeed.
 func initGenesis(ctx *cli.Context) error {
+	initStart := time.Now()
 	if ctx.Args().Len() != 1 {
 		utils.Fatalf("need genesis.json file as the only argument")
 	}
@@ -362,7 +363,7 @@ func initGenesis(ctx *cli.Context) error {
 	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), false, genesis.IsVerkle())
 	defer triedb.Close()
 
-	_, _, compatErr, err := core.SetupGenesisBlockWithOverride(chaindb, triedb, genesis, &overrides)
+	_, hash, compatErr, err := core.SetupGenesisBlockWithOverride(chaindb, triedb, genesis, &overrides)
 	if err != nil {
 		utils.Fatalf("Failed to write genesis block: %v", err)
 	}
