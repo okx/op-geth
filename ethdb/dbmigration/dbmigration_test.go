@@ -180,10 +180,9 @@ func TestDatabaseMigrator_CancellationSupport(t *testing.T) {
 	migrator := NewDatabaseMigrator(sourceDB, targetDB, 1024, 10, false)
 
 	// Cancel migration after a short delay
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		migrator.Cancel()
-	}()
+	time.Sleep(2 * time.Millisecond)
+	migrator.Cancel()
+	time.Sleep(2 * time.Millisecond)
 
 	// Run migration (should be cancelled)
 	err := migrator.Run()

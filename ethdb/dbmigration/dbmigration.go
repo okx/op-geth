@@ -379,6 +379,10 @@ func (m *DatabaseMigrator) verify() error {
 
 // Run executes the migration process
 func (m *DatabaseMigrator) Run() error {
+	if m.Ctx.Err() != nil {
+		return m.Ctx.Err()
+	}
+
 	defer m.Cancel()
 
 	// Perform migration

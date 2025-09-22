@@ -1,6 +1,6 @@
 # Database Migration Tool
 
-The op-geth database migration tool (`geth db-migrate`) allows you to migrate blockchain databases between different storage backends (Pebble, RocksDB, LevelDB) while preserving all blockchain state data.
+The op-geth database migration tool (`dbmigrate`) allows you to migrate blockchain databases between different storage backends (Pebble, RocksDB, LevelDB) while preserving all blockchain state data.
 
 ## Overview
 
@@ -28,7 +28,7 @@ This tool is specifically designed for migrating op-geth databases between stora
 
 ```bash
 # Stop your op-geth node first
-geth db-migrate \
+dbmigrate \
   --datadir /path/to/datadir \
   --from pebble \
   --to rocksdb \
@@ -38,7 +38,7 @@ geth db-migrate \
 ### Custom Target Directory
 
 ```bash
-geth db-migrate \
+dbmigrate \
   --datadir /path/to/datadir \
   --from pebble \
   --to rocksdb \
@@ -49,7 +49,7 @@ geth db-migrate \
 ### Performance Optimized Migration
 
 ```bash
-geth db-migrate \
+dbmigrate \
   --datadir /path/to/datadir \
   --from pebble \
   --to rocksdb \
@@ -61,7 +61,7 @@ geth db-migrate \
 ## Command Reference
 
 ```
-geth db-migrate [OPTIONS]
+dbmigrate [OPTIONS]
 
 DESCRIPTION:
    Migrate database from one backend to another
@@ -136,7 +136,7 @@ INFO Migration progress    progress=45.2% (1,234,567/2,731,891 keys, 1.2GB/2.8GB
 Use `--verify` to ensure migration integrity:
 
 ```bash
-geth db-migrate --verify [other options]
+dbmigrate --verify [other options]
 ```
 
 Verification process:
@@ -188,7 +188,7 @@ sudo systemctl stop op-geth
 cp -r /var/lib/op-geth/geth/chaindata /backup/chaindata-backup
 
 # 3. Run migration with verification
-geth db-migrate \
+dbmigrate \
   --datadir /var/lib/op-geth \
   --from pebble \
   --to rocksdb \
@@ -286,7 +286,7 @@ sudo systemctl stop op-geth
 
 # Run migration
 echo "Running migration..."
-geth db-migrate \
+dbmigrate \
   --datadir "$DATADIR" \
   --from pebble \
   --to rocksdb \

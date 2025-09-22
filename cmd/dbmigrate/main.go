@@ -171,7 +171,7 @@ func main() {
 		},
 		Action: dbMigrate,
 		Description: `
-The db-migrate command migrates an op-geth database from one backend to another.
+The dbmigrate command migrates an op-geth database from one backend to another.
 
 This tool is specifically designed for migrating between Pebble, RocksDB, and LevelDB
 backends while preserving all blockchain state data, including trie nodes, block data,
@@ -179,16 +179,16 @@ receipts, and other critical information.
 
 Examples:
   # Migrate from Pebble to RocksDB (most common use case)
-  geth db-migrate --from pebble --to rocksdb
+  dbmigrate --from pebble --to rocksdb
 
   # Migrate with custom target directory
-  geth db-migrate --from pebble --to rocksdb --target-dir /custom/path
+  dbmigrate --from pebble --to rocksdb --target-dir /custom/path
 
   # Migrate with verification
-  geth db-migrate --from pebble --to rocksdb --verify
+  dbmigrate --from pebble --to rocksdb --verify
 
   # Force migration overwriting existing target
-  geth db-migrate --from pebble --to rocksdb --force
+  dbmigrate --from pebble --to rocksdb --force
 
 The migration process:
 1. Opens source database in read-only mode
