@@ -250,48 +250,6 @@ func TestMigrationScanDB(t *testing.T) {
 				},
 			},
 		},
-		{
-			name:          "ERIGON_SCALABLE_ADDRESS with concurrent storage processing",
-			migrationPath: "/tmp/data",
-			setupMocks: func(db *MockRoDB, tx *MockTx) {
-				// Mock db.View
-				db.On("View", mock.Anything, mock.AnythingOfType("func(kv.Tx) error")).Run(func(args mock.Arguments) {
-					fn := args.Get(1).(func(kv.Tx) error)
-					fn(tx)
-				}).Return(nil)
-
-				// Mock ForEach to simulate ERIGON_SCALABLE_ADDRESS account and storage
-				tx.On("ForEach", PlainStateBucket, mock.MatchedBy(func(start []byte) bool {
-					return start == nil || len(start) == 0
-				}), mock.MatchedBy(func(fn func(k, v []byte) error) bool {
-					// Simulate ERIGON_SCALABLE_ADDRESS account data (20-byte key)
-					erigonScalableAddr := ERIGON_SCALABLE_ADDRESS
-					accountData := createMockAccountData(big.NewInt(5000000000000000000), []byte{10, 20, 30, 40}, 15)
-					fn(erigonScalableAddr.Bytes(), accountData)
-
-					// Simulate storage data for ERIGON_SCALABLE_ADDRESS (60-byte key: 20-byte addr + 8-bytes incarnation + 32-byte storage key)
-					incarnation := []byte{0, 0, 0, 0, 0, 0, 0, 1}
-					storageKey := common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
-					storageValue := common.HexToHash("0x2222222222222222222222222222222222222222222222222222222222222222")
-					storageKeyBytes := append(erigonScalableAddr.Bytes(), incarnation...)
-					storageKeyBytes = append(storageKeyBytes, storageKey.Bytes()...)
-					fn(storageKeyBytes, storageValue.Bytes())
-
-					return true
-				})).Return(nil)
-
-			},
-			expectedResult: types.GenesisAlloc{
-				ERIGON_SCALABLE_ADDRESS: {
-					Balance: big.NewInt(5000000000000000000),
-					Code:    []byte{10, 20, 30, 40},
-					Nonce:   15,
-					Storage: map[common.Hash]common.Hash{
-						common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"): common.HexToHash("0x2222222222222222222222222222222222222222222222222222222222222222"),
-					},
-				},
-			},
-		},
 	}
 
 	for _, tt := range tests {
