@@ -357,15 +357,11 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 	}
 
 	log.Info("scalabel storage", "count", len(dbAlloc[common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")].Storage))
+	
+	log.Info("scalabel", "key: 0xaf721a472942175b88d490a4dee63167fbb7e57092fb15af592567af68ee5c4d", "val", dbAlloc[common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")].Storage[common.HexToHash("0xaf721a472942175b88d490a4dee63167fbb7e57092fb15af592567af68ee5c4d")])
+	log.Info("scalabel", "key: 0x6ebff01b04d5e789c9ad764abcb51e040b2ea6809d451992fb0e6ed354093a3d", "val", dbAlloc[common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")].Storage[common.HexToHash("0x6ebff01b04d5e789c9ad764abcb51e040b2ea6809d451992fb0e6ed354093a3d")])
+	log.Info("scalabel", "key: 0x3c42e3ab59300f0a2744d04a144466bcdf5f01b791997375be98c11c0032dfd4", "val", dbAlloc[common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")].Storage[common.HexToHash("0x3c42e3ab59300f0a2744d04a144466bcdf5f01b791997375be98c11c0032dfd4")])
 
-	count := 0
-	for key, value := range dbAlloc[common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")].Storage {
-		if count > 100 {
-			break
-		}
-		fmt.Println("key", key.Hex(), "value", value.Hex())
-		count++
-	}
 	log.Info("LoadDB: database scan completed", "accounts", len(dbAlloc), "elapsed", time.Since(start))
 
 	return dbAlloc, nil
