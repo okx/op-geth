@@ -11,7 +11,7 @@ type RealtimeConfig struct {
 	EnableSubscribe      bool                            `toml:",omitempty"`
 	CacheHeightThreshold uint64                          `toml:",omitempty"`
 	SubscribeKafka       bool                            `toml:",omitempty"`
-	SubscribeWesocket    bool                            `toml:",omitempty"`
+	SubscribeWebsocket   bool                            `toml:",omitempty"`
 	Kafka                kafka.KafkaConfig               `toml:",omitempty"`
 	WSConn               streamclient.StreamClientConfig `toml:",omitempty"`
 	CacheDumpPath        string                          `toml:",omitempty"`

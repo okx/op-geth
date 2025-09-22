@@ -111,7 +111,7 @@ func ListenRealtimeConsumer(
 		}
 		// Start the kafka consumer
 		go kafkaConsumer.ConsumeKafka(ctx, blockMsgsChan, txMsgsChan, errorMsgsChan, errorChan)
-	} else if cfg.SubscribeWesocket {
+	} else if cfg.SubscribeWebsocket {
 		// TODO: Add ws consumer consume logic
 	} else {
 		log.Error("[Realtime] RealtimeConsumer disabled, no realtime kafka or websocket consumer specified")
