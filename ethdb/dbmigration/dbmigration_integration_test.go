@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/ethdb/pebble"
 )
 
@@ -304,4 +306,78 @@ func TestMigrationPerformance(t *testing.T) {
 	}
 
 	t.Logf("Performance test output:\n%s", output)
+}
+
+// TestLevelDBToRocksDBIntegration tests LevelDB to RocksDB migration
+func TestLevelDBToRocksDBIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping LevelDB integration test in short mode")
+	}
+
+	// Setup temporary directory structure
+	tempDir := t.TempDir()
+	sourceDir := filepath.Join(tempDir, "source")
+	targetDir := filepath.Join(tempDir, "target")
+
+	// Create source directory
+	if err := os.MkdirAll(sourceDir, 0755); err != nil {
+		t.Fatalf("failed to create source directory: %v", err)
+	}
+
+	// Create and populate a test LevelDB database
+	levelKV, err := leveldb.New(sourceDir, 16, 16, "", false)
+	if err != nil {
+		t.Fatalf("failed to create leveldb database: %v", err)
+	}
+	sourceDB := rawdb.NewDatabase(levelKV)
+
+	// Add some test data
+	batch := sourceDB.NewBatch()
+	for i := 0; i < 100; i++ {
+		key := fmt.Sprintf("test-key-%08d", i)
+		value := fmt.Sprintf("test-value-%08d-with-some-longer-content", i)
+		if err := batch.Put([]byte(key), []byte(value)); err != nil {
+			t.Fatalf("failed to add test data: %v", err)
+		}
+	}
+	if err := batch.Write(); err != nil {
+		t.Fatalf("failed to write test data: %v", err)
+	}
+	sourceDB.Close()
+
+	// Test the migration directly using the library
+	sourceDB, err = OpenDatabase("leveldb", sourceDir, true)
+	if err != nil {
+		t.Fatalf("failed to reopen leveldb database: %v", err)
+	}
+	defer sourceDB.Close()
+
+	targetDB, err := OpenDatabase("rocksdb", targetDir, false)
+	if err != nil {
+		t.Fatalf("failed to create rocksdb database: %v", err)
+	}
+	defer targetDB.Close()
+
+	// Run migration
+	migrator := NewDatabaseMigrator(sourceDB, targetDB, 1024, 10, true)
+	if err := migrator.Run(); err != nil {
+		t.Fatalf("migration failed: %v", err)
+	}
+
+	// Verify migration success
+	stats := migrator.Stats
+	if stats.ProcessedKeys != 100 {
+		t.Errorf("expected 100 processed keys, got %d", stats.ProcessedKeys)
+	}
+
+	if stats.ErrorCount != 0 {
+		t.Errorf("expected 0 errors, got %d", stats.ErrorCount)
+	}
+
+	// Verify target directory was created
+	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
+		t.Error("target directory was not created")
+	}
+
+	t.Logf("LevelDB to RocksDB integration test passed. Stats: %s", stats.String())
 }

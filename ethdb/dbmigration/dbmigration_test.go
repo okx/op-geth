@@ -28,6 +28,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/ethdb/pebble"
 	"github.com/ethereum/go-ethereum/ethdb/rocksdb"
@@ -272,6 +273,83 @@ func TestPebbleToRocksDBMigration(t *testing.T) {
 	t.Logf("Migration completed: %s", stats.String())
 }
 
+func TestLevelDBToRocksDBMigration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping leveldb to rocksdb test in short mode")
+	}
+
+	// Setup temporary directories
+	tempDir := t.TempDir()
+	leveldbDir := filepath.Join(tempDir, "leveldb")
+	rocksdbDir := filepath.Join(tempDir, "rocksdb")
+
+	// Create directories
+	if err := os.MkdirAll(leveldbDir, 0755); err != nil {
+		t.Fatalf("failed to create leveldb directory: %v", err)
+	}
+	if err := os.MkdirAll(rocksdbDir, 0755); err != nil {
+		t.Fatalf("failed to create rocksdb directory: %v", err)
+	}
+
+	// Create and populate LevelDB database
+	levelKV, err := leveldb.New(leveldbDir, 16, 16, "", false)
+	if err != nil {
+		t.Fatalf("failed to create leveldb database: %v", err)
+	}
+	levelDB := rawdb.NewDatabase(levelKV)
+
+	// Add test data
+	testData := generateTestData(t, 500)
+	batch := levelDB.NewBatch()
+	for key, value := range testData {
+		if err := batch.Put([]byte(key), value); err != nil {
+			batch.Reset()
+			levelDB.Close()
+			t.Fatalf("failed to add test data to batch: %v", err)
+		}
+	}
+	if err := batch.Write(); err != nil {
+		batch.Reset()
+		levelDB.Close()
+		t.Fatalf("failed to write batch: %v", err)
+	}
+	levelDB.Close()
+
+	// Reopen LevelDB database in read-only mode
+	levelKVRO, err := leveldb.New(leveldbDir, 16, 16, "", true)
+	if err != nil {
+		t.Fatalf("failed to reopen leveldb database: %v", err)
+	}
+	levelDB = rawdb.NewDatabase(levelKVRO)
+	defer levelDB.Close()
+
+	// Create RocksDB database
+	rocksKV, err := rocksdb.New(rocksdbDir, 16, 16, "", false)
+	if err != nil {
+		t.Fatalf("failed to create rocksdb database: %v", err)
+	}
+	rocksDB := rawdb.NewDatabase(rocksKV)
+	defer rocksDB.Close()
+
+	// Create migrator and run migration
+	migrator := NewDatabaseMigrator(levelDB, rocksDB, 1024, 50, true)
+	if err := migrator.Run(); err != nil {
+		t.Fatalf("migration failed: %v", err)
+	}
+
+	// Verify migration success
+	stats := migrator.Stats
+	if stats.ProcessedKeys != int64(len(testData)) {
+		t.Errorf("expected %d processed keys, got %d", len(testData), stats.ProcessedKeys)
+	}
+
+	if stats.ErrorCount != 0 {
+		t.Errorf("expected 0 errors, got %d", stats.ErrorCount)
+	}
+
+	t.Logf("LevelDB to RocksDB migration completed: %s", stats.String())
+}
+
 func TestOpenDatabase(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -284,7 +362,8 @@ func TestOpenDatabase(t *testing.T) {
 		{"pebble", true, false},
 		{"rocksdb", false, false},
 		{"rocksdb", true, false},
-		{"leveldb", false, true}, // Not implemented
+		{"leveldb", false, false}, // Now implemented
+		{"leveldb", true, false},  // Now implemented
 		{"invalid", false, true},
 	}
 

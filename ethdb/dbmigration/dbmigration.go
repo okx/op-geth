@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/ethdb/pebble"
 	"github.com/ethereum/go-ethereum/ethdb/rocksdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -398,7 +399,7 @@ func (m *DatabaseMigrator) Run() error {
 	return nil
 }
 
-// openDatabase opens a database with the specified type and configuration
+// OpenDatabase opens a database with the specified type and configuration
 func OpenDatabase(dbType, dataDir string, readonly bool) (ethdb.Database, error) {
 	switch strings.ToLower(dbType) {
 	case "pebble":
@@ -416,8 +417,12 @@ func OpenDatabase(dbType, dataDir string, readonly bool) (ethdb.Database, error)
 		// Wrap with rawdb.NewDatabase to get full ethdb.Database interface
 		return rawdb.NewDatabase(kvdb), nil
 	case "leveldb":
-		// LevelDB implementation would go here if needed
-		return nil, fmt.Errorf("leveldb migration not implemented yet")
+		kvdb, err := leveldb.New(dataDir, 256, 256, "geth/db/chaindata/", readonly)
+		if err != nil {
+			return nil, err
+		}
+		// Wrap with rawdb.NewDatabase to get full ethdb.Database interface
+		return rawdb.NewDatabase(kvdb), nil
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", dbType)
 	}

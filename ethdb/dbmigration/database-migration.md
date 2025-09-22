@@ -20,7 +20,7 @@ This tool is specifically designed for migrating op-geth databases between stora
 | RocksDB | Pebble | ✅ Fully Supported |
 | RocksDB | LevelDB | 🚧 Planned |
 | LevelDB | Pebble | 🚧 Planned |
-| LevelDB | RocksDB | 🚧 Planned |
+| LevelDB | RocksDB | ✅ Fully Supported |
 
 ## Quick Start
 
@@ -31,6 +31,17 @@ This tool is specifically designed for migrating op-geth databases between stora
 dbmigrate \
   --datadir /path/to/datadir \
   --from pebble \
+  --to rocksdb \
+  --verify
+```
+
+### LevelDB to RocksDB Migration
+
+```bash
+# Stop your op-geth node first
+dbmigrate \
+  --datadir /path/to/datadir \
+  --from leveldb \
   --to rocksdb \
   --verify
 ```
