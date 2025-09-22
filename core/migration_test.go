@@ -146,6 +146,7 @@ func (m *MockTx) Rollback() {
 
 // TestScanDB tests the ScanDB function with various scenarios
 func TestMigrationScanDB(t *testing.T) {
+	const PlainStateBucket = "PlainState"
 	tests := []struct {
 		name           string
 		migrationPath  string
