@@ -83,7 +83,7 @@ func largestPowerOfTwo(n int) int {
 func processScalableAddressStorageConcurrently(db kv.RoDB, prefix []byte) (map[common.Hash]common.Hash, uint64, error) {
 
 	numWorkers := runtime.NumCPU()
-	keyRanges := generatePowerOfTwoKeyRanges(uint(numWorkers))
+	keyRanges := generatePowerOfTwoKeyRanges(uint(largestPowerOfTwo(numWorkers)))
 
 	var wg sync.WaitGroup
 	results := make(chan []StorageEntry, numWorkers)
