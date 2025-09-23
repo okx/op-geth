@@ -71,6 +71,7 @@ var Defaults = Config{
 	GPO:                FullNodeGPO,
 	RPCTxFeeCap:        1, // 1 ether
 	Monitor:            DefaultMonitorConfig(),
+	XLayer:             XLayerConfig{OkPay: OkPayConfig{}, Apollo: ApolloConfig{}},
 }
 
 //go:generate go run github.com/fjl/gencodec -type Config -formats toml -out gen_config.go
