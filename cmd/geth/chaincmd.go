@@ -888,7 +888,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 		}
 
 		// Progress reporting
-		if verifiedCount%1000 == 0 {
+		if verifiedCount%100000 == 0 {
 			log.Info("Verification progress", "verified", verifiedCount, "errors", errorCount)
 		}
 	}
