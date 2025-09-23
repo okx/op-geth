@@ -93,8 +93,6 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]*types.Accoun
 	numWorkers := largestPowerOfTwo(runtime.NumCPU())
 	keyRanges := generatePowerOfTwoKeyRanges(160, uint(numWorkers))
 
-	var storageScanned int64
-
 	var wg sync.WaitGroup
 	results := make(chan map[common.Address]*types.Account, numWorkers)
 
@@ -213,7 +211,6 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]*types.Accoun
 		allAccounts = append(allAccounts, accounts)
 	}
 
-	logger.Info("concurrent account processing completed", "storageScanned", storageScanned)
 	return allAccounts, nil
 }
 
