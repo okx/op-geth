@@ -68,14 +68,56 @@ func NewEthereumAPI(b Backend) *EthereumAPI {
 	return &EthereumAPI{b}
 }
 
+// getXLayerGasPrice returns gas price for XLayer
+func (api *EthereumAPI) getXLayerGasPrice(ctx context.Context) (*hexutil.Big, error) {
+	// RPC node means isXLayerRPCService is available, forward the request
+	if seqRPC := api.b.SequencerRPCService(); seqRPC != nil {
+		var result hexutil.Big
+		log.Debug("getXLayerGasPrice: forward the request to RPC node")
+		err := seqRPC.CallContext(ctx, &result, "eth_gasPrice")
+		log.Debug("getXLayerGasPrice: received gas price from RPC node", "gasPrice", result.String())
+		return &result, err
+	}
+
+	// Sequencer get gas price at local
+	gasPrice := api.b.XLayerGpricer().GetGasCache().GetLatest()
+	log.Debug("getXLayerGasPrice: use XLayer gas price", "gasPrice", gasPrice.String())
+	return (*hexutil.Big)(gasPrice), nil
+}
+
+// getXLayerMaxPriorityFee returns max priority fee for XLayer
+func (api *EthereumAPI) getXLayerMaxPriorityFee(ctx context.Context) (*hexutil.Big, error) {
+	// RPC node means isXLayerRPCService is available, forward the request
+	if seqRPC := api.b.SequencerRPCService(); seqRPC != nil {
+		var result hexutil.Big
+		log.Debug("getXLayerMaxPriorityFee: forward the request to RPC node")
+		err := seqRPC.CallContext(ctx, &result, "eth_maxPriorityFeePerGas")
+		log.Debug("getXLayerMaxPriorityFee: received max priority fee from RPC node", "maxPriorityFee", result.String())
+		return &result, err
+	}
+
+	// Sequencer get gas price at local
+	gasPrice := api.b.XLayerGpricer().GetGasCache().GetLatest()
+
+	// sub baseFee
+	tipcap := new(big.Int).Set(gasPrice)
+	head := api.b.CurrentHeader()
+	if head.BaseFee != nil {
+		tipcap = tipcap.Sub(tipcap, head.BaseFee)
+		if tipcap.Cmp(big.NewInt(0)) < 0 {
+			tipcap = big.NewInt(0)
+		}
+	}
+
+	log.Debug("getXLayerMaxPriorityFee: use XLayer max priority fee", "maxPriorityFee", tipcap.String())
+	return (*hexutil.Big)(tipcap), nil
+}
+
 // GasPrice returns a suggestion for a gas price for legacy transactions.
 func (api *EthereumAPI) GasPrice(ctx context.Context) (*hexutil.Big, error) {
-
 	// For XLayer
 	if api.b.XLayerGpricer() != nil && api.b.XLayerGpricer().GetConfig().XLayer.Type != "" {
-		gasPrice, err := api.gasPriceXL(ctx)
-		log.Debug("XLayer gas price is enabled, use XLayer gas price", "gasPrice", gasPrice.String())
-		return (*hexutil.Big)(gasPrice), err
+		return api.getXLayerGasPrice(ctx)
 	}
 
 	// Original logic for non-XLayer
@@ -91,27 +133,9 @@ func (api *EthereumAPI) GasPrice(ctx context.Context) (*hexutil.Big, error) {
 
 // MaxPriorityFeePerGas returns a suggestion for a gas tip cap for dynamic fee transactions.
 func (api *EthereumAPI) MaxPriorityFeePerGas(ctx context.Context) (*hexutil.Big, error) {
-
 	// For XLayer
 	if api.b.XLayerGpricer() != nil && api.b.XLayerGpricer().GetConfig().XLayer.Type != "" {
-		// get gasPrice from XLayer
-		gasPrice, err := api.gasPriceXL(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		// sub baseFee
-		tipcap := new(big.Int).Set(gasPrice)
-		head := api.b.CurrentHeader()
-		if head.BaseFee != nil {
-			tipcap = tipcap.Sub(tipcap, head.BaseFee)
-			if tipcap.Cmp(big.NewInt(0)) < 0 {
-				tipcap = big.NewInt(0)
-			}
-		}
-
-		log.Debug("XLayer gas price is enabled, use XLayer gas price", "gasPrice", gasPrice.String(), "baseFee", head.BaseFee.String(), "tipcap", tipcap.String())
-		return (*hexutil.Big)(tipcap), err
+		return api.getXLayerMaxPriorityFee(ctx)
 	}
 
 	tipcap, err := api.b.SuggestGasTipCap(ctx)
@@ -2248,10 +2272,4 @@ func checkTxFee(gasPrice *big.Int, gas uint64, cap float64) error {
 // CheckTxFee exports a helper function used to check whether the fee is reasonable
 func CheckTxFee(gasPrice *big.Int, gas uint64, cap float64) error {
 	return checkTxFee(gasPrice, gas, cap)
-}
-
-// gasPriceXL handles gas price for XLayer
-func (api *EthereumAPI) gasPriceXL(ctx context.Context) (*big.Int, error) {
-	gasResult := api.b.XLayerGpricer().GetGasCache().GetLatest()
-	return gasResult, nil
 }

@@ -94,6 +94,7 @@ type Backend interface {
 
 	// XLayer additions
 	XLayerGpricer() xlayer.L2GasPricer
+	SequencerRPCService() *rpc.Client
 
 	// This is copied from filters.Backend
 	// eth/filters needs to be initialized from this backend type, so methods needed by

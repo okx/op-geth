@@ -57,6 +57,7 @@ type EthAPIBackend struct {
 	eth                 *Ethereum
 	gpo                 *gasprice.Oracle
 	xlayerGpricer       xlayer.L2GasPricer
+	seqRPCService       *rpc.Client
 }
 
 // ChainConfig returns the active chain configuration.
@@ -522,4 +523,9 @@ func (b *EthAPIBackend) Genesis() *types.Block {
 // XLayerGpricer returns the XLayer gas price suggester
 func (b *EthAPIBackend) XLayerGpricer() xlayer.L2GasPricer {
 	return b.xlayerGpricer
+}
+
+// SequencerRPCService returns the sequencer RPC service client
+func (b *EthAPIBackend) SequencerRPCService() *rpc.Client {
+	return b.seqRPCService
 }
