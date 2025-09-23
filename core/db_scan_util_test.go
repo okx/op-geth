@@ -8,17 +8,26 @@ import (
 
 func TestGeneratePowerOfTwoKeyRanges(t *testing.T) {
 
-	ranges := generatePowerOfTwoKeyRanges(32)
+	ranges256 := generatePowerOfTwoKeyRanges(256, 32)
 
-	assert.Equal(t, "0000000000000000000000000000000000000000000000000000000000000000", hex.EncodeToString(ranges[0].Start))
-	assert.Equal(t, "0800000000000000000000000000000000000000000000000000000000000000", hex.EncodeToString(ranges[0].End))
+	assert.Equal(t, "0000000000000000000000000000000000000000000000000000000000000000", hex.EncodeToString(ranges256[0].Start))
+	assert.Equal(t, "0800000000000000000000000000000000000000000000000000000000000000", hex.EncodeToString(ranges256[0].End))
 
-	assert.Equal(t, "0800000000000000000000000000000000000000000000000000000000000000", hex.EncodeToString(ranges[1].Start))
-	assert.Equal(t, "1000000000000000000000000000000000000000000000000000000000000000", hex.EncodeToString(ranges[1].End))
+	assert.Equal(t, "0800000000000000000000000000000000000000000000000000000000000000", hex.EncodeToString(ranges256[1].Start))
+	assert.Equal(t, "1000000000000000000000000000000000000000000000000000000000000000", hex.EncodeToString(ranges256[1].End))
 
-	assert.Equal(t, "f800000000000000000000000000000000000000000000000000000000000000", hex.EncodeToString(ranges[31].Start))
-	assert.Equal(t, "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", hex.EncodeToString(ranges[31].End))
+	assert.Equal(t, "f800000000000000000000000000000000000000000000000000000000000000", hex.EncodeToString(ranges256[31].Start))
+	assert.Equal(t, "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", hex.EncodeToString(ranges256[31].End))
 
+	ranges160 := generatePowerOfTwoKeyRanges(160, 32)
+	assert.Equal(t, "0000000000000000000000000000000000000000", hex.EncodeToString(ranges160[0].Start))
+	assert.Equal(t, "0800000000000000000000000000000000000000", hex.EncodeToString(ranges160[0].End))
+
+	assert.Equal(t, "0800000000000000000000000000000000000000", hex.EncodeToString(ranges160[1].Start))
+	assert.Equal(t, "1000000000000000000000000000000000000000", hex.EncodeToString(ranges160[1].End))
+
+	assert.Equal(t, "f800000000000000000000000000000000000000", hex.EncodeToString(ranges160[31].Start))
+	assert.Equal(t, "ffffffffffffffffffffffffffffffffffffffff", hex.EncodeToString(ranges160[31].End))
 }
 
 func TestLargestPowerOfTwo(t *testing.T) {

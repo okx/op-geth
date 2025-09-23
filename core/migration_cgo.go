@@ -302,10 +302,20 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 	start := time.Now()
 	dbAlloc := make(types.GenesisAlloc)
 
+	accts, err := processAccountsConcurrently(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process accounts: %w", err)
+	}
+
+	for _, acct := range accts {
+		dbAlloc[acct.Address] = *acct.Account
+	}
+	logger.Info("ScanDB: process accounts", "size", len(accts), "elapsed", time.Since(start))
+
 	var total uint64
 
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
-		var skipNums uint64 = 0
+		var skipNums uint64 = uint64(len(accts)) // skip accounts
 		return tx.ForEach(PlainStateBucket, nil, func(k, v []byte) error {
 			if skipNums > 0 {
 				skipNums--
@@ -315,6 +325,7 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 
 			// Process accounts (keys with length 20)
 			if len(k) == 20 {
+				//logger.Warn("encounter account while scanning for storage", "key", k)
 				addr := common.BytesToAddress(k)
 
 				// Decode account data
