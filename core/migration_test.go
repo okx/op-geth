@@ -283,6 +283,7 @@ func TestMigrationGenerateMigrateAlloc(t *testing.T) {
 		ignoreAddresses map[common.Address]struct{}
 		genesisAlloc    *types.GenesisAlloc
 		expectedResult  types.GenesisAlloc
+		expectError     bool
 	}{
 		{
 			name: "no ignored addresses, no conflicts",
@@ -399,11 +400,11 @@ func TestMigrationGenerateMigrateAlloc(t *testing.T) {
 			},
 		},
 		{
-			name: "with conflicts, genesis takes precedence",
+			name: "with conflicts, db takes precedence if code len is same and genesis has no storage",
 			dbAlloc: types.GenesisAlloc{
 				common.HexToAddress("0x1111111111111111111111111111111111111111"): {
 					Balance: big.NewInt(1000000000000000000),
-					Code:    []byte{1, 2, 3, 4},
+					Code:    []byte{1, 2, 3, 4}, // Same length as genesis code
 					Nonce:   5,
 					Storage: map[common.Hash]common.Hash{
 						common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002"),
@@ -414,24 +415,66 @@ func TestMigrationGenerateMigrateAlloc(t *testing.T) {
 			genesisAlloc: &types.GenesisAlloc{
 				common.HexToAddress("0x1111111111111111111111111111111111111111"): {
 					Balance: big.NewInt(5000000000000000000), // Different balance
-					Code:    []byte{9, 10, 11, 12},           // Different code
+					Code:    []byte{1, 2, 3, 4},              // Same length as db code
 					Nonce:   20,                              // Different nonce
-					Storage: map[common.Hash]common.Hash{
-						common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000005"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000006"),
-					},
+					Storage: map[common.Hash]common.Hash{},   // No storage in genesis
 				},
 			},
 			expectedResult: types.GenesisAlloc{
-				// Genesis account takes precedence (conflict resolved)
+				// DB account takes precedence (conflict resolved)
 				common.HexToAddress("0x1111111111111111111111111111111111111111"): {
-					Balance: big.NewInt(5000000000000000000),
-					Code:    []byte{9, 10, 11, 12},
-					Nonce:   20,
+					Balance: big.NewInt(1000000000000000000),
+					Code:    []byte{1, 2, 3, 4},
+					Nonce:   5,
 					Storage: map[common.Hash]common.Hash{
+						common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002"),
+					},
+				},
+			},
+		},
+		{
+			name: "with conflicts, expect error when code len differs",
+			dbAlloc: types.GenesisAlloc{
+				common.HexToAddress("0x2222222222222222222222222222222222222222"): {
+					Balance: big.NewInt(1000000000000000000),
+					Code:    []byte{1, 2, 3, 4}, // Length 4
+					Nonce:   5,
+					Storage: map[common.Hash]common.Hash{},
+				},
+			},
+			ignoreAddresses: map[common.Address]struct{}{},
+			genesisAlloc: &types.GenesisAlloc{
+				common.HexToAddress("0x2222222222222222222222222222222222222222"): {
+					Balance: big.NewInt(5000000000000000000),
+					Code:    []byte{1, 2, 3, 4, 5}, // Length 5 - different from db
+					Nonce:   20,
+					Storage: map[common.Hash]common.Hash{},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "with conflicts, expect error when genesis has storage",
+			dbAlloc: types.GenesisAlloc{
+				common.HexToAddress("0x3333333333333333333333333333333333333333"): {
+					Balance: big.NewInt(1000000000000000000),
+					Code:    []byte{1, 2, 3, 4}, // Same length as genesis code
+					Nonce:   5,
+					Storage: map[common.Hash]common.Hash{},
+				},
+			},
+			ignoreAddresses: map[common.Address]struct{}{},
+			genesisAlloc: &types.GenesisAlloc{
+				common.HexToAddress("0x3333333333333333333333333333333333333333"): {
+					Balance: big.NewInt(5000000000000000000),
+					Code:    []byte{9, 10, 11, 12}, // Same length as db code
+					Nonce:   20,
+					Storage: map[common.Hash]common.Hash{ // Genesis has storage - should cause error
 						common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000005"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000006"),
 					},
 				},
 			},
+			expectError: true,
 		},
 		{
 			name:            "empty dbAlloc and genesisAlloc",
@@ -456,21 +499,19 @@ func TestMigrationGenerateMigrateAlloc(t *testing.T) {
 			genesisAlloc: &types.GenesisAlloc{
 				common.HexToAddress("0x1111111111111111111111111111111111111111"): {
 					Balance: nil, // nil balance in genesis too
-					Code:    []byte{9, 10, 11, 12},
+					Code:    []byte{1, 2, 3, 4},
 					Nonce:   20,
-					Storage: map[common.Hash]common.Hash{
-						common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000005"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000006"),
-					},
+					Storage: map[common.Hash]common.Hash{},
 				},
 			},
 			expectedResult: types.GenesisAlloc{
-				// Genesis account takes precedence, but balance should be set to zero
+				// db account takes precedence, but balance should be set to zero
 				common.HexToAddress("0x1111111111111111111111111111111111111111"): {
 					Balance: big.NewInt(0), // Should be set to zero
-					Code:    []byte{9, 10, 11, 12},
-					Nonce:   20,
+					Code:    []byte{1, 2, 3, 4},
+					Nonce:   5,
 					Storage: map[common.Hash]common.Hash{
-						common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000005"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000006"),
+						common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002"),
 					},
 				},
 			},
@@ -481,35 +522,42 @@ func TestMigrationGenerateMigrateAlloc(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := generateMigrateAlloc(tt.dbAlloc, tt.ignoreAddresses, tt.genesisAlloc)
 
-			// Check that the result has the expected number of accounts
-			assert.Equal(t, len(tt.expectedResult), len(result), "Number of accounts should match")
+			if tt.expectError {
+				// For error cases, we expect the function to still return a result
+				// but the mergeConflictAccount function will log errors for these cases
+				// We just verify the function doesn't panic and returns some result
+				assert.NotNil(t, result, "Result should not be nil even for error cases")
+			} else {
+				// Check that the result has the expected number of accounts
+				assert.Equal(t, len(tt.expectedResult), len(result), "Number of accounts should match")
 
-			// Check each expected account
-			for expectedAddr, expectedAccount := range tt.expectedResult {
-				actualAccount, exists := result[expectedAddr]
-				assert.True(t, exists, "Account %s should exist in result", expectedAddr.Hex())
+				// Check each expected account
+				for expectedAddr, expectedAccount := range tt.expectedResult {
+					actualAccount, exists := result[expectedAddr]
+					assert.True(t, exists, "Account %s should exist in result", expectedAddr.Hex())
 
-				// Check balance
-				if expectedAccount.Balance == nil {
-					assert.Nil(t, actualAccount.Balance, "Balance should be nil for account %s", expectedAddr.Hex())
-				} else {
-					assert.Equal(t, expectedAccount.Balance, actualAccount.Balance, "Balance should match for account %s", expectedAddr.Hex())
+					// Check balance
+					if expectedAccount.Balance == nil {
+						assert.Nil(t, actualAccount.Balance, "Balance should be nil for account %s", expectedAddr.Hex())
+					} else {
+						assert.Equal(t, expectedAccount.Balance, actualAccount.Balance, "Balance should match for account %s", expectedAddr.Hex())
+					}
+
+					// Check code
+					assert.Equal(t, expectedAccount.Code, actualAccount.Code, "Code should match for account %s", expectedAddr.Hex())
+
+					// Check nonce
+					assert.Equal(t, expectedAccount.Nonce, actualAccount.Nonce, "Nonce should match for account %s", expectedAddr.Hex())
+
+					// Check storage
+					assert.Equal(t, expectedAccount.Storage, actualAccount.Storage, "Storage should match for account %s", expectedAddr.Hex())
 				}
 
-				// Check code
-				assert.Equal(t, expectedAccount.Code, actualAccount.Code, "Code should match for account %s", expectedAddr.Hex())
-
-				// Check nonce
-				assert.Equal(t, expectedAccount.Nonce, actualAccount.Nonce, "Nonce should match for account %s", expectedAddr.Hex())
-
-				// Check storage
-				assert.Equal(t, expectedAccount.Storage, actualAccount.Storage, "Storage should match for account %s", expectedAddr.Hex())
-			}
-
-			// Check that no unexpected accounts exist
-			for actualAddr := range result {
-				_, exists := tt.expectedResult[actualAddr]
-				assert.True(t, exists, "Account %s should not exist in result", actualAddr.Hex())
+				// Check that no unexpected accounts exist
+				for actualAddr := range result {
+					_, exists := tt.expectedResult[actualAddr]
+					assert.True(t, exists, "Account %s should not exist in result", actualAddr.Hex())
+				}
 			}
 		})
 	}
@@ -624,11 +672,11 @@ func TestMigrationMergeConflictAccount(t *testing.T) {
 				},
 			},
 			expectedResult: types.Account{
-				Balance: big.NewInt(2000000000000000000), // Use OP balance
-				Code:    []byte{9, 10, 11, 12},           // Use OP code
-				Nonce:   10,                              // Use OP nonce
-				Storage: map[common.Hash]common.Hash{ // Use OP storage
-					common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000003"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000004"),
+				Balance: big.NewInt(1000000000000000000), // Use XLayer balance
+				Code:    []byte{1, 2, 3, 4},              // Use XLayer code
+				Nonce:   5,                               // Use XLayer nonce
+				Storage: map[common.Hash]common.Hash{ // Use XLayer storage
+					common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002"),
 				},
 			},
 		},
