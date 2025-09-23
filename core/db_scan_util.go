@@ -151,22 +151,22 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]*types.Accoun
 							logger.Warn("processAccountsConcurrently: failed to decode account", "address", addr.Hex(), "error", err)
 							return nil
 						}
-
-						// Get code data if account has code
-						if len(decodedAcct.Code) > 0 {
-							codeHash := common.BytesToHash(decodedAcct.Code)
-							if codeHash != EmptyCodeHash {
-								code, err := workerTx.GetOne(CodeBucket, codeHash[:])
-								if err == nil && len(code) > 0 {
-									// Make a copy to avoid potential memory issues
-									if addr == EeigonScalableAddress {
-										logger.Info("scalable: code >>>>>>>", "address", len(code))
-									}
-									decodedAcct.Code = make([]byte, len(code))
-									copy(decodedAcct.Code, code)
-								}
-							}
-						}
+						//
+						//// Get code data if account has code
+						//if len(decodedAcct.Code) > 0 {
+						//	codeHash := common.BytesToHash(decodedAcct.Code)
+						//	if codeHash != EmptyCodeHash {
+						//		code, err := workerTx.GetOne(CodeBucket, codeHash[:])
+						//		if err == nil && len(code) > 0 {
+						//			// Make a copy to avoid potential memory issues
+						//			if addr == EeigonScalableAddress {
+						//				logger.Info("scalable: code >>>>>>>", "address", len(code))
+						//			}
+						//			decodedAcct.Code = make([]byte, len(code))
+						//			copy(decodedAcct.Code, code)
+						//		}
+						//	}
+						//}
 						//fmt.Printf("assign account to account %x\n", acctPtr)
 						chunkAccts[addr] = decodedAcct
 
