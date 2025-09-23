@@ -90,7 +90,7 @@ func largestPowerOfTwo(n int) int {
 }
 
 func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account, error) {
-	numWorkers := largestPowerOfTwo(runtime.NumCPU()) / 2
+	numWorkers := largestPowerOfTwo(runtime.NumCPU())
 	keyRanges := generatePowerOfTwoKeyRanges(160, uint(numWorkers))
 
 	var storageScanned int64
