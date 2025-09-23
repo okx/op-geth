@@ -95,7 +95,7 @@ func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.St
 }
 
 func afterApplyTransaction(env *vm.EVM, failed bool) []*types.InnerTx {
-	innerTxs := env.GetInnerTxMeta().InnerTxs
+	innerTxs := env.PopInnerTxs()
 	if failed {
 		for _, innerTx := range innerTxs {
 			innerTx.IsError = true
