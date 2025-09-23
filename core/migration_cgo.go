@@ -172,8 +172,6 @@ func IsEmptyAccount(acct types.Account) bool {
 }
 
 func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *types.Account) types.Account {
-	logger.Info("mergeConflictAccount: merging conflict account", "address", addr.Hex())
-
 	var destAccount types.Account
 	switch addr {
 	// black hole on XLayer with no code or storage
