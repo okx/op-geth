@@ -556,6 +556,9 @@ func (it *rocksdbIterator) Next() bool {
 		it.first = false
 		return it.Valid()
 	}
+	if !it.Valid() {
+		return false
+	}
 	it.iter.Next()
 	return it.Valid()
 }
