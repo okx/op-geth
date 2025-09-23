@@ -328,6 +328,7 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 	tr := btree.New(2)
 
 	// insert all storage entries
+	logger.Info("scalabel storage", "count", len(dbAlloc[EeigonScalableAddress].Storage))
 	for k, v := range dbAlloc[EeigonScalableAddress].Storage {
 		tr.ReplaceOrInsert(storageItem{key: k, val: v})
 	}
