@@ -133,7 +133,7 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account
 				for iter.HasNext() {
 					if skipNums > 0 {
 						skipNums--
-						return nil
+						continue
 					}
 
 					keyAcct, valAcct, err := iter.Next()
