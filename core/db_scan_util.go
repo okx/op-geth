@@ -99,6 +99,7 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account
 	results := make(chan map[common.Address]types.Account, numWorkers)
 
 	for i := 0; i < numWorkers; i++ {
+		logger.Info("scan account worker start", "id", i)
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
@@ -108,13 +109,13 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account
 			chunkAccts := make(map[common.Address]types.Account, 1<<16)
 
 			if err := db.View(context.Background(), func(workerTx kv.Tx) error {
-				var count uint64
+				//var count uint64
 
-				cursor, err := workerTx.Cursor(PlainStateBucket)
-				if err != nil {
-					return err
-				}
-				defer cursor.Close()
+				//cursor, err := workerTx.Cursor(PlainStateBucket)
+				//if err != nil {
+				//	return err
+				//}
+				//defer cursor.Close()
 
 				startKey := make([]byte, 20)
 				copy(startKey[:20], keyRange.Start)
@@ -131,12 +132,11 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account
 
 				var skipNums uint64 = 0
 				for iter.HasNext() {
+					keyAcct, valAcct, err := iter.Next()
 					if skipNums > 0 {
 						skipNums--
 						continue
 					}
-
-					keyAcct, valAcct, err := iter.Next()
 					if err != nil {
 						logger.Error("failed to read value from cursor", "worker", workerID, "error", err)
 						break
@@ -203,7 +203,7 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account
 				}
 
 				results <- chunkAccts
-				logger.Info("worker completed", "workerID", workerID, "count", count, "duration", time.Since(start))
+				logger.Info("account worker completed", "workerID", workerID, "account count", len(chunkAccts), "duration", time.Since(start))
 				return nil
 			}); err != nil {
 				logger.Error("worker error", "workerID", workerID, "error", err)
@@ -275,7 +275,7 @@ func processScalableAddressStorageConcurrently(db kv.RoDB, prefix []byte) (map[c
 				}
 
 				results <- chunkStorage
-				logger.Info("worker completed", "id", workerID, "elapsed", time.Since(start))
+				logger.Info("storage worker completed", "id", workerID, "storage count", len(chunkStorage), "elapsed", time.Since(start))
 				return nil
 			}); err != nil {
 				logger.Error("worker transaction failed", "worker", workerID, "error", err)
