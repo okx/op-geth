@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -42,6 +43,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/gasestimator"
 	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/internal/ethapi/override"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
@@ -1637,6 +1639,60 @@ func (api *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash commo
 	return marshalReceipt(receipt, blockHash, blockNumber, signer, tx, int(index), api.b.ChainConfig()), nil
 }
 
+// GetInternalTransactions returns the inner transactions for a given transaction hash
+func (api *TransactionAPI) GetInternalTransactions(ctx context.Context, txHash common.Hash) ([]*types.InnerTx, error) {
+	// Check if inner transaction feature is enabled
+	if xlayerBackend, ok := api.b.(XLayerBackend); ok && !xlayerBackend.IsInnerTxEnabled() {
+		return nil, errors.New("unsupported internal transaction method")
+	}
+
+	innerTxs, err := rawdb.ReadInnerTxsByTxHash(api.b.ChainDb(), txHash)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to read inner transactions: %w", err)
+	}
+
+	if innerTxs == nil {
+		return []*types.InnerTx{}, nil
+	}
+
+	return innerTxs, nil
+}
+
+// GetBlockInternalTransactions returns all inner transactions for all transactions in a block
+func (api *TransactionAPI) GetBlockInternalTransactions(ctx context.Context, blockNr rpc.BlockNumber) (map[common.Hash][]*types.InnerTx, error) {
+	// Check if inner transaction feature is enabled
+	if xlayerBackend, ok := api.b.(XLayerBackend); ok && !xlayerBackend.IsInnerTxEnabled() {
+		return nil, errors.New("unsupported internal transaction method")
+	}
+
+	block, err := api.b.BlockByNumber(ctx, blockNr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block: %w", err)
+	}
+	if block == nil {
+		return nil, fmt.Errorf("block not found")
+	}
+
+	blockNum := block.NumberU64()
+	transactions := block.Transactions()
+	result := make(map[common.Hash][]*types.InnerTx)
+
+	// Retrieve inner transactions for each transaction in the block
+	for i, tx := range transactions {
+		innerTxs, err := rawdb.ReadInnerTxs(api.b.ChainDb(), blockNum, uint32(i))
+		if err != nil {
+			continue
+		}
+		if len(innerTxs) > 0 {
+			// Use transaction hash as key
+			result[tx.Hash()] = innerTxs
+		}
+	}
+
+	return result, nil
+}
+
 // marshalReceipt marshals a transaction receipt into a JSON object.
 func marshalReceipt(receipt *types.Receipt, blockHash common.Hash, blockNumber uint64, signer types.Signer, tx *types.Transaction, txIndex int, chainConfig *params.ChainConfig) map[string]interface{} {
 	from, _ := types.Sender(signer, tx)
@@ -1727,31 +1783,67 @@ func (api *TransactionAPI) sign(addr common.Address, tx *types.Transaction) (*ty
 
 // SubmitTransaction is a helper function that submits tx to txPool and logs a message.
 func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (common.Hash, error) {
+	txHash := tx.Hash().Hex()
+	head := b.CurrentBlock()
+
+	// Log transaction start
+	monitor.LogTransactionStart(
+		txHash,
+		monitor.ServiceNameRPC,
+		monitor.StepRPCReceiveTx.ID,
+		monitor.StepRPCReceiveTx.Key,
+		head.Number.Uint64(),
+		int8(tx.Type()),
+		"", "", "", 0, // from, to, value, nonce will be filled after sender recovery
+	)
+
 	// If the transaction fee cap is already specified, ensure the
 	// fee of the given transaction is _reasonable_.
 	if err := checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
+		monitor.LogTransactionEnd(txHash, monitor.ServiceNameRPC, monitor.StepRPCReceiveTx.ID,
+			monitor.StepRPCReceiveTx.Key, head.Number.Uint64(), "", 0, int8(tx.Type()),
+			"failed", err.Error(), 0)
 		return common.Hash{}, err
 	}
 	if !b.UnprotectedAllowed() && !tx.Protected() {
 		// Ensure only eip155 signed transactions are submitted if EIP155Required is set.
-		return common.Hash{}, errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
-	}
-	if err := b.SendTx(ctx, tx); err != nil {
-		return common.Hash{}, err
-	}
-	// Print a log with full tx details for manual investigations and interventions
-	head := b.CurrentBlock()
-	signer := types.MakeSigner(b.ChainConfig(), head.Number, head.Time)
-	from, err := types.Sender(signer, tx)
-	if err != nil {
+		err := errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
+		monitor.LogTransactionEnd(txHash, monitor.ServiceNameRPC, monitor.StepRPCReceiveTx.ID,
+			monitor.StepRPCReceiveTx.Key, head.Number.Uint64(), "", 0, int8(tx.Type()),
+			"failed", err.Error(), 0)
 		return common.Hash{}, err
 	}
 
+	// Log before sending to tx pool
+	monitor.LogTransactionProgress(txHash, monitor.ServiceNameRPC, monitor.StepRPCSendTx.ID,
+		monitor.StepRPCSendTx.Key, head.Number.Uint64(), int8(tx.Type()), "sending", 0)
+
+	if err := b.SendTx(ctx, tx); err != nil {
+		monitor.LogTransactionEnd(txHash, monitor.ServiceNameRPC, monitor.StepRPCSendTx.ID,
+			monitor.StepRPCSendTx.Key, head.Number.Uint64(), "", 0, int8(tx.Type()),
+			"failed", err.Error(), 0)
+		return common.Hash{}, err
+	}
+	// Print a log with full tx details for manual investigations and interventions
+	signer := types.MakeSigner(b.ChainConfig(), head.Number, head.Time)
+	from, err := types.Sender(signer, tx)
+	if err != nil {
+		monitor.LogTransactionEnd(txHash, monitor.ServiceNameRPC, monitor.StepRPCSendTx.ID,
+			monitor.StepRPCSendTx.Key, head.Number.Uint64(), "", 0, int8(tx.Type()),
+			"failed", err.Error(), 0)
+		return common.Hash{}, err
+	}
+
+	// Log successful submission
+	monitor.LogTransactionEnd(txHash, monitor.ServiceNameRPC, monitor.StepRPCSendTx.ID,
+		monitor.StepRPCSendTx.Key, head.Number.Uint64(), "", 0, int8(tx.Type()),
+		"success", "", 0)
+
 	if tx.To() == nil {
 		addr := crypto.CreateAddress(from, tx.Nonce())
-		log.Info("Submitted contract creation", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "contract", addr.Hex(), "value", tx.Value())
+		log.Debug("Submitted contract creation", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "contract", addr.Hex(), "value", tx.Value())
 	} else {
-		log.Info("Submitted transaction", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "recipient", tx.To(), "value", tx.Value())
+		log.Debug("Submitted transaction", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "recipient", tx.To(), "value", tx.Value())
 	}
 	return tx.Hash(), nil
 }

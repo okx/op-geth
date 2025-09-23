@@ -115,7 +115,8 @@ type Ethereum struct {
 	seqRPCService        *rpc.Client
 	historicalRPCService *rpc.Client
 
-	interopRPC *interop.InteropClient
+	interopRPC             *interop.InteropClient
+	xlayerLegacyRPCService *XlayerLegacyRPCService // Migration configuration for routing to xlayer-erigon
 
 	nodeCloser func() error
 
@@ -215,6 +216,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	var (
 		vmConfig = vm.Config{
 			EnablePreimageRecording: config.EnablePreimageRecording,
+
+			// For X Layer
+			EnableInnerTxs: config.EnableInnerTx,
 		}
 		cacheConfig = &core.CacheConfig{
 			TrieCleanLimit:      config.TrieCleanCache,
@@ -380,6 +384,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	eth.dropper = newDropper(eth.p2pServer.MaxDialedConns(), eth.p2pServer.MaxInboundConns())
 
+	// For X Layer
+	config.Miner.OkPayPriorityEnable = config.XLayer.OkPay.PriorityEnable
+	config.Miner.OkPaySenderAccounts = config.XLayer.OkPay.SenderAccountsList
+	config.Miner.OkPayBlockPriorityTxsLimit = config.XLayer.OkPay.BlockPriorityTxsLimit
+
 	eth.miner = miner.New(eth, config.Miner, eth.engine)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 	eth.miner.SetPrioAddresses(config.TxPool.Locals)
@@ -389,6 +398,21 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		log.Info("Unprotected transactions allowed")
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, config.GPO, config.Miner.GasPrice)
+
+	// Set up migration configuration if configured
+	if config.XLayer.LegacyPp.MigrationBlock != nil && config.XLayer.LegacyPp.PPRPCUrl != "" {
+		migrationConfig, err := NewXlayerLegacyRPCService(config)
+		if err != nil {
+			log.Error("Failed to create migration configuration", "error", err)
+			return nil, err
+		}
+		if migrationConfig != nil {
+			eth.xlayerLegacyRPCService = migrationConfig
+			log.Info("Migration routing enabled",
+				"migrationBlock", *config.XLayer.LegacyPp.MigrationBlock,
+				"ppUrl", config.XLayer.LegacyPp.PPRPCUrl)
+		}
+	}
 
 	if config.RollupSequencerHTTP != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -448,10 +472,16 @@ func makeExtraData(extra []byte) []byte {
 // APIs return the collection of RPC services the ethereum package offers.
 // NOTE, some of these services probably need to be moved to somewhere else.
 func (s *Ethereum) APIs() []rpc.API {
+
 	apis := ethapi.GetAPIs(s.APIBackend)
 
 	// Append any APIs exposed explicitly by the consensus engine
 	apis = append(apis, s.engine.APIs(s.BlockChain())...)
+
+	// Xlayer: Wrap APIs with migration routing if configured
+	if s.xlayerLegacyRPCService != nil {
+		apis = WrapAPIsForXlayer(apis, s.xlayerLegacyRPCService)
+	}
 
 	// Append any Sequencer APIs as enabled
 	if s.config.RollupSequencerTxConditionalEnabled {
@@ -477,6 +507,10 @@ func (s *Ethereum) APIs() []rpc.API {
 		}, {
 			Namespace: "net",
 			Service:   s.netRPCService,
+		}, {
+			// For X Layer
+			Namespace: "eth",
+			Service:   NewTxPreExecAPI(s),
 		},
 	}...)
 }
@@ -641,6 +675,9 @@ func (s *Ethereum) Stop() error {
 	}
 	if s.historicalRPCService != nil {
 		s.historicalRPCService.Close()
+	}
+	if s.xlayerLegacyRPCService != nil {
+		s.xlayerLegacyRPCService.Close()
 	}
 	if s.interopRPC != nil {
 		s.interopRPC.Close()

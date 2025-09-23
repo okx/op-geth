@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
@@ -123,10 +124,21 @@ type generateParams struct {
 
 // generateWork generates a sealing block based on the given parameters.
 func (miner *Miner) generateWork(params *generateParams, witness bool) *newPayloadResult {
+	// Reset and reuse miner-level propose stats
+	if miner.proposeStats == nil {
+		miner.proposeStats = metrics.NewLogStatistics()
+	} else {
+		miner.proposeStats.ResetStatistics()
+	}
+	proposeStats := miner.proposeStats
+
+	startBuildTime := time.Now()
+	prepStart := time.Now()
 	work, err := miner.prepareWork(params, witness)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
+	proposeStats.CumulativeTiming(metrics.ProposePrepareMs, time.Since(prepStart))
 	if work.gasPool == nil {
 		gasLimit := work.header.GasLimit
 
@@ -143,11 +155,12 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 	}
 
 	misc.EnsureCreate2Deployer(miner.chainConfig, work.header.Time, work.state)
-
 	for _, tx := range params.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
+		execStart := time.Now()
 		err = miner.commitTransaction(work, tx)
+		miner.proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
 		if err != nil {
 			return &newPayloadResult{err: fmt.Errorf("failed to force-include tx: %s type: %d sender: %s nonce: %d, err: %w", tx.Hash(), tx.Type(), from, tx.Nonce(), err)}
 		}
@@ -187,6 +200,7 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 	if miner.chainConfig.IsPrague(work.header.Number, work.header.Time) && !isIsthmus {
 		requests = [][]byte{}
 		// EIP-6110 deposits
+		xstart := time.Now()
 		if err := core.ParseDepositLogs(&requests, allLogs, miner.chainConfig); err != nil {
 			return &newPayloadResult{err: err}
 		}
@@ -198,6 +212,7 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		if err := core.ProcessConsolidationQueue(&requests, work.evm); err != nil {
 			return &newPayloadResult{err: err}
 		}
+		proposeStats.CumulativeTiming(metrics.ProposePragueMs, time.Since(xstart))
 	}
 
 	if isIsthmus {
@@ -209,10 +224,36 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		work.header.RequestsHash = &reqHash
 	}
 
+	assembleStart := time.Now()
 	block, err := miner.engine.FinalizeAndAssemble(miner.chain, work.header, work.state, &body, work.receipts)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
+	proposeStats.CumulativeTiming(metrics.ProposeAssembleMs, time.Since(assembleStart))
+
+	// Include StateDB internal timings
+	if work != nil && work.state != nil {
+		sdb := work.state
+		proposeStats.CumulativeTiming(metrics.AccountReadMs, sdb.AccountReads)
+		proposeStats.CumulativeTiming(metrics.AccountHashMs, sdb.AccountHashes)
+		proposeStats.CumulativeTiming(metrics.AccountUpdateMs, sdb.AccountUpdates)
+		proposeStats.CumulativeTiming(metrics.AccountCommitMs, sdb.AccountCommits)
+		proposeStats.CumulativeTiming(metrics.StorageReadMs, sdb.StorageReads)
+		proposeStats.CumulativeTiming(metrics.StorageUpdateMs, sdb.StorageUpdates)
+		proposeStats.CumulativeTiming(metrics.StorageCommitMs, sdb.StorageCommits)
+		proposeStats.CumulativeTiming(metrics.SnapshotCommitMs, sdb.SnapshotCommits)
+		proposeStats.CumulativeTiming(metrics.TrieDBCommitMs, sdb.TrieDBCommits)
+	}
+
+	// Counters and total time
+	// Set block number and counters
+	proposeStats.CumulativeValue(metrics.BlockNumberTag, int64(block.NumberU64()))
+	proposeStats.CumulativeValue(metrics.TxCounter, int64(len(work.txs)))
+	proposeStats.CumulativeValue(metrics.GasUsedCounter, int64(block.GasUsed()))
+	proposeStats.CumulativeTiming(metrics.ProposeTotalMs, time.Since(startBuildTime))
+
+	//
+	proposeStats.ProposeCheckpoint()
 	return &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),
@@ -369,8 +410,32 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 }
 
 func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) error {
+	txHash := tx.Hash().Hex()
+	blockHeight := env.header.Number.Uint64()
+
+	// Log transaction selection
+	monitor.LogTransactionStart(
+		txHash,
+		monitor.ServiceNameMiner,
+		monitor.StepMinerSelectTx.ID,
+		monitor.StepMinerSelectTx.Key,
+		blockHeight,
+		int8(tx.Type()),
+		"", "", "", tx.Nonce(),
+	)
+
 	if tx.Type() == types.BlobTxType {
-		return miner.commitBlobTransaction(env, tx)
+		err := miner.commitBlobTransaction(env, tx)
+		if err != nil {
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+				int8(tx.Type()), "failed", err.Error(), 0)
+		} else {
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+				int8(tx.Type()), "success", "", 0)
+		}
+		return err
 	}
 
 	// If a conditional is set, check prior to applying
@@ -379,20 +444,40 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 
 		// check the conditional
 		if err := env.header.CheckTransactionConditional(conditional); err != nil {
-			return fmt.Errorf("failed header check: %s: %w", err, errTxConditionalInvalid)
+			err := fmt.Errorf("failed header check: %s: %w", err, errTxConditionalInvalid)
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+				int8(tx.Type()), "failed", err.Error(), 0)
+			return err
 		}
 		if err := env.state.CheckTransactionConditional(conditional); err != nil {
-			return fmt.Errorf("failed state check: %s: %w", err, errTxConditionalInvalid)
+			err := fmt.Errorf("failed state check: %s: %w", err, errTxConditionalInvalid)
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+				int8(tx.Type()), "failed", err.Error(), 0)
+			return err
 		}
 	}
 
-	receipt, err := miner.applyTransaction(env, tx)
+	// Log transaction execution start
+	monitor.LogTransactionProgress(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+		monitor.StepMinerExecuteTx.Key, blockHeight, int8(tx.Type()), "executing", 0)
+
+	receipt, err := miner.applyTransaction_okx(env, tx)
 	if err != nil {
+		monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+			monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+			int8(tx.Type()), "failed", err.Error(), 0)
 		return err
 	}
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
 	env.tcount++
+
+	// Log successful execution
+	monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+		monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+		int8(tx.Type()), "success", "", receipt.GasUsed)
 	return nil
 }
 
@@ -409,7 +494,7 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 	if env.blobs+len(sc.Blobs) > maxBlobs {
 		return errors.New("max data blobs reached")
 	}
-	receipt, err := miner.applyTransaction(env, tx)
+	receipt, err := miner.applyTransaction_okx(env, tx)
 	if err != nil {
 		return err
 	}
@@ -592,10 +677,12 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	miner.confMu.RUnlock()
 
 	// Retrieve the pending transactions pre-filtered by the 1559/4844 dynamic fees
+	fetchTxStart := time.Now()
 	filter := txpool.PendingFilter{
 		MinTip:      uint256.MustFromBig(tip),
 		MaxDATxSize: miner.config.MaxDATxSize,
 	}
+	miner.proposeStats.CumulativeTiming(metrics.ProposeFetchTxMs, time.Since(fetchTxStart))
 	if env.header.BaseFee != nil {
 		filter.BaseFee = uint256.MustFromBig(env.header.BaseFee)
 	}
@@ -612,6 +699,71 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	prioPlainTxs, normalPlainTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingPlainTxs
 	prioBlobTxs, normalBlobTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingBlobTxs
 
+	// For X Layer
+	type okPayTx struct {
+		account common.Address
+		tx      *txpool.LazyTransaction
+	}
+
+	okPayTxs := make(map[common.Address][]*txpool.LazyTransaction)
+
+	sortedOkPayTxs := common.OrderedList[okPayTx]{}
+	sortedOkPayTxs.SetCompareFunc(func(a, b okPayTx) int {
+		if a.tx.Time.Before(b.tx.Time) {
+			return -1
+		}
+		if a.tx.Time.After(b.tx.Time) {
+			return 1
+		}
+		return 0
+	})
+
+	accounts := miner.config.OkPaySenderAccounts
+
+	// Skip the entire loop if OkPay priority feature is disabled
+	if miner.config.OkPayPriorityEnable && len(accounts) > 0 {
+		for _, account := range accounts {
+			if txs := normalPlainTxs[account]; len(txs) > 0 {
+				for _, tx := range txs {
+					sortedOkPayTxs.Add(okPayTx{account: account, tx: tx})
+				}
+				delete(normalPlainTxs, account)
+			}
+		}
+
+		if sortedOkPayTxs.Size() > 0 {
+			sortedOkPayTxs.Sort()
+			items := sortedOkPayTxs.Items()
+
+			limit := int(miner.config.OkPayBlockPriorityTxsLimit)
+			if len(items) > limit {
+				// Process priority transactions
+				for _, item := range items[:limit] {
+					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
+				}
+				// Put back unselected transactions
+				for _, item := range items[limit:] {
+					normalPlainTxs[item.account] = append(normalPlainTxs[item.account], item.tx)
+				}
+			} else {
+				// All transactions get priority
+				for _, item := range items {
+					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
+				}
+			}
+		}
+	}
+	// Process OkPay transactions first (highest priority)
+	if len(okPayTxs) > 0 {
+		okpayPlainTxs := newTransactionsByPriceAndNonce(env.signer, okPayTxs, env.header.BaseFee)
+		emptyBlobTxs := newTransactionsByPriceAndNonce(env.signer, nil, env.header.BaseFee)
+		execStart := time.Now()
+		if err := miner.commitTransactions(env, okpayPlainTxs, emptyBlobTxs, interrupt); err != nil {
+			return err
+		}
+		miner.proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
+	}
+
 	for _, account := range prio {
 		if txs := normalPlainTxs[account]; len(txs) > 0 {
 			delete(normalPlainTxs, account)
@@ -622,22 +774,25 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 			prioBlobTxs[account] = txs
 		}
 	}
-	// Fill the block with all available pending transactions.
+
+	// Fill the block with remaining available pending transactions.
 	if len(prioPlainTxs) > 0 || len(prioBlobTxs) > 0 {
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, prioPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, prioBlobTxs, env.header.BaseFee)
-
+		execStart := time.Now()
 		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt); err != nil {
 			return err
 		}
+		miner.proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
 	}
 	if len(normalPlainTxs) > 0 || len(normalBlobTxs) > 0 {
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, normalPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, normalBlobTxs, env.header.BaseFee)
-
+		execStart := time.Now()
 		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt); err != nil {
 			return err
 		}
+		miner.proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
 	}
 	return nil
 }
