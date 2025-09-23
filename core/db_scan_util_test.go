@@ -28,3 +28,8 @@ func TestLargestPowerOfTwo(t *testing.T) {
 	assert.Equal(t, 32, largestPowerOfTwo(32))
 	assert.Equal(t, 32, largestPowerOfTwo(33))
 }
+
+func TestLog2Bits(t *testing.T) {
+	assert.Equal(t, 5, log2Bits(32))
+	assert.Equal(t, 0, log2Bits(1))
+}

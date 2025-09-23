@@ -63,7 +63,7 @@ const (
 	CodeBucket       = "Code"
 )
 
-var ERIGON_SCALABLE_ADDRESS = common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+var EeigonScalableAddress = common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
 
 // Empty code hash constant
 var EmptyCodeHash = common.Hash{}
@@ -354,7 +354,7 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 					storageKey := common.BytesToHash(k[28:])
 					storageValue := common.BytesToHash(v)
 
-					if addr == ERIGON_SCALABLE_ADDRESS {
+					if addr == EeigonScalableAddress {
 						logger.Info("start load scalable acct", "address", addr, "incarnation", k[20:28])
 						storage, scalableStorageCount, err := processScalableAddressStorageConcurrently(db, k[:28])
 						if err != nil {

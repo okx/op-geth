@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"math/big"
+	"math/bits"
 	"runtime"
 	"sync"
 	"time"
@@ -25,25 +26,25 @@ type StorageEntry struct {
 // generatePowerOfTwoKeyRanges splits the 256-bit space into numChunks
 // equal ranges, each of size 2^(256 - log2(numChunks)).
 // numChunks must be a power of two.
-func generatePowerOfTwoKeyRanges(numChunks int) []KeyRange {
+func generatePowerOfTwoKeyRanges(numChunks uint) []KeyRange {
 	// check that numChunks is a power of two
 	if numChunks <= 0 || (numChunks&(numChunks-1)) != 0 {
 		panic("numChunks must be a power of two")
 	}
 
-	bitShift := 256 - log2(numChunks)
+	bitShift := 256 - log2Bits(numChunks)
 	chunkSize := new(big.Int).Lsh(big.NewInt(1), uint(bitShift)) // 2^(256 - m)
 
 	ranges := make([]KeyRange, numChunks)
 
 	ranges[0].Start = make([]byte, 32)
 	ranges[0].End = intToBytes32(chunkSize)
-	for i := 1; i < numChunks; i++ {
+	for i := 1; i < int(numChunks); i++ {
 		end := new(big.Int).Mul(big.NewInt(int64(i+1)), chunkSize)
-		if i == numChunks-1 {
+		if i == int(numChunks)-1 {
 			end = end.Sub(end, big.NewInt(1))
 		}
-		
+
 		tmp := make([]byte, 32)
 		copy(tmp, ranges[i-1].End)
 		ranges[i] = KeyRange{
@@ -54,14 +55,8 @@ func generatePowerOfTwoKeyRanges(numChunks int) []KeyRange {
 	return ranges
 }
 
-func log2(n int) int {
-	// assumes n is a power of two
-	p := 0
-	for n > 1 {
-		n >>= 1
-		p++
-	}
-	return p
+func log2Bits(n uint) int {
+	return bits.Len(n) - 1
 }
 
 func intToBytes32(x *big.Int) []byte {
@@ -88,7 +83,7 @@ func largestPowerOfTwo(n int) int {
 func processScalableAddressStorageConcurrently(db kv.RoDB, prefix []byte) (map[common.Hash]common.Hash, uint64, error) {
 
 	numWorkers := runtime.NumCPU()
-	keyRanges := generatePowerOfTwoKeyRanges(numWorkers)
+	keyRanges := generatePowerOfTwoKeyRanges(uint(numWorkers))
 
 	var wg sync.WaitGroup
 	results := make(chan []StorageEntry, numWorkers)
