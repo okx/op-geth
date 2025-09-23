@@ -307,97 +307,99 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 		return nil, fmt.Errorf("failed to process accounts: %w", err)
 	}
 
-	for _, acct := range accts {
-		dbAlloc[acct.Address] = *acct.Account
+	for _, acctMap := range accts {
+		for addr, account := range acctMap {
+			dbAlloc[addr] = account
+		}
 	}
 	logger.Info("ScanDB: process accounts", "size", len(accts), "elapsed", time.Since(start))
 
-	var total uint64
+	//var total uint64
+	//
+	//if err := db.View(context.Background(), func(tx kv.Tx) error {
+	//	var skipNums uint64 = uint64(len(accts)) // skip accounts
+	//	return tx.ForEach(PlainStateBucket, nil, func(k, v []byte) error {
+	//		if skipNums > 0 {
+	//			skipNums--
+	//			return nil
+	//		}
+	//		total++
+	//
+	//		// Process accounts (keys with length 20)
+	//		if len(k) == 20 {
+	//			//logger.Warn("encounter account while scanning for storage", "key", k)
+	//			addr := common.BytesToAddress(k)
+	//
+	//			// Decode account data
+	//			genesisAccount, err := decodeAccountData(v)
+	//			if err != nil {
+	//				log.Warn("LoadDB: failed to decode account", "address", addr.Hex(), "error", err)
+	//				return nil
+	//			}
+	//
+	//			// Get code data if account has code
+	//			if len(genesisAccount.Code) > 0 {
+	//				codeHash := common.BytesToHash(genesisAccount.Code)
+	//				if codeHash != EmptyCodeHash {
+	//					code, err := tx.GetOne(CodeBucket, codeHash[:])
+	//					if err == nil && len(code) > 0 {
+	//						// Make a copy to avoid potential memory issues
+	//						genesisAccount.Code = make([]byte, len(code))
+	//						copy(genesisAccount.Code, code)
+	//					}
+	//				}
+	//			}
+	//
+	//			// Write all accounts to dbAlloc (regardless of ignore status)
+	//			dbAlloc[addr] = *genesisAccount
+	//		}
+	//
+	//		// Process storage (keys with length > 28)
+	//		if len(k) > 28 {
+	//
+	//			addr := common.BytesToAddress(k[:20])
+	//
+	//			if account, exists := dbAlloc[addr]; exists {
+	//				if account.Storage == nil {
+	//					account.Storage = make(map[common.Hash]common.Hash)
+	//				}
+	//
+	//				storageKey := common.BytesToHash(k[28:])
+	//				storageValue := common.BytesToHash(v)
+	//
+	//				if addr == EeigonScalableAddress {
+	//					logger.Info("start load scalable acct", "address", addr, "incarnation", k[20:28])
+	//					storage, scalableStorageCount, err := processScalableAddressStorageConcurrently(db, k[:28])
+	//					if err != nil {
+	//						logger.Error("processing scalable address storage", "error", err)
+	//					}
+	//					if scalableStorageCount < 1 {
+	//						logger.Warn("scalable acct storage is zero")
+	//					} else {
+	//						logger.Info("scalable storage", "count", scalableStorageCount)
+	//						account.Storage = storage
+	//						dbAlloc[addr] = account
+	//						skipNums = scalableStorageCount - 1
+	//					}
+	//
+	//				} else {
+	//					account.Storage[storageKey] = storageValue
+	//					dbAlloc[addr] = account
+	//
+	//				}
+	//
+	//			} else {
+	//				logger.Error("account not exist for storage", "addr", addr)
+	//			}
+	//
+	//		}
+	//		return nil
+	//	})
+	//}); err != nil {
+	//	return nil, fmt.Errorf("failed to scan migration database: %w", err)
+	//}
 
-	if err := db.View(context.Background(), func(tx kv.Tx) error {
-		var skipNums uint64 = uint64(len(accts)) // skip accounts
-		return tx.ForEach(PlainStateBucket, nil, func(k, v []byte) error {
-			if skipNums > 0 {
-				skipNums--
-				return nil
-			}
-			total++
-
-			// Process accounts (keys with length 20)
-			if len(k) == 20 {
-				//logger.Warn("encounter account while scanning for storage", "key", k)
-				addr := common.BytesToAddress(k)
-
-				// Decode account data
-				genesisAccount, err := decodeAccountData(v)
-				if err != nil {
-					log.Warn("LoadDB: failed to decode account", "address", addr.Hex(), "error", err)
-					return nil
-				}
-
-				// Get code data if account has code
-				if len(genesisAccount.Code) > 0 {
-					codeHash := common.BytesToHash(genesisAccount.Code)
-					if codeHash != EmptyCodeHash {
-						code, err := tx.GetOne(CodeBucket, codeHash[:])
-						if err == nil && len(code) > 0 {
-							// Make a copy to avoid potential memory issues
-							genesisAccount.Code = make([]byte, len(code))
-							copy(genesisAccount.Code, code)
-						}
-					}
-				}
-
-				// Write all accounts to dbAlloc (regardless of ignore status)
-				dbAlloc[addr] = *genesisAccount
-			}
-
-			// Process storage (keys with length > 28)
-			if len(k) > 28 {
-
-				addr := common.BytesToAddress(k[:20])
-
-				if account, exists := dbAlloc[addr]; exists {
-					if account.Storage == nil {
-						account.Storage = make(map[common.Hash]common.Hash)
-					}
-
-					storageKey := common.BytesToHash(k[28:])
-					storageValue := common.BytesToHash(v)
-
-					if addr == EeigonScalableAddress {
-						logger.Info("start load scalable acct", "address", addr, "incarnation", k[20:28])
-						storage, scalableStorageCount, err := processScalableAddressStorageConcurrently(db, k[:28])
-						if err != nil {
-							logger.Error("processing scalable address storage", "error", err)
-						}
-						if scalableStorageCount < 1 {
-							logger.Warn("scalable acct storage is zero")
-						} else {
-							logger.Info("scalable storage", "count", scalableStorageCount)
-							account.Storage = storage
-							dbAlloc[addr] = account
-							skipNums = scalableStorageCount - 1
-						}
-
-					} else {
-						account.Storage[storageKey] = storageValue
-						dbAlloc[addr] = account
-
-					}
-
-				} else {
-					logger.Error("account not exist for storage", "addr", addr)
-				}
-
-			}
-			return nil
-		})
-	}); err != nil {
-		return nil, fmt.Errorf("failed to scan migration database: %w", err)
-	}
-
-	log.Info("LoadDB: database scan completed", "accounts", len(dbAlloc), "elapsed", time.Since(start))
+	//log.Info("LoadDB: database scan completed", "accounts", len(dbAlloc), "elapsed", time.Since(start))
 
 	return dbAlloc, nil
 }
