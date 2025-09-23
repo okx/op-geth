@@ -18,8 +18,10 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"github.com/google/btree"
 	"math/big"
 	"os"
 	"runtime"
@@ -297,6 +299,16 @@ func setupDB(migrationPath string) (kv.RwDB, error) {
 	return db, nil
 }
 
+type storageItem struct {
+	key common.Hash
+	val common.Hash
+}
+
+func (a storageItem) Less(b btree.Item) bool {
+	other := b.(storageItem)
+	return bytes.Compare(a.key[:], other.key[:]) < 0
+}
+
 // ScanDB scans the mdbx database and returns the dbAlloc
 func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 	start := time.Now()
@@ -312,6 +324,32 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 			dbAlloc[addr] = account
 		}
 	}
+
+	tr := btree.New(2)
+
+	// insert all storage entries
+	for k, v := range dbAlloc[EeigonScalableAddress].Storage {
+		tr.ReplaceOrInsert(storageItem{key: k, val: v})
+	}
+
+	// log top 5 (smallest keys)
+	top := 0
+	tr.Ascend(func(it btree.Item) bool {
+		si := it.(storageItem)
+		logger.Info("btree-top", "key", si.key, "val", si.val)
+		top++
+		return top < 5
+	})
+
+	// log bottom 5 (largest keys)
+	bot := 0
+	tr.Descend(func(it btree.Item) bool {
+		si := it.(storageItem)
+		logger.Info("btree-bot", "key", si.key, "val", si.val)
+		bot++
+		return bot < 5
+	})
+
 	logger.Info("ScanDB: process accounts", "size", len(accts), "elapsed", time.Since(start))
 
 	//var total uint64
