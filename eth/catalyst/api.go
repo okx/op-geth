@@ -457,17 +457,18 @@ func (api *ConsensusAPI) forkchoiceUpdated(update engine.ForkchoiceStateV1, payl
 			transactions = append(transactions, &tx)
 		}
 		args := &miner.BuildPayloadArgs{
-			Parent:          update.HeadBlockHash,
-			Timestamp:       payloadAttributes.Timestamp,
-			FeeRecipient:    payloadAttributes.SuggestedFeeRecipient,
-			Random:          payloadAttributes.Random,
-			Withdrawals:     payloadAttributes.Withdrawals,
-			BeaconRoot:      payloadAttributes.BeaconRoot,
-			NoTxPool:        payloadAttributes.NoTxPool,
-			Transactions:    transactions,
-			GasLimit:        payloadAttributes.GasLimit,
-			Version:         payloadVersion,
-			EIP1559Params:   eip1559Params,
+			Parent:        update.HeadBlockHash,
+			Timestamp:     payloadAttributes.Timestamp,
+			FeeRecipient:  payloadAttributes.SuggestedFeeRecipient,
+			Random:        payloadAttributes.Random,
+			Withdrawals:   payloadAttributes.Withdrawals,
+			BeaconRoot:    payloadAttributes.BeaconRoot,
+			NoTxPool:      payloadAttributes.NoTxPool,
+			Transactions:  transactions,
+			GasLimit:      payloadAttributes.GasLimit,
+			Version:       payloadVersion,
+			EIP1559Params: eip1559Params,
+			// For X Layer, realtime
 			RealtimeEnabled: payloadAttributes.RealtimeEnabled,
 		}
 		id := args.Id()
