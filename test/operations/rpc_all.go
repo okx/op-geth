@@ -388,6 +388,31 @@ func EthGetStorageAt(address common.Address, position string, block string) (str
 	return result, nil
 }
 
+// EthTransactionPreExec executes a transaction and returns the result without creating a transaction on chain
+func EthTransactionPreExec(txRequest interface{}, blockParameter string, stateOverride interface{}) (interface{}, error) {
+	if clientRPC == nil {
+		return nil, fmt.Errorf("RPC client not initialized")
+	}
+
+	var result interface{}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var args []interface{}
+	args = append(args, []interface{}{txRequest}) // eth_transactionPreExec expects array of transactions
+	args = append(args, blockParameter)
+	if stateOverride != nil {
+		args = append(args, stateOverride)
+	}
+
+	err := clientRPC.Client().CallContext(ctx, &result, "eth_transactionPreExec", args...)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 // EthGetTransactionByBlockHashAndIndex returns information about a transaction by block hash and transaction index position
 func EthGetTransactionByBlockHashAndIndex(blockHash common.Hash, index string) (interface{}, error) {
 
