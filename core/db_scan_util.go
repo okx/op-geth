@@ -89,14 +89,14 @@ func largestPowerOfTwo(n int) int {
 	return power
 }
 
-func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account, error) {
+func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]*types.Account, error) {
 	numWorkers := largestPowerOfTwo(runtime.NumCPU())
 	keyRanges := generatePowerOfTwoKeyRanges(160, uint(numWorkers))
 
 	var storageScanned int64
 
 	var wg sync.WaitGroup
-	results := make(chan map[common.Address]types.Account, numWorkers)
+	results := make(chan map[common.Address]*types.Account, numWorkers)
 
 	for i := 0; i < numWorkers; i++ {
 		logger.Info("scan account worker start", "id", i)
@@ -106,9 +106,9 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account
 			start := time.Now()
 			keyRange := keyRanges[workerID]
 
-			chunkAccts := make(map[common.Address]types.Account, 1<<16)
-
 			if err := db.View(context.Background(), func(workerTx kv.Tx) error {
+				//logger.Info("inside db view >>>>>>>>", "keyRange", keyRange)
+				chunkAccts := make(map[common.Address]*types.Account, 1<<16)
 
 				startKey := make([]byte, 20)
 				copy(startKey[:20], keyRange.Start)
@@ -124,7 +124,9 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account
 				}
 
 				var skipNums uint64 = 0
+				//logger.Info("has next", "has?", iter.HasNext())
 				for iter.HasNext() {
+					//logger.Info("insid eloop>>>>>>>>>>")
 					keyAcct, valAcct, err := iter.Next()
 					if skipNums > 0 {
 						skipNums--
@@ -138,28 +140,35 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account
 						addr := common.BytesToAddress(keyAcct[:common.AddressLength])
 
 						if _, ok := chunkAccts[addr]; !ok {
-							chunkAccts[addr] = types.Account{}
+							chunkAccts[addr] = &types.Account{}
 						}
 
-						acctPtr, err := decodeAccountData(valAcct)
+						decodedAcct, err := decodeAccountData(valAcct)
+						if addr == EeigonScalableAddress {
+							logger.Info("scalable: decode acct >>>>>>>", "acct", *decodedAcct)
+						}
 						if err != nil {
 							logger.Warn("processAccountsConcurrently: failed to decode account", "address", addr.Hex(), "error", err)
 							return nil
 						}
 
 						// Get code data if account has code
-						if len(acctPtr.Code) > 0 {
-							codeHash := common.BytesToHash(acctPtr.Code)
+						if len(decodedAcct.Code) > 0 {
+							codeHash := common.BytesToHash(decodedAcct.Code)
 							if codeHash != EmptyCodeHash {
 								code, err := workerTx.GetOne(CodeBucket, codeHash[:])
 								if err == nil && len(code) > 0 {
 									// Make a copy to avoid potential memory issues
-									acctPtr.Code = make([]byte, len(code))
-									copy(acctPtr.Code, code)
+									if addr == EeigonScalableAddress {
+										logger.Info("scalable: code >>>>>>>", "address", len(code))
+									}
+									decodedAcct.Code = make([]byte, len(code))
+									copy(decodedAcct.Code, code)
 								}
 							}
 						}
-						chunkAccts[addr] = *acctPtr
+						//fmt.Printf("assign account to account %x\n", acctPtr)
+						chunkAccts[addr] = decodedAcct
 
 					} else if len(keyAcct) > 28 {
 						addr := common.BytesToAddress(keyAcct[:common.AddressLength])
@@ -200,7 +209,7 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account
 				return nil
 			}); err != nil {
 				logger.Error("worker error", "workerID", workerID, "error", err)
-				results <- make(map[common.Address]types.Account, 0)
+				results <- make(map[common.Address]*types.Account, 0)
 			}
 		}(i)
 	}
@@ -209,7 +218,7 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account
 		close(results)
 	}()
 
-	var allAccounts []map[common.Address]types.Account
+	var allAccounts []map[common.Address]*types.Account
 
 	for accounts := range results {
 		allAccounts = append(allAccounts, accounts)

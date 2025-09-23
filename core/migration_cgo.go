@@ -319,16 +319,20 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 		return nil, fmt.Errorf("failed to process accounts: %w", err)
 	}
 
-	for _, acctMap := range accts {
-		for addr, account := range acctMap {
-			dbAlloc[addr] = account
+	fmt.Println("scanned accounts:", len(accts))
+	for _, chunkAccts := range accts {
+		fmt.Println("scanned sub accounts:", len(chunkAccts))
+		for addr, account := range chunkAccts {
+			//copyed := maps.Clone(account)
+			//fmt.Println("account sotrage len", len(account.Storage))
+			dbAlloc[addr] = *account
 		}
 	}
 
 	tr := btree.New(2)
 
 	// insert all storage entries
-	logger.Info("scalabel storage", "count", len(dbAlloc[EeigonScalableAddress].Storage))
+	logger.Info("scalabel storage", "count", len(dbAlloc[EeigonScalableAddress].Storage), "code", dbAlloc[EeigonScalableAddress].Code)
 	for k, v := range dbAlloc[EeigonScalableAddress].Storage {
 		tr.ReplaceOrInsert(storageItem{key: k, val: v})
 	}
