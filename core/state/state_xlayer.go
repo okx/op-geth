@@ -18,7 +18,7 @@ type TxInfo struct {
 }
 
 type Entries struct {
-	entries  *[]journalEntry
+	entries  []journalEntry
 	snapshot int
 }
 
@@ -29,15 +29,19 @@ func (s *StateDB) SetReader(reader Reader) {
 
 func CollectChangeset(entries Entries) *realtimeTypes.Changeset {
 	changeset := realtimeTypes.NewChangeset()
-	for _, entry := range (*entries.entries)[(entries).snapshot:] {
+	for _, entry := range (entries.entries)[(entries).snapshot:] {
 		entry.collectChangeset(changeset)
 	}
 	return changeset
 }
 
 func (s *StateDB) GenerateChangeset() *realtimeTypes.Changeset {
+	ce := make([]journalEntry, len(s.journal.entries))
+	for i, entry := range s.journal.entries {
+		ce[i] = entry.copy()
+	}
 	entries := Entries{
-		entries:  &s.journal.entries,
+		entries:  ce,
 		snapshot: 0,
 	}
 	return CollectChangeset(entries)
@@ -52,8 +56,12 @@ func (s *StateDB) GenerateEntriesSinceSnapshot(revid int) Entries {
 		panic(fmt.Errorf("revision id %v cannot be reverted", revid))
 	}
 	snapshot := s.journal.validRevisions[idx].journalIndex
+	entries := make([]journalEntry, len(s.journal.entries))
+	for i, entry := range s.journal.entries {
+		entries[i] = entry.copy()
+	}
 	return Entries{
-		entries:  &s.journal.entries,
+		entries:  entries,
 		snapshot: snapshot,
 	}
 }

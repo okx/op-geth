@@ -30,16 +30,16 @@ import (
 // database and uses the input parameters for its environment. It returns the
 // receipt for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction_XLayer(evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, shouldFinalize bool) (*types.Receipt, []*types.InnerTx, error) {
+func ApplyTransaction_XLayer(evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, shouldFinalize bool) (*types.Receipt, []*types.InnerTx, *state.Entries, error) {
 	msg, err := TransactionToMessage(tx, types.MakeSigner(evm.ChainConfig(), header.Number, header.Time), header.BaseFee)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// Create a new context to be used in the EVM environment
 	return ApplyTransactionWithEVM_XLayer(msg, gp, statedb, header.Number, header.Hash(), tx, usedGas, evm, shouldFinalize)
 }
 
-func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, shouldFinalize bool) (receipt *types.Receipt, innerTxs []*types.InnerTx, err error) {
+func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, shouldFinalize bool) (receipt *types.Receipt, innerTxs []*types.InnerTx, entries *state.Entries, err error) {
 	txHash := tx.Hash().Hex()
 
 	// For X Layer, log transaction application start
@@ -63,7 +63,7 @@ func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.St
 	// Apply the transaction to the current state (included in the env).
 	result, err := ApplyMessage(evm, msg, gp)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// Update the state with pending changes.
 	var root []byte
@@ -91,7 +91,7 @@ func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.St
 		innerTxs = afterApplyTransaction(evm, result.Failed())
 	}
 
-	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce), innerTxs, nil
+	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce), innerTxs, &result.Entries, nil
 }
 
 func afterApplyTransaction(env *vm.EVM, failed bool) []*types.InnerTx {

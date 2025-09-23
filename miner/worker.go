@@ -477,7 +477,7 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction, r
 	monitor.LogTransactionProgress(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
 		monitor.StepMinerExecuteTx.Key, blockHeight, int8(tx.Type()), "executing", 0)
 
-	snap, receipt, innertxs, err := miner.applyTransaction_XLayer(env, tx)
+	receipt, innertxs, entries, err := miner.applyTransaction_XLayer(env, tx)
 	if err != nil {
 		monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
 			monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
@@ -490,7 +490,7 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction, r
 
 	// For X Layer, realtime
 	if realtimeEnabled {
-		miner.RealtimeSendTxInfo(env.state, snap, env.header.Time, tx, receipt, innertxs)
+		miner.RealtimeSendTxInfo(env.header.Time, tx, receipt, innertxs, entries)
 	}
 	env.state.Finalise(true)
 
@@ -514,7 +514,7 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 	if env.blobs+len(sc.Blobs) > maxBlobs {
 		return errors.New("max data blobs reached")
 	}
-	snap, receipt, innertxs, err := miner.applyTransaction_XLayer(env, tx)
+	receipt, innertxs, entries, err := miner.applyTransaction_XLayer(env, tx)
 	if err != nil {
 		return err
 	}
@@ -527,7 +527,7 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 
 	// For X Layer, realtime
 	if realtimeEnabled {
-		miner.RealtimeSendTxInfo(env.state, snap, env.header.Time, tx, receipt, innertxs)
+		miner.RealtimeSendTxInfo(env.header.Time, tx, receipt, innertxs, entries)
 	}
 
 	return nil

@@ -117,7 +117,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		statedb.SetTxContext(tx.Hash(), i)
 
 		// For X Layer
-		receipt, innerTxs, err := ApplyTransactionWithEVM_XLayer(msg, gp, statedb, blockNumber, blockHash, tx, usedGas, evm, true)
+		receipt, innerTxs, _, err := ApplyTransactionWithEVM_XLayer(msg, gp, statedb, blockNumber, blockHash, tx, usedGas, evm, true)
 		if err != nil {
 			monitor.LogTransactionEnd(txHash, monitor.ServiceNameState, monitor.StepStateProcessTx.ID,
 				monitor.StepStateProcessTx.Key, blockNumber.Uint64(), blockHash.Hex(), header.Time,

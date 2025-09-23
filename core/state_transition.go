@@ -465,8 +465,6 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 	snap := st.state.Snapshot()
 
 	result, err := st.innerExecute()
-	// For X Layer, realtime
-	result.Entries = st.state.GenerateEntriesSinceSnapshot(snap)
 
 	// Failed deposits must still be included. Unless we cannot produce the block at all due to the gas limit.
 	// On deposit failure, we rewind any state changes from after the minting, and increment the nonce.
@@ -494,6 +492,8 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 		}
 		err = nil
 	}
+	// For X Layer, realtime
+	result.Entries = st.state.GenerateEntriesSinceSnapshot(snap)
 	return result, err
 }
 
