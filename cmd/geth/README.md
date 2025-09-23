@@ -4,7 +4,7 @@
 export OP_DATA_DIR=/data/xlayer_uploads/op_geth_data
 export OP_GENESIS_PATH=/data/xlayer_uploads/genesis-op-raw.json
 export ERIGON_CHAINDATA_DIR=/data/xlayer_uploads/erigon-data/chaindata
-./build/bin/geth  --datadir=${OP_DATA_DIR} --gcmode=archive migrate --state.scheme=hash --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=${ERIGON_CHAINDATA_DIR} ${OP_GENESIS_PATH}
+nohup ./build/bin/geth --datadir=${OP_DATA_DIR} --gcmode=archive migrate --state.scheme=hash --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=${ERIGON_CHAINDATA_DIR} ${OP_GENESIS_PATH} > migrate.log 2>&1 &
 ```
 
 ## unit test
