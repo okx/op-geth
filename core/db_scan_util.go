@@ -109,13 +109,6 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account
 			chunkAccts := make(map[common.Address]types.Account, 1<<16)
 
 			if err := db.View(context.Background(), func(workerTx kv.Tx) error {
-				//var count uint64
-
-				//cursor, err := workerTx.Cursor(PlainStateBucket)
-				//if err != nil {
-				//	return err
-				//}
-				//defer cursor.Close()
 
 				startKey := make([]byte, 20)
 				copy(startKey[:20], keyRange.Start)
@@ -228,7 +221,7 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]types.Account
 
 func processScalableAddressStorageConcurrently(db kv.RoDB, prefix []byte) (map[common.Hash]common.Hash, uint64, error) {
 
-	numWorkers := largestPowerOfTwo(runtime.NumCPU()) / 2
+	numWorkers := largestPowerOfTwo(runtime.NumCPU())
 	keyRanges := generatePowerOfTwoKeyRanges(256, uint(numWorkers))
 
 	var wg sync.WaitGroup
