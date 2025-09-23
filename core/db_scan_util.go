@@ -107,7 +107,6 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]*types.Accoun
 			keyRange := keyRanges[workerID]
 
 			if err := db.View(context.Background(), func(workerTx kv.Tx) error {
-				//logger.Info("inside db view >>>>>>>>", "keyRange", keyRange)
 				chunkAccts := make(map[common.Address]*types.Account, 1<<16)
 
 				startKey := make([]byte, 20)
@@ -124,9 +123,7 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]*types.Accoun
 				}
 
 				var skipNums uint64 = 0
-				//logger.Info("has next", "has?", iter.HasNext())
 				for iter.HasNext() {
-					//logger.Info("insid eloop>>>>>>>>>>")
 					keyAcct, valAcct, err := iter.Next()
 					if skipNums > 0 {
 						skipNums--

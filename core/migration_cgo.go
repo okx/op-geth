@@ -313,7 +313,7 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 		}
 	}
 
-	logger.Info("scalabel storage", "count", len(dbAlloc[EeigonScalableAddress].Storage), "code", dbAlloc[EeigonScalableAddress].Code)
+	//logger.Info("scalabel storage", "count", len(dbAlloc[EeigonScalableAddress].Storage), "code", dbAlloc[EeigonScalableAddress].Code)
 
 	logger.Info("ScanDB: process accounts", "size", len(accts), "elapsed", time.Since(start))
 

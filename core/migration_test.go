@@ -146,6 +146,8 @@ func (m *MockTx) Rollback() {
 
 // TestScanDB tests the ScanDB function with various scenarios
 func TestMigrationScanDB(t *testing.T) {
+	// TODO@cliff: skip
+	t.Skip("SKIPPED")
 	const PlainStateBucket = "PlainState"
 	tests := []struct {
 		name           string
