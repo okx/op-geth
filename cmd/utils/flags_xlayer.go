@@ -10,9 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/ethereum/go-ethereum/node"
-	"github.com/ethereum/go-ethereum/realtime"
-	"github.com/ethereum/go-ethereum/realtime/kafka"
-	"github.com/ethereum/go-ethereum/realtime/relayer/streamclient"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -305,35 +302,56 @@ func setMonitorXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 }
 
 func setRealtimeXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
-	// For realtime. Get GroupID from flag
-	groupID := ctx.String(RealtimeKafkaSyncGroupID.Name)
+	if ctx.IsSet(RealtimeKafkaSyncGroupID.Name) {
+		cfg.XLayer.Realtime.Kafka.GroupID = ctx.String(RealtimeKafkaSyncGroupID.Name)
+	}
 	if envGroupID := os.Getenv(EnvKafkaConsumerGroupID); envGroupID != "" {
 		// Override consumer group id if env variable is set
-		groupID = envGroupID
+		cfg.XLayer.Realtime.Kafka.GroupID = envGroupID
 	}
-
-	cfg.XLayer = ethconfig.XLayerConfig{
-		Realtime: realtime.RealtimeConfig{
-			Enable:               ctx.Bool(RealtimeEnableFlag.Name),
-			RealtimeRpc:          ctx.Bool(RealtimeRpcFlag.Name),
-			EnableSubscribe:      ctx.Bool(RealtimeEnableSubscribeFlag.Name),
-			CacheHeightThreshold: ctx.Uint64(RealtimeCacheHeightThreshold.Name),
-			CacheDumpPath:        ctx.String(RealtimeCacheDumpPath.Name),
-			SubscribeKafka:       ctx.Bool(RealtimeSubscribeKafka.Name),
-			Kafka: kafka.KafkaConfig{
-				BootstrapServers: strings.Split(ctx.String(RealtimeKafkaSyncBootstrapServers.Name), ","),
-				BlockTopic:       ctx.String(RealtimeKafkaSyncBlockTopic.Name),
-				TxTopic:          ctx.String(RealtimeKafkaSyncTxTopic.Name),
-				ErrorTopic:       ctx.String(RealtimeKafkaSyncErrorTopic.Name),
-				ClientID:         ctx.String(RealtimeKafkaSyncClientID.Name),
-				GroupID:          groupID,
-			},
-			SubscribeWebsocket: ctx.Bool(RealtimeSubscribeWebsocket.Name),
-			WSConn: streamclient.StreamClientConfig{
-				RealtimeStreamerUrl:     ctx.String(RealtimeStreamerUrl.Name),
-				RealtimeStreamerUseTLS:  ctx.Bool(RealtimeStreamerUseTLS.Name),
-				RealtimeStreamerTimeout: ctx.Duration(RealtimeStreamerTimeout.Name),
-			},
-		},
+	if ctx.IsSet(RealtimeEnableFlag.Name) {
+		cfg.XLayer.Realtime.Enable = ctx.Bool(RealtimeEnableFlag.Name)
+	}
+	if ctx.IsSet(RealtimeRpcFlag.Name) {
+		cfg.XLayer.Realtime.RealtimeRpc = ctx.Bool(RealtimeRpcFlag.Name)
+	}
+	if ctx.IsSet(RealtimeEnableSubscribeFlag.Name) {
+		cfg.XLayer.Realtime.EnableSubscribe = ctx.Bool(RealtimeEnableSubscribeFlag.Name)
+	}
+	if ctx.IsSet(RealtimeCacheHeightThreshold.Name) {
+		cfg.XLayer.Realtime.CacheHeightThreshold = ctx.Uint64(RealtimeCacheHeightThreshold.Name)
+	}
+	if ctx.IsSet(RealtimeCacheDumpPath.Name) {
+		cfg.XLayer.Realtime.CacheDumpPath = ctx.String(RealtimeCacheDumpPath.Name)
+	}
+	if ctx.IsSet(RealtimeSubscribeKafka.Name) {
+		cfg.XLayer.Realtime.SubscribeKafka = ctx.Bool(RealtimeSubscribeKafka.Name)
+	}
+	if ctx.IsSet(RealtimeKafkaSyncBootstrapServers.Name) {
+		cfg.XLayer.Realtime.Kafka.BootstrapServers = strings.Split(ctx.String(RealtimeKafkaSyncBootstrapServers.Name), ",")
+	}
+	if ctx.IsSet(RealtimeKafkaSyncBlockTopic.Name) {
+		cfg.XLayer.Realtime.Kafka.BlockTopic = ctx.String(RealtimeKafkaSyncBlockTopic.Name)
+	}
+	if ctx.IsSet(RealtimeKafkaSyncTxTopic.Name) {
+		cfg.XLayer.Realtime.Kafka.TxTopic = ctx.String(RealtimeKafkaSyncTxTopic.Name)
+	}
+	if ctx.IsSet(RealtimeKafkaSyncErrorTopic.Name) {
+		cfg.XLayer.Realtime.Kafka.ErrorTopic = ctx.String(RealtimeKafkaSyncErrorTopic.Name)
+	}
+	if ctx.IsSet(RealtimeKafkaSyncClientID.Name) {
+		cfg.XLayer.Realtime.Kafka.ClientID = ctx.String(RealtimeKafkaSyncClientID.Name)
+	}
+	if ctx.IsSet(RealtimeSubscribeWebsocket.Name) {
+		cfg.XLayer.Realtime.SubscribeWebsocket = ctx.Bool(RealtimeSubscribeWebsocket.Name)
+	}
+	if ctx.IsSet(RealtimeStreamerUrl.Name) {
+		cfg.XLayer.Realtime.WSConn.RealtimeStreamerUrl = ctx.String(RealtimeStreamerUrl.Name)
+	}
+	if ctx.IsSet(RealtimeStreamerUseTLS.Name) {
+		cfg.XLayer.Realtime.WSConn.RealtimeStreamerUseTLS = ctx.Bool(RealtimeStreamerUseTLS.Name)
+	}
+	if ctx.IsSet(RealtimeStreamerTimeout.Name) {
+		cfg.XLayer.Realtime.WSConn.RealtimeStreamerTimeout = ctx.Duration(RealtimeStreamerTimeout.Name)
 	}
 }
