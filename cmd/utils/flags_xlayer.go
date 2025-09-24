@@ -199,9 +199,9 @@ func setMigrationXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 
 func setApolloXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.IsSet(ApolloEnabledFlag.Name) {
-		cfg.XLayer.Apollo.Enabled = ctx.Bool(ApolloEnabledFlag.Name)
+		cfg.XLayer.Apollo.Enable = ctx.Bool(ApolloEnabledFlag.Name)
 	}
-	if !cfg.XLayer.Apollo.Enabled {
+	if !cfg.XLayer.Apollo.Enable {
 		return
 	}
 	if ctx.IsSet(ApolloAppIDFlag.Name) {
@@ -214,7 +214,7 @@ func setApolloXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 		cfg.XLayer.Apollo.Cluster = ctx.String(ApolloClusterFlag.Name)
 	}
 	if ctx.IsSet(ApolloNamespaceFlag.Name) {
-		cfg.XLayer.Apollo.Namespace = ctx.String(ApolloNamespaceFlag.Name)
+		cfg.XLayer.Apollo.NamespaceName = ctx.String(ApolloNamespaceFlag.Name)
 	}
 }
 
