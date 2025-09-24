@@ -63,7 +63,7 @@ const (
 	CodeBucket       = "Code"
 )
 
-var EeigonScalableAddress = common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+var ErigonScalableAddress = common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
 
 // Empty code hash constant
 var EmptyCodeHash = common.Hash{}

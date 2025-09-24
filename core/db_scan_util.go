@@ -169,7 +169,7 @@ func processAccountsConcurrently(db kv.RoDB) ([]map[common.Address]*types.Accoun
 							acct.Storage = make(map[common.Hash]common.Hash)
 						}
 
-						if addr == EeigonScalableAddress {
+						if addr == ErigonScalableAddress {
 							logger.Info("start load scalable acct", "address", addr, "incarnation", keyAcct[20:28])
 							storage, scalableStorageCount, err := processScalableAddressStorageConcurrently(db, keyAcct[:28])
 							if err != nil {
