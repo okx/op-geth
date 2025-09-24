@@ -62,7 +62,6 @@ type Statistics interface {
 	GetStatistics(tag LogTag) int64
 	GetDuration(tag LogTag) time.Duration
 	ResetStatistics()
-	Snapshot() *ProposeStatsSnapshot
 	CombinedSummary(Statistics) string
 }
 
@@ -137,32 +136,6 @@ func (l *statisticsInstance) ResetStatistics() {
 	if l.tags != nil {
 		clear(l.tags)
 	}
-}
-
-// Snapshot & merge support for propose/insert aggregation
-
-type ProposeStatsSnapshot struct {
-	Durations map[LogTag]time.Duration
-	Counters  map[LogTag]int64
-	Tags      map[LogTag]string
-}
-
-func (l *statisticsInstance) Snapshot() *ProposeStatsSnapshot {
-	snap := &ProposeStatsSnapshot{
-		Durations: make(map[LogTag]time.Duration, len(l.durations)),
-		Counters:  make(map[LogTag]int64, len(l.counters)),
-		Tags:      make(map[LogTag]string, len(l.tags)),
-	}
-	for k, v := range l.durations {
-		snap.Durations[k] = v
-	}
-	for k, v := range l.counters {
-		snap.Counters[k] = v
-	}
-	for k, v := range l.tags {
-		snap.Tags[k] = v
-	}
-	return snap
 }
 
 // CombinedSummary prints a combined line that shows Propose (from snapshot)
