@@ -1,10 +1,31 @@
-## migrate
+# migration
+
+## mount
 ```
+mkdir -p /mnt/ramdisk_op
+mount -t tmpfs -o size=32g tmpfs /mnt/ramdisk_op
+df -hT /mnt/ramdisk_op
+```
+
+## drop cache (when necessary)
+```
+# flush dirty pages to disk
+echo 3 | sudo tee /proc/sys/vm/drop_caches
+```
+
+## run
+```
+export OP_DATA_DIR=/mnt/ramdisk_op/op_geth_data
+export OP_GENESIS_PATH=/mnt/genesis-op-raw.json
+export ERIGON_CHAINDATA_DIR=/data/xlayer_uploads/erigon-data/chaindata/
+export ERIGON_SMTDATA_DIR=/data/xlayer_uploads/erigon-data/smt/
+nohup ./build/bin/geth --datadir=${OP_DATA_DIR} --gcmode=archive migrate --state.scheme=hash --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=${ERIGON_CHAINDATA_DIR} --smt-db-path=${ERIGON_SMTDATA_DIR} ${OP_GENESIS_PATH} > migrate.log 2>&1 &
+```
+
 ## unit test
+```
 go test ./core -cover -run TestMigration -coverprofile=coverage.out
 go tool cover -html=coverage.out -o coverage.html
 open coverage.html
-
-## run
-geth --datadir=/tmp/op_geth_data --gcmode=archive migrate --state.scheme=hash --ignore-smt-verify --no-verify --chaindata=/mnt/ramdisk_op/xlayer_chaindata/ op-genesis.json
 ```
+

@@ -63,6 +63,8 @@ const (
 	CodeBucket       = "Code"
 )
 
+var ErigonScalableAddress = common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+
 // Empty code hash constant
 var EmptyCodeHash = common.Hash{}
 
@@ -308,64 +310,20 @@ func ScanDB(db kv.RoDB) (types.GenesisAlloc, error) {
 	start := time.Now()
 	dbAlloc := make(types.GenesisAlloc)
 
-	if err := db.View(context.Background(), func(tx kv.Tx) error {
-		return tx.ForEach(PlainStateBucket, nil, func(k, v []byte) error {
-			// Process accounts (keys with length 20)
-			if len(k) == 20 {
-				addr := common.BytesToAddress(k)
-
-				// Decode account data
-				genesisAccount, err := decodeAccountData(v)
-				if err != nil {
-					log.Warn("LoadDB: failed to decode account", "address", addr.Hex(), "error", err)
-					return nil
-				}
-
-				// Get code data if account has code
-				if len(genesisAccount.Code) > 0 {
-					codeHash := common.BytesToHash(genesisAccount.Code)
-					if codeHash != EmptyCodeHash {
-						code, err := tx.GetOne(CodeBucket, codeHash[:])
-						if err == nil && len(code) > 0 {
-							// Make a copy to avoid potential memory issues
-							genesisAccount.Code = make([]byte, len(code))
-							copy(genesisAccount.Code, code)
-						}
-					}
-				}
-
-				// Write all accounts to dbAlloc (regardless of ignore status)
-				dbAlloc[addr] = *genesisAccount
-			}
-
-			// Process storage (keys with length > 28)
-			if len(k) > 28 {
-				addr := common.BytesToAddress(k[:20])
-
-				storageKey := common.BytesToHash(k[28:])
-				storageValue := common.BytesToHash(v)
-
-				if account, exists := dbAlloc[addr]; exists {
-					if account.Storage == nil {
-						account.Storage = make(map[common.Hash]common.Hash)
-					}
-					account.Storage[storageKey] = storageValue
-					dbAlloc[addr] = account
-				} else {
-					dbAlloc[addr] = types.Account{
-						Balance: big.NewInt(0),
-						Storage: make(map[common.Hash]common.Hash),
-					}
-					dbAlloc[addr].Storage[storageKey] = storageValue
-				}
-			}
-			return nil
-		})
-	}); err != nil {
-		return nil, fmt.Errorf("failed to scan migration database: %w", err)
+	accts, err := processAccountsConcurrently(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process accounts: %w", err)
 	}
 
-	log.Info("LoadDB: database scan completed", "accounts", len(dbAlloc), "elapsed", time.Since(start))
+	for _, chunkAccts := range accts {
+		for addr, account := range chunkAccts {
+			dbAlloc[addr] = *account
+		}
+	}
+
+	//logger.Info("scalabel storage", "count", len(dbAlloc[EeigonScalableAddress].Storage), "code", dbAlloc[EeigonScalableAddress].Code)
+
+	logger.Info("ScanDB: process accounts", "size", len(accts), "elapsed", time.Since(start))
 
 	return dbAlloc, nil
 }
@@ -400,10 +358,12 @@ func getSmtBatchRootHashOrigin(chainDataPath, smtDataPath string) (*big.Int, err
 	// Get lastRoot from SMT stats table
 	lastRootData, err := tx.GetOne("HermezSmtStats", []byte("lastRoot"))
 	if err != nil {
+		log.Error("failed to get last root hash", "err", err)
 		return big.NewInt(0), nil // Return zero if table doesn't exist
 	}
 
 	if lastRootData == nil {
+		logger.Error("last smt root is nil")
 		return big.NewInt(0), nil // Return zero if no data found
 	}
 
