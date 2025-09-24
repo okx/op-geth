@@ -22,6 +22,8 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/ethereum/go-ethereum/eth/gasprice/xlayer"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -89,6 +91,10 @@ type Backend interface {
 	HistoryPruningCutoff() uint64
 	HistoricalRPCService() *rpc.Client
 	Genesis() *types.Block
+
+	// XLayer additions
+	XLayerGpricer() xlayer.L2GasPricer
+	SequencerRPCService() *rpc.Client
 
 	// This is copied from filters.Backend
 	// eth/filters needs to be initialized from this backend type, so methods needed by

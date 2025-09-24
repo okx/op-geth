@@ -127,17 +127,11 @@ type Miner struct {
 	lifeCtxCancel context.CancelFunc
 	lifeCtx       context.Context
 
-<<<<<<< HEAD
-	// payloadCache caches block execution results
-	payloadCache *core.PayloadCache
-	// (stats are passed per-call; no miner-level statistics field)
-=======
-	// proposeStats holds per-propose-cycle statistics collector
-	proposeStats metrics.Statistics
 
 	// payloadCache caches block execution results
 	payloadCache *core.PayloadCache
->>>>>>> origin/kf/block_cache
+	// (stats are passed per-call; no miner-level statistics field)
+
 }
 
 // New creates a new miner with provided config.
