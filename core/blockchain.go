@@ -2129,10 +2129,9 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 
 	// Try merge propose stats snapshot if exists (and add propose time into final block time)
 	if pstat, ok := metrics.GlobalStatsStore.GetAndDelete(block.Hash()); ok {
-		// get a snapshot via the interface to avoid type assertion to unexported type
-		_ = ls.CombinedSummaryCheckpoint(pstat.Snapshot())
+		_ = ls.CombinedSummary(pstat)
 	} else {
-		ls.CombinedSummaryCheckpoint(nil)
+		ls.CombinedSummary(nil)
 	}
 
 	return &blockProcessingResult{usedGas: res.GasUsed, procTime: proctime, status: status}, nil

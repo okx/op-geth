@@ -49,7 +49,6 @@ const (
 	ProposeExecTxMs
 	ProposePragueMs
 	ProposeAssembleMs
-	ProposeFetchTxMs
 )
 
 // Statistics exposes accumulation helpers and summary output.
@@ -61,26 +60,10 @@ type Statistics interface {
 	SetTag(tag LogTag, value string)
 	GetTag(tag LogTag) string
 	GetStatistics(tag LogTag) int64
+	GetDuration(tag LogTag) time.Duration
 	ResetStatistics()
 	Snapshot() *ProposeStatsSnapshot
-	MergeSnapshot(*ProposeStatsSnapshot)
-	CombinedSummaryCheckpoint(*ProposeStatsSnapshot) string
-}
-
-var (
-	instance *statisticsInstance
-)
-
-// GetLogStatistics returns a singleton Statistics collector.
-func GetLogStatistics() Statistics {
-	if instance == nil {
-		instance = &statisticsInstance{
-			durations: make(map[LogTag]time.Duration),
-			counters:  make(map[LogTag]int64),
-			tags:      make(map[LogTag]string),
-		}
-	}
-	return instance
+	CombinedSummary(Statistics) string
 }
 
 // NewLogStatistics returns a fresh, independent statistics collector.
@@ -140,6 +123,10 @@ func (l *statisticsInstance) GetStatistics(tag LogTag) int64 {
 	return l.counters[tag]
 }
 
+func (l *statisticsInstance) GetDuration(tag LogTag) time.Duration {
+	return l.durations[tag]
+}
+
 func (l *statisticsInstance) ResetStatistics() {
 	if l.durations != nil {
 		clear(l.durations)
@@ -178,79 +165,9 @@ func (l *statisticsInstance) Snapshot() *ProposeStatsSnapshot {
 	return snap
 }
 
-func (l *statisticsInstance) MergeSnapshot(s *ProposeStatsSnapshot) {
-	if s == nil {
-		return
-	}
-	if l.durations == nil {
-		l.durations = make(map[LogTag]time.Duration)
-	}
-	if l.counters == nil {
-		l.counters = make(map[LogTag]int64)
-	}
-	if l.tags == nil {
-		l.tags = make(map[LogTag]string)
-	}
-	for k, v := range s.Durations {
-		l.durations[k] += v
-	}
-	for k, v := range s.Counters {
-		l.counters[k] += v
-	}
-	for k, v := range s.Tags {
-		if _, ok := l.tags[k]; !ok {
-			l.tags[k] = v
-		}
-	}
-}
-
-// SummaryCheckpoint computes per-block stats and logs a single-line summary.
-func (l *statisticsInstance) SummaryCheckpoint() string {
-	block := l.counters[BlockNumberTag]
-	blockDuration := l.durations[TotalBuildMs]
-
-	// Current block values
-	tx := l.counters[TxCounter]
-	gasUsed := l.counters[GasUsedCounter]
-
-	exec := l.durations[ExecuteMs]
-	validate := l.durations[ValidateMs]
-	xvalidate := l.durations[CrossValidateMs]
-	writeBlk := l.durations[WriteBlockMs]
-	evmPure := l.durations[EvmExecPureMs]
-	valPure := l.durations[ValidationPureMs]
-	accRead := l.durations[AccountReadMs]
-	storRead := l.durations[StorageReadMs]
-	accUpdate := l.durations[AccountUpdateMs]
-	storUpdate := l.durations[StorageUpdateMs]
-	accHash := l.durations[AccountHashMs]
-	trieUpd := l.durations[TrieUpdateMs]
-	accCommit := l.durations[AccountCommitMs]
-	storCommit := l.durations[StorageCommitMs]
-	snapCommit := l.durations[SnapshotCommitMs]
-	triedbCommit := l.durations[TrieDBCommitMs]
-
-	// Only TotalBuildMs is combined earlier; here we keep insert-only phase timings
-
-	line := fmt.Sprintf(
-		"Block<%d>, Txs<%d> GasUsed<%d>, BlockTime<%s> { Propose[%s] { Prepare[%s], FetchTx[%s], execute[%s], Prague[%s], assemble[%s] } , State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }, Insert[%s] { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] }, Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
-		block,
-		tx,
-		gasUsed,
-		common.PrettyDuration(blockDuration),
-		common.PrettyDuration(exec), common.PrettyDuration(validate), common.PrettyDuration(xvalidate), common.PrettyDuration(evmPure), common.PrettyDuration(valPure),
-		common.PrettyDuration(writeBlk),
-		common.PrettyDuration(accRead), common.PrettyDuration(storRead), common.PrettyDuration(accUpdate), common.PrettyDuration(storUpdate), common.PrettyDuration(accHash), common.PrettyDuration(trieUpd),
-		common.PrettyDuration(accCommit), common.PrettyDuration(storCommit), common.PrettyDuration(snapCommit), common.PrettyDuration(triedbCommit),
-	)
-	log.Info(line)
-
-	return line
-}
-
-// CombinedSummaryCheckpoint prints a combined line that shows Propose (from snapshot)
+// CombinedSummary prints a combined line that shows Propose (from snapshot)
 // and Insert (from this instance) sections, while BlockTime is TotalBuildMs (already combined).
-func (l *statisticsInstance) CombinedSummaryCheckpoint(p *ProposeStatsSnapshot) string {
+func (l *statisticsInstance) CombinedSummary(pstat Statistics) string {
 	block := l.counters[BlockNumberTag]
 	blockDuration := l.durations[TotalBuildMs]
 
@@ -274,20 +191,20 @@ func (l *statisticsInstance) CombinedSummaryCheckpoint(p *ProposeStatsSnapshot) 
 	snapCommit := l.durations[SnapshotCommitMs]
 	triedbCommit := l.durations[TrieDBCommitMs]
 
-	// Propose (from snapshot, if any)
+	// Propose (access propose stats directly, no copy)
 	var pTotal, pPrepare, pExec, pPrague, pAssemble time.Duration
 	var pAccRead, pStorRead, pAccUpdate, pStorUpdate, pAccHash time.Duration
-	if p != nil {
-		pTotal = p.Durations[ProposeTotalMs]
-		pPrepare = p.Durations[ProposePrepareMs]
-		pExec = p.Durations[ProposeExecTxMs]
-		pPrague = p.Durations[ProposePragueMs]
-		pAssemble = p.Durations[ProposeAssembleMs]
-		pAccRead = p.Durations[AccountReadMs]
-		pStorRead = p.Durations[StorageReadMs]
-		pAccUpdate = p.Durations[AccountUpdateMs]
-		pStorUpdate = p.Durations[StorageUpdateMs]
-		pAccHash = p.Durations[AccountHashMs]
+	if pstat != nil {
+		pTotal = pstat.GetDuration(ProposeTotalMs)
+		pPrepare = pstat.GetDuration(ProposePrepareMs)
+		pExec = pstat.GetDuration(ProposeExecTxMs)
+		pPrague = pstat.GetDuration(ProposePragueMs)
+		pAssemble = pstat.GetDuration(ProposeAssembleMs)
+		pAccRead = pstat.GetDuration(AccountReadMs)
+		pStorRead = pstat.GetDuration(StorageReadMs)
+		pAccUpdate = pstat.GetDuration(AccountUpdateMs)
+		pStorUpdate = pstat.GetDuration(StorageUpdateMs)
+		pAccHash = pstat.GetDuration(AccountHashMs)
 	}
 
 	line := fmt.Sprintf(
