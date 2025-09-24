@@ -814,7 +814,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	stateDB := state.NewDatabase(triedb, nil)
 
 	// Prepare accounts for verification
-	accountsToVerify := make([]common.Address, len(genesis.Alloc))
+	accountsToVerify := make([]common.Address, 0)
 
 	for addr, _ := range genesis.Alloc {
 		accountsToVerify = append(accountsToVerify, addr)
