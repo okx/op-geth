@@ -820,7 +820,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 
 	log.Info("Starting concurrent verification", "total_accounts", len(accountsToVerify))
 
-	numWorkers := runtime.NumCPU() / 2
+	numWorkers := runtime.NumCPU()
 	if numWorkers > len(accountsToVerify) {
 		numWorkers = len(accountsToVerify)
 	}
@@ -913,6 +913,7 @@ func migrateGenesis(ctx *cli.Context) error {
 	if ctx.Args().Len() != 1 {
 		utils.Fatalf("need genesis.json file as the only argument")
 	}
+	start := time.Now()
 	genesisPath := ctx.Args().First()
 	if len(genesisPath) == 0 {
 		utils.Fatalf("invalid path to genesis file")
@@ -924,7 +925,6 @@ func migrateGenesis(ctx *cli.Context) error {
 	}
 	defer file.Close()
 
-	start := time.Now()
 	genesis := new(core.Genesis)
 	if err := json.NewDecoder(file).Decode(genesis); err != nil {
 		utils.Fatalf("invalid genesis file: %v", err)
@@ -993,5 +993,6 @@ func migrateGenesis(ctx *cli.Context) error {
 		log.Info("Genesis verification completed successfully", "elapsed", common.PrettyDuration(time.Since(verifyStart)))
 	}
 
+	log.Info("migration complete", "elapsed", common.PrettyDuration(time.Since(start)))
 	return nil
 }
