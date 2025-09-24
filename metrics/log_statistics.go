@@ -101,9 +101,12 @@ type statisticsInstance struct {
 	durations map[LogTag]time.Duration // per-block durations
 	counters  map[LogTag]int64         // per-block counters
 	tags      map[LogTag]string
+	mu        sync.Mutex // protects maps
 }
 
 func (l *statisticsInstance) CumulativeCounting(tag LogTag) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.counters == nil {
 		l.counters = make(map[LogTag]int64)
 	}
@@ -111,6 +114,8 @@ func (l *statisticsInstance) CumulativeCounting(tag LogTag) {
 }
 
 func (l *statisticsInstance) CumulativeValue(tag LogTag, value int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.counters == nil {
 		l.counters = make(map[LogTag]int64)
 	}
@@ -118,6 +123,8 @@ func (l *statisticsInstance) CumulativeValue(tag LogTag, value int64) {
 }
 
 func (l *statisticsInstance) CumulativeTiming(tag LogTag, duration time.Duration) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.durations == nil {
 		l.durations = make(map[LogTag]time.Duration)
 	}
@@ -129,6 +136,8 @@ func (l *statisticsInstance) CumulativeMicroTiming(tag LogTag, duration time.Dur
 }
 
 func (l *statisticsInstance) SetTag(tag LogTag, value string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.tags == nil {
 		l.tags = make(map[LogTag]string)
 	}
@@ -136,14 +145,20 @@ func (l *statisticsInstance) SetTag(tag LogTag, value string) {
 }
 
 func (l *statisticsInstance) GetTag(tag LogTag) string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.tags[tag]
 }
 
 func (l *statisticsInstance) GetStatistics(tag LogTag) int64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.counters[tag]
 }
 
 func (l *statisticsInstance) ResetStatistics() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.durations != nil {
 		clear(l.durations)
 	}
