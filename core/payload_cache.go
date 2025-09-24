@@ -23,11 +23,11 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	lru "github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
-	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 // CachedPayloadResult represents a cached block execution result
@@ -78,7 +78,7 @@ func NewPayloadCache(config *PayloadCacheConfig) *PayloadCache {
 		config = DefaultPayloadCacheConfig()
 	}
 
-	cache, _ := lru.New[common.Hash, *CachedPayloadResult](config.Size)
+	cache := lru.NewCache[common.Hash, *CachedPayloadResult](config.Size)
 	return &PayloadCache{
 		cache:  cache,
 		config: config,
