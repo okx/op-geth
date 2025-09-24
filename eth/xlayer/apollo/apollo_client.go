@@ -147,11 +147,11 @@ func IsInitialized() bool {
 	return instance != nil
 }
 
-// // Start starts the Apollo client
-// func (c *Client) Start() error {
-// 	log.Info("Apollo client started")
-// 	return nil
-// }
+// Start starts the Apollo client
+func (c *Client) Start() error {
+	log.Info("Apollo client started")
+	return nil
+}
 
 // Stop stops the Apollo client
 func (c *Client) Stop() error {

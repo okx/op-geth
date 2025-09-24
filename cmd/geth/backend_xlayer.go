@@ -13,13 +13,8 @@ func addXLayerBackend(stack *node.Node, cfg *gethConfig) {
 	}
 
 	// Initialize Apollo configuration if enabled
-	if cfg.Eth.XLayer.Apollo.Enabled {
-		client, err := apollo.New(apollo.Config{
-			AppID:         cfg.Eth.XLayer.Apollo.AppID,
-			IP:            cfg.Eth.XLayer.Apollo.IP,
-			Cluster:       cfg.Eth.XLayer.Apollo.Cluster,
-			NamespaceName: cfg.Eth.XLayer.Apollo.Namespace,
-		})
+	if cfg.Eth.XLayer.Apollo.Enable {
+		client, err := apollo.GetInstance(&cfg.Eth)
 		if err != nil {
 			utils.Fatalf("Failed to initialize Apollo configuration: %v", err)
 		}
