@@ -972,6 +972,11 @@ func migrateGenesis(ctx *cli.Context) error {
 	// Check if verification is requested
 	if !ctx.Bool("no-verify") {
 		log.Info("Starting genesis verification after migration", "total account:", len(genesis.Alloc))
+		if _, ok := genesis.Alloc[core.ErigonScalableAddress]; ok {
+			log.Warn("SCALABLE exist")
+		} else {
+			log.Info("SCALABLE excluded")
+		}
 
 		if err := triedb.Close(); err != nil {
 			log.Warn("Failed to close trie database", "error", err)
