@@ -471,11 +471,6 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 
 		st.state.RevertToSnapshot(snap)
 
-		// For X Layer
-		// Clear inner transactions for failed deposit transactions
-		// Since the deposit failed, any inner transactions captured should be discarded
-		st.evm.ClearInnerTxs()
-
 		// Even though we revert the state changes, always increment the nonce for the next deposit transaction
 		st.state.SetNonce(st.msg.From, st.state.GetNonce(st.msg.From)+1, tracing.NonceChangeEoACall)
 		// Record deposits as using all their gas (matches the gas pool)

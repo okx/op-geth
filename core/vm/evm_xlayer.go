@@ -34,16 +34,18 @@ func (evm *EVM) AddInnerTx(innerTx *types.InnerTx) {
 	evm.innerTxMeta.InnerTxs = append(evm.innerTxMeta.InnerTxs, innerTx)
 }
 
-func (evm *EVM) ClearInnerTxs() {
-	if evm.innerTxMeta != nil {
-		evm.innerTxMeta.InnerTxs = evm.innerTxMeta.InnerTxs[:0] // Clear the slice
-		evm.innerTxMeta.index = 0
-		evm.innerTxMeta.lastDepth = 0
-		// Clear the index map
-		for k := range evm.innerTxMeta.indexMap {
-			delete(evm.innerTxMeta.indexMap, k)
-		}
+func (evm *EVM) PopInnerTxs() []*types.InnerTx {
+	innertxs := make([]*types.InnerTx, len(evm.innerTxMeta.InnerTxs))
+	copy(innertxs, evm.innerTxMeta.InnerTxs)
+
+	evm.innerTxMeta.InnerTxs = evm.innerTxMeta.InnerTxs[:0]
+	evm.innerTxMeta.index = 0
+	evm.innerTxMeta.lastDepth = 0
+	// Clear the index map
+	for k := range evm.innerTxMeta.indexMap {
+		delete(evm.innerTxMeta.indexMap, k)
 	}
+	return innertxs
 }
 
 func beforeOp(

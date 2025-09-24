@@ -124,21 +124,15 @@ type generateParams struct {
 
 // generateWork generates a sealing block based on the given parameters.
 func (miner *Miner) generateWork(params *generateParams, witness bool) *newPayloadResult {
-	// Reset and reuse miner-level propose stats
-	if miner.proposeStats == nil {
-		miner.proposeStats = metrics.NewLogStatistics()
-	} else {
-		miner.proposeStats.ResetStatistics()
-	}
-	proposeStats := miner.proposeStats
+	// Use per-call statistics to avoid shared state across concurrent builds
+	proposeStats := metrics.NewLogStatistics()
 
 	startBuildTime := time.Now()
-	prepStart := time.Now()
 	work, err := miner.prepareWork(params, witness)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
-	proposeStats.CumulativeTiming(metrics.ProposePrepareMs, time.Since(prepStart))
+	proposeStats.CumulativeTiming(metrics.ProposePrepareMs, time.Since(startBuildTime))
 	if work.gasPool == nil {
 		gasLimit := work.header.GasLimit
 
@@ -155,12 +149,11 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 	}
 
 	misc.EnsureCreate2Deployer(miner.chainConfig, work.header.Time, work.state)
+	execStart := time.Now()
 	for _, tx := range params.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
-		execStart := time.Now()
 		err = miner.commitTransaction(work, tx)
-		miner.proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
 		if err != nil {
 			return &newPayloadResult{err: fmt.Errorf("failed to force-include tx: %s type: %d sender: %s nonce: %d, err: %w", tx.Hash(), tx.Type(), from, tx.Nonce(), err)}
 		}
@@ -183,6 +176,7 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 			log.Info("Block building got interrupted by payload resolution")
 		}
 	}
+	proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
 	if intr := params.interrupt; intr != nil && params.isUpdate && intr.Load() != commitInterruptNone {
 		return &newPayloadResult{err: errInterruptedUpdate}
 	}
@@ -237,12 +231,8 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		proposeStats.CumulativeTiming(metrics.AccountReadMs, sdb.AccountReads)
 		proposeStats.CumulativeTiming(metrics.AccountHashMs, sdb.AccountHashes)
 		proposeStats.CumulativeTiming(metrics.AccountUpdateMs, sdb.AccountUpdates)
-		proposeStats.CumulativeTiming(metrics.AccountCommitMs, sdb.AccountCommits)
 		proposeStats.CumulativeTiming(metrics.StorageReadMs, sdb.StorageReads)
 		proposeStats.CumulativeTiming(metrics.StorageUpdateMs, sdb.StorageUpdates)
-		proposeStats.CumulativeTiming(metrics.StorageCommitMs, sdb.StorageCommits)
-		proposeStats.CumulativeTiming(metrics.SnapshotCommitMs, sdb.SnapshotCommits)
-		proposeStats.CumulativeTiming(metrics.TrieDBCommitMs, sdb.TrieDBCommits)
 	}
 
 	// Counters and total time
@@ -252,8 +242,11 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 	proposeStats.CumulativeValue(metrics.GasUsedCounter, int64(block.GasUsed()))
 	proposeStats.CumulativeTiming(metrics.ProposeTotalMs, time.Since(startBuildTime))
 
-	//
-	proposeStats.ProposeCheckpoint()
+	// store propose stats snapshot keyed by block hash; output will be merged at insertChain
+	if block != nil {
+		// Store the statistics instance directly; it is local and no longer written after this point
+		metrics.GlobalStatsStore.Put(block.Hash(), proposeStats)
+	}
 	return &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),
@@ -677,12 +670,12 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	miner.confMu.RUnlock()
 
 	// Retrieve the pending transactions pre-filtered by the 1559/4844 dynamic fees
-	fetchTxStart := time.Now()
+	// fetchTxStart removed: caller accumulates timings
 	filter := txpool.PendingFilter{
 		MinTip:      uint256.MustFromBig(tip),
 		MaxDATxSize: miner.config.MaxDATxSize,
 	}
-	miner.proposeStats.CumulativeTiming(metrics.ProposeFetchTxMs, time.Since(fetchTxStart))
+	// Note: fetch timing is accumulated in caller scope (generateWork) only
 	if env.header.BaseFee != nil {
 		filter.BaseFee = uint256.MustFromBig(env.header.BaseFee)
 	}
@@ -757,11 +750,11 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	if len(okPayTxs) > 0 {
 		okpayPlainTxs := newTransactionsByPriceAndNonce(env.signer, okPayTxs, env.header.BaseFee)
 		emptyBlobTxs := newTransactionsByPriceAndNonce(env.signer, nil, env.header.BaseFee)
-		execStart := time.Now()
+		// execStart removed: caller accumulates timings
 		if err := miner.commitTransactions(env, okpayPlainTxs, emptyBlobTxs, interrupt); err != nil {
 			return err
 		}
-		miner.proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
+		// Note: execution timing is accumulated in caller scope (generateWork)
 	}
 
 	for _, account := range prio {
@@ -779,20 +772,20 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	if len(prioPlainTxs) > 0 || len(prioBlobTxs) > 0 {
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, prioPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, prioBlobTxs, env.header.BaseFee)
-		execStart := time.Now()
+		// execStart removed: caller accumulates timings
 		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt); err != nil {
 			return err
 		}
-		miner.proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
+		// Note: execution timing is accumulated in caller scope (generateWork)
 	}
 	if len(normalPlainTxs) > 0 || len(normalBlobTxs) > 0 {
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, normalPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, normalBlobTxs, env.header.BaseFee)
-		execStart := time.Now()
+		// execStart removed: caller accumulates timings
 		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt); err != nil {
 			return err
 		}
-		miner.proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
+		// Note: execution timing is accumulated in caller scope (generateWork)
 	}
 	return nil
 }

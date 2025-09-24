@@ -23,6 +23,8 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/ethereum/go-ethereum/eth/gasprice/xlayer"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -54,6 +56,8 @@ type EthAPIBackend struct {
 	disableTxPool       bool
 	eth                 *Ethereum
 	gpo                 *gasprice.Oracle
+	xlayerGpricer       xlayer.L2GasPricer
+	seqRPCService       *rpc.Client
 }
 
 // ChainConfig returns the active chain configuration.
@@ -514,4 +518,14 @@ func (b *EthAPIBackend) HistoricalRPCService() *rpc.Client {
 
 func (b *EthAPIBackend) Genesis() *types.Block {
 	return b.eth.blockchain.Genesis()
+}
+
+// XLayerGpricer returns the XLayer gas price suggester
+func (b *EthAPIBackend) XLayerGpricer() xlayer.L2GasPricer {
+	return b.xlayerGpricer
+}
+
+// SequencerRPCService returns the sequencer RPC service client
+func (b *EthAPIBackend) SequencerRPCService() *rpc.Client {
+	return b.seqRPCService
 }
