@@ -971,7 +971,7 @@ func migrateGenesis(ctx *cli.Context) error {
 
 	// Check if verification is requested
 	if !ctx.Bool("no-verify") {
-		log.Info("Starting genesis verification after migration")
+		log.Info("Starting genesis verification after migration", "total account:", len(genesis.Alloc))
 
 		if err := triedb.Close(); err != nil {
 			log.Warn("Failed to close trie database", "error", err)
