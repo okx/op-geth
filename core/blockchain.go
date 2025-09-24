@@ -2070,7 +2070,6 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		ls.CumulativeValue(metrics.PayloadCacheHitCounter, 1)
 	}
 
-
 	vstart := time.Now()
 	if err := bc.validator.ValidateState(block, statedb, res, false); err != nil {
 		monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainValidate.ID,
@@ -2527,6 +2526,11 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Header) error 
 		}
 		// Update the head block
 		bc.writeHeadBlock(block)
+	}
+
+	// Maintain miner payload cache on reorg: remove old-chain blocks from cache
+	if bc.payloadCache != nil && len(deletedBlocks) > 0 {
+		bc.payloadCache.HandleReorg(deletedBlocks)
 	}
 	if len(rebirthLogs) > 0 {
 		bc.logsFeed.Send(rebirthLogs)

@@ -207,8 +207,8 @@ func (pc *PayloadCache) Stats() (hits, misses uint64, hitRate float64) {
 	return
 }
 
-// HandleReorg clears cache entries affected by a chain reorganization
-func (pc *PayloadCache) HandleReorg(oldBlocks, newBlocks types.Blocks) {
+// HandleReorg clears cache entries of blocks removed by a chain reorganization
+func (pc *PayloadCache) HandleReorg(oldBlocks types.Blocks) {
 	if pc == nil {
 		return
 	}
@@ -222,8 +222,7 @@ func (pc *PayloadCache) HandleReorg(oldBlocks, newBlocks types.Blocks) {
 	}
 
 	log.Info("Handled chain reorg in payload cache",
-		"removed", len(oldBlocks),
-		"new", len(newBlocks))
+		"removed", len(oldBlocks))
 }
 
 // CopyStateDB creates a deep copy of the StateDB for safe reuse

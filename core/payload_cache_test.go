@@ -211,7 +211,7 @@ func TestPayloadCacheHandleReorg(t *testing.T) {
 	}
 
 	// Handle reorg
-	cache.HandleReorg(oldBlocks, nil)
+	cache.HandleReorg(oldBlocks)
 
 	// Verify they're removed
 	for _, block := range oldBlocks {
