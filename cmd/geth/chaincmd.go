@@ -810,10 +810,8 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, genesis.IsVerkle())
 	defer triedb.Close()
 
-	// Create state database (shared across workers)
 	stateDB := state.NewDatabase(triedb, nil)
 
-	// Prepare accounts for verification
 	accountsToVerify := make([]common.Address, len(genesis.Alloc))
 
 	for addr, _ := range genesis.Alloc {
@@ -856,12 +854,12 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 			defer wg.Done()
 
 			log.Info("Worker started", "worker", workerID, "accounts", len(accounts))
-
+			start := time.Now()
 			for _, addr := range accounts {
 				verifyAccount(addr, genesis.Alloc[addr], stateDB, genesisBlock.Root(), resultChan)
 			}
 
-			log.Info("Worker completed", "worker", workerID, "accounts_processed", len(accounts))
+			log.Info("Worker verifyAccount completed", "worker", workerID, "accounts_processed", len(accounts), "elapsed", common.PrettyDuration(time.Since(start)))
 		}(i, accountsToVerify[startIdx:endIdx])
 	}
 
