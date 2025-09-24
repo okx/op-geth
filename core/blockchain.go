@@ -2070,6 +2070,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		ls.CumulativeValue(metrics.PayloadCacheHitCounter, 1)
 	}
 
+
 	vstart := time.Now()
 	if err := bc.validator.ValidateState(block, statedb, res, false); err != nil {
 		monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainValidate.ID,

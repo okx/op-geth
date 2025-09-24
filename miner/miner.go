@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/types/interoptypes"
 	"github.com/ethereum/go-ethereum/eth/tracers"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 )
@@ -126,9 +127,17 @@ type Miner struct {
 	lifeCtxCancel context.CancelFunc
 	lifeCtx       context.Context
 
+<<<<<<< HEAD
 	// payloadCache caches block execution results
 	payloadCache *core.PayloadCache
 	// (stats are passed per-call; no miner-level statistics field)
+=======
+	// proposeStats holds per-propose-cycle statistics collector
+	proposeStats metrics.Statistics
+
+	// payloadCache caches block execution results
+	payloadCache *core.PayloadCache
+>>>>>>> origin/kf/block_cache
 }
 
 // New creates a new miner with provided config.
