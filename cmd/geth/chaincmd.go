@@ -930,42 +930,42 @@ func migrateGenesis(ctx *cli.Context) error {
 		utils.Fatalf("invalid genesis file: %v", err)
 	}
 	log.Info("read file and decode json", "elapsed", time.Since(start))
-
-	// Open and initialise both full and light databases
-	stack, _ := makeConfigNode(ctx)
-	defer stack.Close()
-
-	var overrides core.ChainOverrides
-	if ctx.IsSet(utils.OverridePrague.Name) {
-		v := ctx.Uint64(utils.OverridePrague.Name)
-		overrides.OverridePrague = &v
-	}
-	if ctx.IsSet(utils.OverrideVerkle.Name) {
-		v := ctx.Uint64(utils.OverrideVerkle.Name)
-		overrides.OverrideVerkle = &v
-	}
-
-	chaindb := utils.MakeChainDatabase(ctx, stack, false)
-	defer chaindb.Close()
-
-	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), false, genesis.IsVerkle())
-	defer triedb.Close()
-
-	// Declare variables for genesis setup
-	var hash common.Hash
-	var compatErr *params.ConfigCompatError
-	var setupErr error
-
-	// Use SetupGenesisBlockWithMigrationData to handle migration and setup genesis block
-	_, hash, compatErr, setupErr = core.SetupGenesisBlockWithMigrationData(chaindb, triedb, genesis, &overrides, ctx)
-
-	if setupErr != nil {
-		utils.Fatalf("Failed to write genesis block: %v", setupErr)
-	}
-	if compatErr != nil {
-		utils.Fatalf("Failed to write chain config: %v", compatErr)
-	}
-	log.Info("Successfully wrote genesis state with migration", "database", "chaindata", "hash", hash, "elapsed", time.Since(start))
+	//
+	//// Open and initialise both full and light databases
+	//stack, _ := makeConfigNode(ctx)
+	//defer stack.Close()
+	//
+	//var overrides core.ChainOverrides
+	//if ctx.IsSet(utils.OverridePrague.Name) {
+	//	v := ctx.Uint64(utils.OverridePrague.Name)
+	//	overrides.OverridePrague = &v
+	//}
+	//if ctx.IsSet(utils.OverrideVerkle.Name) {
+	//	v := ctx.Uint64(utils.OverrideVerkle.Name)
+	//	overrides.OverrideVerkle = &v
+	//}
+	//
+	//chaindb := utils.MakeChainDatabase(ctx, stack, false)
+	//defer chaindb.Close()
+	//
+	//triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), false, genesis.IsVerkle())
+	//defer triedb.Close()
+	//
+	//// Declare variables for genesis setup
+	//var hash common.Hash
+	//var compatErr *params.ConfigCompatError
+	//var setupErr error
+	//
+	//// Use SetupGenesisBlockWithMigrationData to handle migration and setup genesis block
+	//_, hash, compatErr, setupErr = core.SetupGenesisBlockWithMigrationData(chaindb, triedb, genesis, &overrides, ctx)
+	//
+	//if setupErr != nil {
+	//	utils.Fatalf("Failed to write genesis block: %v", setupErr)
+	//}
+	//if compatErr != nil {
+	//	utils.Fatalf("Failed to write chain config: %v", compatErr)
+	//}
+	//log.Info("Successfully wrote genesis state with migration", "database", "chaindata", "hash", hash, "elapsed", time.Since(start))
 
 	// Check if verification is requested
 	if !ctx.Bool("no-verify") {
@@ -976,15 +976,15 @@ func migrateGenesis(ctx *cli.Context) error {
 			log.Info("SCALABLE excluded")
 		}
 
-		if err := triedb.Close(); err != nil {
-			log.Warn("Failed to close trie database", "error", err)
-		}
-		if err := chaindb.Close(); err != nil {
-			log.Warn("Failed to close chain database", "error", err)
-		}
-		if err := stack.Close(); err != nil {
-			log.Warn("Failed to close node stack", "error", err)
-		}
+		//if err := triedb.Close(); err != nil {
+		//	log.Warn("Failed to close trie database", "error", err)
+		//}
+		//if err := chaindb.Close(); err != nil {
+		//	log.Warn("Failed to close chain database", "error", err)
+		//}
+		//if err := stack.Close(); err != nil {
+		//	log.Warn("Failed to close node stack", "error", err)
+		//}
 		verifyStart := time.Now()
 		if err := verifyGenesisInternal(ctx, genesis); err != nil {
 			log.Error("Genesis verification failed", "error", err)
