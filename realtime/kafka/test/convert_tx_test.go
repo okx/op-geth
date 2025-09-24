@@ -114,3 +114,29 @@ func TestFromBlobTx(t *testing.T) {
 	assert.Equal(t, msg.FeeCap.String(), convertBlobTx.GasFeeCap().String())
 	assertTxAccessList(t, convertBlobTx.AccessList())
 }
+
+func TestDepositTx(t *testing.T) {
+	// Test from
+	blockNumber := uint64(100)
+	blockTime := uint64(1000)
+	msg, err := kafkaTypes.ToKafkaTransactionMessage(depositTx, depositTxReceipt, txInnerTxs, txChangeset, blockNumber, blockTime)
+	assert.NilError(t, err)
+	AssertCommonTx(t, msg, depositTx, blockNumber, blockTime, types.DepositTxType)
+	assert.Equal(t, msg.SourceHash.String(), depositTx.SourceHash().String())
+	assert.Equal(t, msg.IsSystemTx, depositTx.IsSystemTx())
+	assert.Equal(t, msg.Mint.String(), depositTx.Mint().String())
+	assert.Equal(t, msg.DepositFrom.String(), depositTx.From().String())
+	AssertReceipt(t, msg, depositTxReceipt)
+	AssertInnerTxs(t, msg, txInnerTxs)
+	AssertChangeseet(t, msg, txChangeset)
+
+	// Test to
+	convertDepositTx, convertBlockNumber, err := msg.GetTransaction()
+	assert.NilError(t, err)
+	assert.Equal(t, convertBlockNumber, blockNumber)
+	AssertCommonTx(t, msg, convertDepositTx, convertBlockNumber, blockTime, types.DepositTxType)
+	assert.Equal(t, msg.SourceHash.String(), convertDepositTx.SourceHash().String())
+	assert.Equal(t, msg.IsSystemTx, convertDepositTx.IsSystemTx())
+	assert.Equal(t, msg.Mint.String(), convertDepositTx.Mint().String())
+	assert.Equal(t, msg.DepositFrom.String(), convertDepositTx.From().String())
+}

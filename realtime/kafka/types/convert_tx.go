@@ -19,7 +19,6 @@ func fromCommonTxMessage(tx *types.Transaction, blockNumber uint64, blockTime ui
 		Data:        tx.Data(),
 	}
 	msg.V, msg.R, msg.S = tx.RawSignatureValues()
-
 	return msg, nil
 }
 
@@ -29,7 +28,6 @@ func fromLegacyTxMessage(tx *types.Transaction, blockNumber uint64, blockTime ui
 		return TransactionMessage{}, err
 	}
 	msg.GasPrice = tx.GasPrice()
-
 	return msg, nil
 }
 
@@ -43,7 +41,6 @@ func fromAccessListTxMessage(tx *types.Transaction, blockNumber uint64, blockTim
 	for _, tuple := range accessList {
 		msg.AccessList = append(msg.AccessList, fromAccessTuple(tuple))
 	}
-
 	return msg, nil
 }
 
@@ -54,7 +51,6 @@ func fromDynamicFeeTxMessage(tx *types.Transaction, blockNumber uint64, blockTim
 	}
 	msg.Tip = tx.GasTipCap()
 	msg.FeeCap = tx.GasFeeCap()
-
 	return msg, nil
 }
 
@@ -70,6 +66,18 @@ func fromBlobTxMessage(tx *types.Transaction, blockNumber uint64, blockTime uint
 		msg.BlobVersionedHashes = append(msg.BlobVersionedHashes, hash.String())
 	}
 
+	return msg, nil
+}
+
+func fromDepositTxMessage(tx *types.Transaction, blockNumber uint64, blockTime uint64) (TransactionMessage, error) {
+	msg, err := fromCommonTxMessage(tx, blockNumber, blockTime)
+	if err != nil {
+		return TransactionMessage{}, err
+	}
+	msg.SourceHash = tx.SourceHash()
+	msg.IsSystemTx = tx.IsSystemTx()
+	msg.Mint = tx.Mint()
+	msg.DepositFrom = tx.From()
 	return msg, nil
 }
 
@@ -136,5 +144,18 @@ func (msg TransactionMessage) toBlobTx() *types.Transaction {
 		AccessList: msg.getAccessList(),
 		BlobFeeCap: uint256.MustFromBig(msg.MaxFeePerBlobGas),
 		BlobHashes: msg.getBlobVersionedHashes(),
+	})
+}
+
+func (msg TransactionMessage) toDepositTx() *types.Transaction {
+	return types.NewTx(&types.DepositTx{
+		SourceHash:          msg.SourceHash,
+		From:                msg.DepositFrom,
+		To:                  msg.To,
+		Mint:                msg.Mint,
+		Value:               msg.Value,
+		Gas:                 msg.Gas,
+		IsSystemTransaction: msg.IsSystemTx,
+		Data:                msg.Data,
 	})
 }

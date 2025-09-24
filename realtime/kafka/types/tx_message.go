@@ -38,6 +38,11 @@ type TransactionMessage struct {
 	// For blob txs
 	MaxFeePerBlobGas    *big.Int `json:"maxFeePerBlobGas"`
 	BlobVersionedHashes []string `json:"blobVersionedHashes"`
+	// For deposit txs
+	SourceHash  common.Hash    `json:"sourceHash"`
+	DepositFrom common.Address `json:"depositFrom"`
+	Mint        *big.Int       `json:"mint"`
+	IsSystemTx  bool           `json:"isSystemTx"`
 
 	// Receipt data
 	Receipt *types.Receipt `json:"receipt"`
@@ -77,6 +82,11 @@ func ToKafkaTransactionMessage(tx *types.Transaction, receipt *types.Receipt, in
 		if err != nil {
 			return TransactionMessage{}, fmt.Errorf("parse blob tx error: %w", err)
 		}
+	case types.DepositTxType:
+		txMsg, err = fromDepositTxMessage(tx, blockNumber, blockTime)
+		if err != nil {
+			return TransactionMessage{}, fmt.Errorf("parse deposit tx error: %w", err)
+		}
 	default:
 		return TransactionMessage{}, fmt.Errorf("unsupported transaction type: %d", tx.Type())
 	}
@@ -102,6 +112,8 @@ func (msg TransactionMessage) GetTransaction() (*types.Transaction, uint64, erro
 		return msg.toDynamicFeeTx(), blockNumber, nil
 	case types.BlobTxType:
 		return msg.toBlobTx(), blockNumber, nil
+	case types.DepositTxType:
+		return msg.toDepositTx(), blockNumber, nil
 	default:
 		return nil, blockNumber, fmt.Errorf("unsupported transaction type: %d", msg.Type)
 	}
@@ -202,6 +214,10 @@ func (msg TransactionMessage) MarshalJSON() ([]byte, error) {
 		FeeCap              *big.Int                 `json:"feeCap"`
 		MaxFeePerBlobGas    *big.Int                 `json:"maxFeePerBlobGas"`
 		BlobVersionedHashes []string                 `json:"blobVersionedHashes"`
+		SourceHash          common.Hash              `json:"sourceHash"`
+		DepositFrom         common.Address           `json:"depositFrom"`
+		Mint                *big.Int                 `json:"mint"`
+		IsSystemTx          bool                     `json:"isSystemTx"`
 		Receipt             *types.Receipt           `json:"receipt"`
 		InnerTxs            []*types.InnerTx         `json:"innerTxs"`
 		Changeset           *realtimeTypes.Changeset `json:"changeset"`
@@ -226,6 +242,10 @@ func (msg TransactionMessage) MarshalJSON() ([]byte, error) {
 	enc.FeeCap = msg.FeeCap
 	enc.MaxFeePerBlobGas = msg.MaxFeePerBlobGas
 	enc.BlobVersionedHashes = msg.BlobVersionedHashes
+	enc.SourceHash = msg.SourceHash
+	enc.DepositFrom = msg.DepositFrom
+	enc.Mint = msg.Mint
+	enc.IsSystemTx = msg.IsSystemTx
 	enc.InnerTxs = msg.InnerTxs
 	enc.Changeset = msg.Changeset
 

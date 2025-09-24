@@ -92,6 +92,17 @@ var (
 	})
 	signedBlobTx, _ = types.SignTx(blobTx, signer, privateKey)
 
+	depositTx = types.NewTx(&types.DepositTx{
+		SourceHash:          common.Hash{5},
+		From:                testFromAddr,
+		To:                  &testToAddr,
+		Mint:                big.NewInt(10),
+		Value:               big.NewInt(10),
+		Gas:                 25000,
+		IsSystemTransaction: false,
+		Data:                common.FromHex("5544"),
+	})
+
 	txReceipt = &types.Receipt{
 		Type:              types.LegacyTxType,
 		PostState:         common.Hash{2}.Bytes(),
@@ -153,6 +164,18 @@ var (
 			{Address: common.BytesToAddress([]byte{0x02, 0x22})},
 		},
 		TxHash:          signedBlobTx.Hash(),
+		ContractAddress: common.BytesToAddress([]byte{0x02, 0x22, 0x22}),
+		GasUsed:         5,
+	}
+
+	depositTxReceipt = &types.Receipt{
+		Type:              types.DepositTxType,
+		PostState:         common.Hash{5}.Bytes(),
+		CumulativeGasUsed: 20,
+		Logs: []*types.Log{
+			{Address: common.BytesToAddress([]byte{0x22})},
+		},
+		TxHash:          depositTx.Hash(),
 		ContractAddress: common.BytesToAddress([]byte{0x02, 0x22, 0x22}),
 		GasUsed:         5,
 	}
