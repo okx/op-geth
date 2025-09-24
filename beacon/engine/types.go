@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -136,6 +137,8 @@ type ExecutionPayloadEnvelope struct {
 	Witness          *hexutil.Bytes  `json:"witness,omitempty"`
 	// OP-Stack: Ecotone specific fields
 	ParentBeaconBlockRoot *common.Hash `json:"parentBeaconBlockRoot,omitempty"`
+	// For X Layer, realtime
+	Changeset *realtimeTypes.Changeset `json:"changeset,omitempty"`
 }
 
 type BlobsBundleV1 struct {

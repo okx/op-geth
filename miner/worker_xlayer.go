@@ -68,20 +68,6 @@ func (miner *Miner) RealtimeSendNewPendingBlock(statedb *state.StateDB, header *
 	}
 }
 
-func (miner *Miner) RealtimeSendConfirmedBlock(statedb *state.StateDB, block *types.Block) {
-	if miner.backend.RealtimeEnabled() {
-		blockInfoChan := miner.backend.GetRealtimeBlockInfoChan()
-		if blockInfoChan != nil {
-			blockInfoChan <- &realtimeTypes.BlockInfo{
-				Header:    block.Header(),
-				TxCount:   int64(len(block.Transactions())),
-				Hash:      block.Hash(),
-				Changeset: statedb.GenerateChangeset(),
-			}
-		}
-	}
-}
-
 func (miner *Miner) RealtimeSendTxInfo(blockTime uint64, tx *types.Transaction, receipt *types.Receipt, innerTxs []*types.InnerTx, entries *state.Entries) {
 	if miner.backend.RealtimeEnabled() {
 		txInfoChan := miner.backend.GetRealtimeTxInfoChan()

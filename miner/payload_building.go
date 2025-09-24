@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -114,6 +115,9 @@ type Payload struct {
 
 	rpcCtx    context.Context // context to limit RPC-coupled payload checks
 	rpcCancel context.CancelFunc
+
+	// For X Layer, realtime
+	changeset *realtimeTypes.Changeset
 }
 
 // newPayload initializes the payload object.
@@ -170,6 +174,9 @@ func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration) {
 		payload.sidecars = r.sidecars
 		payload.requests = r.requests
 		payload.fullWitness = r.witness
+
+		// For X Layer, realtime
+		payload.changeset = r.changeset
 
 		feesInEther := new(big.Float).Quo(new(big.Float).SetInt(r.fees), big.NewFloat(params.Ether))
 		log.Info("Updated payload",
@@ -247,6 +254,8 @@ func (payload *Payload) resolve(onlyFull bool) *engine.ExecutionPayloadEnvelope 
 			envelope.Witness = new(hexutil.Bytes)
 			*envelope.Witness, _ = rlp.EncodeToBytes(payload.fullWitness) // cannot fail
 		}
+		// For X Layer, realtime
+		envelope.Changeset = payload.changeset
 		return envelope
 	} else if !onlyFull && payload.empty != nil {
 		envelope := engine.BlockToExecutableData(payload.empty, big.NewInt(0), nil, payload.emptyRequests)
@@ -327,6 +336,8 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 		payload.fullWitness = empty.witness
 		payload.requests = empty.requests
 		payload.cond.Broadcast() // unblocks Resolve
+		// For X Layer, realtime
+		payload.changeset = empty.changeset
 		return payload, nil
 	}
 

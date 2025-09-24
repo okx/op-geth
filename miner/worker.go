@@ -39,6 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 	"github.com/holiman/uint256"
 )
 
@@ -100,6 +101,8 @@ type newPayloadResult struct {
 	receipts []*types.Receipt       // Receipts collected during construction
 	requests [][]byte               // Consensus layer requests collected during block construction
 	witness  *stateless.Witness     // Witness is an optional stateless proof
+	// For X Layer, realtime
+	changeset *realtimeTypes.Changeset
 }
 
 // generateParams wraps various settings for generating sealing task.
@@ -232,11 +235,6 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
-	// For X Layer, realtime
-	if params.realtimeEnabled {
-		miner.RealtimeSendConfirmedBlock(work.state, block)
-	}
-
 	proposeStats.CumulativeTiming(metrics.ProposeAssembleMs, time.Since(assembleStart))
 
 	// Include StateDB internal timings
@@ -263,13 +261,14 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 	//
 	proposeStats.ProposeCheckpoint()
 	return &newPayloadResult{
-		block:    block,
-		fees:     totalFees(block, work.receipts),
-		sidecars: work.sidecars,
-		stateDB:  work.state,
-		receipts: work.receipts,
-		requests: requests,
-		witness:  work.witness,
+		block:     block,
+		fees:      totalFees(block, work.receipts),
+		sidecars:  work.sidecars,
+		stateDB:   work.state,
+		receipts:  work.receipts,
+		requests:  requests,
+		witness:   work.witness,
+		changeset: work.state.GenerateChangeset(),
 	}
 }
 
@@ -380,7 +379,6 @@ func (miner *Miner) prepareWork(genParams *generateParams, witness bool) (*envir
 	if genParams.realtimeEnabled {
 		miner.RealtimeSendNewPendingBlock(env.state, header)
 	}
-
 	return env, nil
 }
 
@@ -529,7 +527,6 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 	if realtimeEnabled {
 		miner.RealtimeSendTxInfo(env.header.Time, tx, receipt, innertxs, entries)
 	}
-
 	return nil
 }
 
