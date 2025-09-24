@@ -326,10 +326,10 @@ func handleBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
 		)
 		hasher := trie.NewStackTrie(nil)
 		for i, body := range res.BlockBodiesResponse {
-			txsHashes[i] = types.DeriveSha(types.Transactions(body.Transactions), hasher)
+			txsHashes[i] = types.ParallelDeriveSha(types.Transactions(body.Transactions), hasher)
 			uncleHashes[i] = types.CalcUncleHash(body.Uncles)
 			if body.Withdrawals != nil {
-				withdrawalHashes[i] = types.DeriveSha(types.Withdrawals(body.Withdrawals), hasher)
+				withdrawalHashes[i] = types.ParallelDeriveSha(types.Withdrawals(body.Withdrawals), hasher)
 			}
 		}
 		return [][]common.Hash{txsHashes, uncleHashes, withdrawalHashes}
@@ -351,7 +351,7 @@ func handleReceipts(backend Backend, msg Decoder, peer *Peer) error {
 		hasher := trie.NewStackTrie(nil)
 		hashes := make([]common.Hash, len(res.ReceiptsResponse))
 		for i, receipt := range res.ReceiptsResponse {
-			hashes[i] = types.DeriveSha(types.Receipts(receipt), hasher)
+			hashes[i] = types.ParallelDeriveSha(types.Receipts(receipt), hasher)
 		}
 		return hashes
 	}

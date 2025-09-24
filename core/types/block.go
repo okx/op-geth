@@ -276,7 +276,7 @@ func NewBlock(header *Header, body *Body, receipts []*Receipt, hasher TrieHasher
 	if len(txs) == 0 {
 		b.header.TxHash = EmptyTxsHash
 	} else {
-		b.header.TxHash = DeriveSha(Transactions(txs), hasher)
+		b.header.TxHash = ParallelDeriveSha(Transactions(txs), hasher)
 		b.transactions = make(Transactions, len(txs))
 		copy(b.transactions, txs)
 	}
@@ -284,7 +284,7 @@ func NewBlock(header *Header, body *Body, receipts []*Receipt, hasher TrieHasher
 	if len(receipts) == 0 {
 		b.header.ReceiptHash = EmptyReceiptsHash
 	} else {
-		b.header.ReceiptHash = DeriveSha(Receipts(receipts), hasher)
+		b.header.ReceiptHash = ParallelDeriveSha(Receipts(receipts), hasher)
 		// Receipts must go through MakeReceipt to calculate the receipt's bloom
 		// already. Merge the receipt's bloom together instead of recalculating
 		// everything.
@@ -314,7 +314,7 @@ func NewBlock(header *Header, body *Body, receipts []*Receipt, hasher TrieHasher
 		b.header.WithdrawalsHash = &EmptyWithdrawalsHash
 		b.withdrawals = Withdrawals{}
 	} else {
-		hash := DeriveSha(Withdrawals(withdrawals), hasher)
+		hash := ParallelDeriveSha(Withdrawals(withdrawals), hasher)
 		b.header.WithdrawalsHash = &hash
 		b.withdrawals = slices.Clone(withdrawals)
 	}

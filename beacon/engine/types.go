@@ -293,7 +293,7 @@ func ExecutableDataToBlockNoHash(data ExecutableData, versionedHashes []common.H
 		h := *data.WithdrawalsRoot // copy, avoid any sharing of memory
 		withdrawalsRoot = &h
 	} else if data.Withdrawals != nil {
-		h := types.DeriveSha(types.Withdrawals(data.Withdrawals), trie.NewStackTrie(nil))
+		h := types.ParallelDeriveSha(types.Withdrawals(data.Withdrawals), trie.NewStackTrie(nil))
 		withdrawalsRoot = &h
 	}
 
@@ -314,7 +314,7 @@ func ExecutableDataToBlockNoHash(data ExecutableData, versionedHashes []common.H
 		UncleHash:        types.EmptyUncleHash,
 		Coinbase:         data.FeeRecipient,
 		Root:             data.StateRoot,
-		TxHash:           types.DeriveSha(types.Transactions(txs), trie.NewStackTrie(nil)),
+		TxHash:           types.ParallelDeriveSha(types.Transactions(txs), trie.NewStackTrie(nil)),
 		ReceiptHash:      data.ReceiptsRoot,
 		Bloom:            types.BytesToBloom(data.LogsBloom),
 		Difficulty:       common.Big0,

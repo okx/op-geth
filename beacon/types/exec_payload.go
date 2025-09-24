@@ -124,7 +124,7 @@ func convertTransactions(list zrntcommon.PayloadTransactions, execHeader *types.
 		}
 		txs[i] = &tx
 	}
-	execHeader.TxHash = types.DeriveSha(types.Transactions(txs), trie.NewStackTrie(nil))
+	execHeader.TxHash = types.ParallelDeriveSha(types.Transactions(txs), trie.NewStackTrie(nil))
 	return txs, nil
 }
 
@@ -138,7 +138,7 @@ func convertWithdrawals(list zrntcommon.Withdrawals, execHeader *types.Header) [
 			Amount:    uint64(w.Amount),
 		}
 	}
-	wroot := types.DeriveSha(types.Withdrawals(withdrawals), trie.NewStackTrie(nil))
+	wroot := types.ParallelDeriveSha(types.Withdrawals(withdrawals), trie.NewStackTrie(nil))
 	execHeader.WithdrawalsHash = &wroot
 	return withdrawals
 }
