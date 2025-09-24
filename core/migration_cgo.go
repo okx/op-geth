@@ -350,10 +350,12 @@ func getSmtBatchRootHashOrigin(chainDataPath, smtDataPath string) (*big.Int, err
 	// Get lastRoot from SMT stats table
 	lastRootData, err := tx.GetOne("HermezSmtStats", []byte("lastRoot"))
 	if err != nil {
+		log.Error("failed to get last root hash", "err", err)
 		return big.NewInt(0), nil // Return zero if table doesn't exist
 	}
 
 	if lastRootData == nil {
+		logger.Error("last smt root is nil")
 		return big.NewInt(0), nil // Return zero if no data found
 	}
 
