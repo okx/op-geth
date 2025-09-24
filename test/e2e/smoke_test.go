@@ -27,7 +27,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/test/constants"
 	"github.com/ethereum/go-ethereum/test/operations"
-	"github.com/ethereum/go-ethereum/tests"
 	"github.com/holiman/uint256"
 
 	"gopkg.in/yaml.v2"
@@ -177,6 +176,41 @@ func transTokenWithFromImpl(t *testing.T, ctx context.Context, client *ethclient
 	require.NoError(t, err)
 
 	return signedTx.Hash().String()
+}
+
+// transTokenFail creates a token transfer transaction that will fail during execution
+func transTokenFail(t *testing.T, ctx context.Context, client *ethclient.Client, fromPrivateKey string, amount *uint256.Int, toAddress string) common.Hash {
+	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(fromPrivateKey, "0x"))
+	require.NoError(t, err)
+	fromAddr := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	nonce, err := client.PendingNonceAt(ctx, fromAddr)
+	require.NoError(t, err)
+
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	require.NoError(t, err)
+
+	to := common.HexToAddress(toAddress)
+	gasLimit := uint64(50000)
+	tx := types.NewTransaction(nonce, to, amount.ToBig(), gasLimit, gasPrice, nil)
+
+	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
+	signedTx, err := types.SignTx(tx, signer, privateKey)
+	require.NoError(t, err)
+
+	err = client.SendTransaction(ctx, signedTx)
+	require.NoError(t, err, "Transaction should be sent successfully")
+
+	txHash := signedTx.Hash()
+	err = operations.WaitTxToBeMined(ctx, client, signedTx, operations.DefaultTimeoutTxToBeMined)
+	require.Error(t, err, "Transaction should fail during execution")
+
+	// Verify transaction failed
+	receipt, err := client.TransactionReceipt(ctx, txHash)
+	require.NoError(t, err, "Should be able to get receipt for failed transaction")
+	require.Equal(t, uint64(0), receipt.Status, "Transaction should have failed (status=0)")
+
+	return txHash
 }
 
 // makeContractCall is a utility function to make contract calls and return transaction hash
@@ -599,20 +633,6 @@ func TestInnerTx(t *testing.T) {
 	require.NoError(t, err)
 	defer client.Close()
 
-	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultL2AdminPrivateKey, "0x"))
-	require.NoError(t, err)
-
-	contractCAddr := operations.DeployContract(t, ctx, client, privateKey, "ContractC", tests.ContractCABIJson, tests.ContractCBytecodeStr)
-
-	// Create a contract call to setValue function
-	// setValue(uint256) function selector: 0x55241077
-	setValue := big.NewInt(42)
-	setValueData := common.Hex2Bytes("55241077")
-	setValueData = append(setValueData, common.LeftPadBytes(setValue.Bytes(), 32)...)
-
-	signedContractCTxHash, err := makeContractCall(t, ctx, client, privateKey, contractCAddr, setValueData, 100000, nil)
-	require.NoError(t, err)
-
 	operations.EnsureContractsDeployed(t)
 
 	preexecPrivateKey, err := crypto.HexToECDSA(operations.TmpSenderPrivateKey)
@@ -630,21 +650,28 @@ func TestInnerTx(t *testing.T) {
 	require.NoError(t, err)
 	blockNumber := receipt.BlockNumber.Uint64()
 
+	// Call ContractC's setValue function
+	contractCSetValueData := common.Hex2Bytes("552410770000000000000000000000000000000000000000000000000000000000000123")
+	signedContractCSetValueTxHash, err := makeContractCall(t, ctx, client, preexecPrivateKey, operations.ContractCAddr, contractCSetValueData, 200000, nil)
+	require.NoError(t, err)
+
+	// Call ContractC's getValue function
+	contractCGetValueData := common.Hex2Bytes("20965255")
+	signedContractCGetValueTxHash, err := makeContractCall(t, ctx, client, preexecPrivateKey, operations.ContractCAddr, contractCGetValueData, 200000, nil)
+	require.NoError(t, err)
+
 	t.Run("GetInternalTransactions", func(t *testing.T) {
-		innerTxs, err := operations.EthGetInternalTransactions(signedContractCTxHash)
+		innerTxs, err := operations.EthGetInternalTransactions(signedContractCSetValueTxHash)
 		require.NoError(t, err)
 		require.NotNil(t, innerTxs, "Inner transactions result should not be nil")
+		require.IsType(t, []*types.InnerTx{}, innerTxs, "innerTxs should be of type []*types.InnerTx")
 
-		innerTxsSlice, ok := innerTxs.([]interface{})
-		require.True(t, ok, "eth_getInternalTransaction result should be an array")
-
-		for _, innerTxInterface := range innerTxsSlice {
-			innerTxMap, ok := innerTxInterface.(map[string]interface{})
-			require.True(t, ok, "Inner transaction should be a map")
-			require.Contains(t, innerTxMap, "from")
-			require.Contains(t, innerTxMap, "to")
-			require.Contains(t, innerTxMap, "call_type")
-			require.Contains(t, innerTxMap, "is_error")
+		for _, innerTx := range innerTxs {
+			require.NotEmpty(t, innerTx.From, "innerTx.From should not be empty")
+			require.NotEmpty(t, innerTx.To, "innerTx.To should not be empty")
+			require.NotEmpty(t, innerTx.Gas, "innerTx.Gas should not be empty")
+			require.Equal(t, innerTx.IsError, false, "innerTx.IsError should be false")
+			require.NotNil(t, innerTx, "innerTx should not be nil")
 		}
 	})
 
@@ -652,30 +679,17 @@ func TestInnerTx(t *testing.T) {
 		innerTxs, err := operations.EthGetInternalTransactions(signedContractATxHash)
 		require.NoError(t, err)
 		require.NotNil(t, innerTxs, "Inner transactions result should not be nil")
-
-		innerTxsSlice, ok := innerTxs.([]interface{})
-		require.True(t, ok, "Result should be an array")
-		require.Len(t, innerTxsSlice, 2, "Should have exactly 2 inner transactions: EOA->ContractA and ContractA->ContractB")
+		require.IsType(t, []*types.InnerTx{}, innerTxs, "innerTxs should be of type []*types.InnerTx")
+		require.Len(t, innerTxs, 2, "Should have exactly 2 inner transactions: EOA->ContractA and ContractA->ContractB")
 
 		// Validate first inner transaction: EOA -> ContractA
-		innerTxMap1, ok := innerTxsSlice[0].(map[string]interface{})
-		require.True(t, ok, "First inner transaction should be a map")
-
-		fromAddr1, _ := innerTxMap1["from"].(string)
-		toAddr1, _ := innerTxMap1["to"].(string)
-		require.Equal(t, strings.ToLower(preexecFrom.Hex()), strings.ToLower(fromAddr1))
-		require.Equal(t, strings.ToLower(operations.ContractAAddr.Hex()), strings.ToLower(toAddr1))
+		require.Equal(t, strings.ToLower(preexecFrom.Hex()), strings.ToLower(innerTxs[0].From))
+		require.Equal(t, strings.ToLower(operations.ContractAAddr.Hex()), strings.ToLower(innerTxs[0].To))
 
 		// Validate second inner transaction: ContractA -> ContractB
-		innerTxMap2, ok := innerTxsSlice[1].(map[string]interface{})
-		require.True(t, ok, "Second inner transaction should be a map")
-
-		fromAddr2, _ := innerTxMap2["from"].(string)
-		toAddr2, _ := innerTxMap2["to"].(string)
-		callType, _ := innerTxMap2["call_type"].(string)
-		require.Equal(t, strings.ToLower(operations.ContractAAddr.Hex()), strings.ToLower(fromAddr2))
-		require.Equal(t, strings.ToLower(operations.ContractBAddr.Hex()), strings.ToLower(toAddr2))
-		require.Equal(t, "call", callType)
+		require.Equal(t, strings.ToLower(operations.ContractAAddr.Hex()), strings.ToLower(innerTxs[1].From))
+		require.Equal(t, strings.ToLower(operations.ContractBAddr.Hex()), strings.ToLower(innerTxs[1].To))
+		require.Equal(t, "call", innerTxs[1].CallType)
 	})
 
 	t.Run("GetBlockInternalTransactions", func(t *testing.T) {
@@ -683,22 +697,64 @@ func TestInnerTx(t *testing.T) {
 		blockInnerTxs, err := operations.EthGetBlockInternalTransactions(blockNumberHex)
 		require.NoError(t, err)
 		require.NotNil(t, blockInnerTxs, "Block inner transactions should not be nil")
-
-		blockInnerTxsMap, ok := blockInnerTxs.(map[string]interface{})
-		require.True(t, ok, "Result should be a map")
+		require.IsType(t, map[common.Hash][]*types.InnerTx{}, blockInnerTxs, "blockInnerTxs should be of type map[common.Hash][]*types.InnerTx")
 
 		contractAInnerTxs, err := operations.EthGetInternalTransactions(signedContractATxHash)
 		require.NoError(t, err)
 
-		contractAHashStr := signedContractATxHash.Hex()
-		blockContractAInnerTxs, exists := blockInnerTxsMap[contractAHashStr]
+		blockContractAInnerTxs, exists := blockInnerTxs[signedContractATxHash]
 		require.True(t, exists, "ContractA->ContractB transaction should be in block inner transactions")
 
-		contractAFromBlock, ok1 := blockContractAInnerTxs.([]interface{})
-		contractAFromIndividual, ok2 := contractAInnerTxs.([]interface{})
-		require.True(t, ok1 && ok2, "Both results should be arrays")
-		require.Equal(t, len(contractAFromIndividual), len(contractAFromBlock), "Transaction counts should match")
-		require.Len(t, contractAFromBlock, 2, "Should have 2 inner transactions")
+		require.Len(t, blockContractAInnerTxs, 2, "Should have 2 inner transactions for ContractA")
+
+		require.Equal(t, len(contractAInnerTxs), len(blockContractAInnerTxs), "Transaction counts should match")
+		require.Len(t, blockContractAInnerTxs, 2, "Should have 2 inner transactions")
+	})
+
+	t.Run("GetInternalTransactions_WithOutput", func(t *testing.T) {
+		innerTxs, err := operations.EthGetInternalTransactions(signedContractCGetValueTxHash)
+		require.NoError(t, err)
+		require.NotNil(t, innerTxs, "Inner transactions result should not be nil")
+		require.IsType(t, []*types.InnerTx{}, innerTxs, "innerTxs should be of type []*types.InnerTx")
+
+		for _, innerTx := range innerTxs {
+			require.NotEmpty(t, innerTx.From, "innerTx.From should not be empty")
+			require.NotEmpty(t, innerTx.To, "innerTx.To should not be empty")
+			require.NotEmpty(t, innerTx.Gas, "innerTx.Gas should not be empty")
+			require.NotEmpty(t, innerTx.Output, "innerTx.Output should not be empty")
+			require.Equal(t, innerTx.IsError, false, "innerTx.IsError should be false")
+			require.NotNil(t, innerTx, "innerTx should not be nil")
+		}
+	})
+	t.Run("GetInternalTransactions_Batch", func(t *testing.T) {
+		var innerTxs [][]*types.InnerTx
+		// Send multiple transactions in a block
+		txHashes := operations.TransTokenBatch(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2NewAcc1Address, 10, operations.DefaultL2AdminPrivateKey)
+		require.Len(t, txHashes, 10, "Should have created 10 transactions")
+
+		// Verify each transaction has exactly 1 inner transaction
+		for i, txHash := range txHashes {
+			fmt.Printf("Getting inner transactions for tx %d: %s\n", i, txHash)
+			innerTx, err := operations.EthGetInternalTransactions(common.HexToHash(txHash))
+			require.NoError(t, err, "Failed to get inner transactions for tx %d: %s", i, txHash)
+			require.IsType(t, []*types.InnerTx{}, innerTx, "innerTx should be of type []*types.InnerTx for tx %d", i)
+			require.Len(t, innerTx, 1, "Transaction %d (%s) should have exactly 1 inner transaction, got %d", i, txHash, len(innerTx))
+			innerTxs = append(innerTxs, innerTx)
+		}
+		require.Len(t, innerTxs, 10, "Should have inner transactions for all 10 transactions")
+	})
+
+	t.Run("GetInnerTransactionsForFailedTransactions", func(t *testing.T) {
+		amount := uint256.NewInt(params.GWei)
+		toAddress := operations.ContractAAddr.String()
+
+		txHash := transTokenFail(t, ctx, client, operations.TmpSenderPrivateKey, amount, toAddress)
+		fmt.Printf("Signed failing tx hash: %s\n", txHash.Hex())
+
+		innerTx, err := operations.EthGetInternalTransactions(txHash)
+		require.NoError(t, err, "Should be able to get inner transactions")
+		require.Greater(t, len(innerTx), 0, "Should have at least one inner transaction")
+		require.True(t, innerTx[0].IsError, "Inner transaction should have IsError = true")
 	})
 }
 
@@ -710,7 +766,7 @@ func TestTransactionPreExec(t *testing.T) {
 	// Setup common test environment
 	operations.EnsureContractsDeployed(t)
 
-	contractAABI, err := abi.JSON(strings.NewReader(tests.ContractAABIJson))
+	contractAABI, err := abi.JSON(strings.NewReader(constants.ContractAABIJson))
 	require.NoError(t, err)
 	calldata, err := contractAABI.Pack("triggerCall")
 	require.NoError(t, err)

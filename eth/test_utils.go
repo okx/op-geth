@@ -12,9 +12,9 @@ import (
 
 // setupRPCClient establishes connection to the dev node
 func SetupRPCClient(t *testing.T) (*rpc.Client, context.Context) {
-	client, err := rpc.Dial("http://localhost:8545")
+	client, err := rpc.Dial("http://localhost:8124")
 	if err != nil {
-		t.Skipf("No dev node available at http://localhost:8545 - start dev node to run integration tests: %v", err)
+		t.Skipf("Start optimism script to run integration tests: %v", err)
 	}
 	t.Cleanup(func() { client.Close() })
 	return client, context.Background()

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -459,9 +460,9 @@ func EthGetTransactionByHash(txHash common.Hash) (interface{}, error) {
 }
 
 // EthGetInternalTransactions returns the internal transactions for a given transaction hash
-func EthGetInternalTransactions(txHash common.Hash) (interface{}, error) {
+func EthGetInternalTransactions(txHash common.Hash) ([]*types.InnerTx, error) {
 
-	var result interface{}
+	var result []*types.InnerTx
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -474,9 +475,9 @@ func EthGetInternalTransactions(txHash common.Hash) (interface{}, error) {
 }
 
 // EthGetBlockInternalTransactions returns the internal transactions for a given block number
-func EthGetBlockInternalTransactions(blockNumber string) (interface{}, error) {
+func EthGetBlockInternalTransactions(blockNumber string) (map[common.Hash][]*types.InnerTx, error) {
 
-	var result interface{}
+	var result map[common.Hash][]*types.InnerTx
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

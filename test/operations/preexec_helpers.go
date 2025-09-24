@@ -30,6 +30,7 @@ const (
 var (
 	ContractAAddr     common.Address
 	ContractBAddr     common.Address
+	ContractCAddr     common.Address
 	FactoryAddr       common.Address
 	DeploymentAddress common.Address
 	ContractsDeployed bool
@@ -73,6 +74,53 @@ func TransToken(t *testing.T, ctx context.Context, client *ethclient.Client, amo
 	return TransTokenWithFrom(t, ctx, client, DefaultL2AdminPrivateKey, amount, toAddress)
 }
 
+// Creates multiple transactions in a batch and waits for them all to be mined
+func TransTokenBatch(t *testing.T, ctx context.Context, client *ethclient.Client, amount *uint256.Int, toAddress string, batchSize int, fromPrivateKey ...string) []string {
+	privateKey := DefaultL2AdminPrivateKey
+	if len(fromPrivateKey) > 0 && fromPrivateKey[0] != "" {
+		privateKey = fromPrivateKey[0]
+	}
+	var txHashes []string
+	var transactions []*types.Transaction
+
+	chainID, err := client.ChainID(ctx)
+	require.NoError(t, err)
+	auth, err := GetAuth(privateKey, chainID.Uint64())
+	require.NoError(t, err)
+	nonce, err := client.PendingNonceAt(ctx, auth.From)
+	require.NoError(t, err)
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	require.NoError(t, err)
+
+	// Create all transactions first
+	for i := 0; i < batchSize; i++ {
+		to := common.HexToAddress(toAddress)
+		gas := uint64(50000)
+
+		tx := types.NewTransaction(nonce+uint64(i), to, amount.ToBig(), gas, gasPrice, nil)
+
+		privKey, err := crypto.HexToECDSA(strings.TrimPrefix(privateKey, "0x"))
+		require.NoError(t, err)
+
+		signer := types.MakeSigner(GetTestChainConfig(DefaultL2ChainID), big.NewInt(1), 0)
+		signedTx, err := types.SignTx(tx, signer, privKey)
+		require.NoError(t, err)
+
+		err = client.SendTransaction(ctx, signedTx)
+		require.NoError(t, err)
+
+		txHashes = append(txHashes, signedTx.Hash().String())
+		transactions = append(transactions, signedTx)
+	}
+
+	for _, tx := range transactions {
+		err := WaitTxToBeMined(ctx, client, tx, DefaultTimeoutTxToBeMined)
+		require.NoError(t, err)
+	}
+
+	return txHashes
+}
+
 // DeployContract deploys a contract using the provided parameters
 func DeployContract(t *testing.T, ctx context.Context, client *ethclient.Client, privateKey *ecdsa.PrivateKey, contractName, abiJson, bytecodeStr string, constructorArgs ...interface{}) common.Address {
 	fromAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
@@ -114,15 +162,17 @@ func EnsureContractsDeployed(t *testing.T) {
 	require.NoError(t, err)
 	DeploymentAddress = crypto.PubkeyToAddress(privateKey.PublicKey)
 
-	// Fund deployment address
 	fundingAmount := uint256.NewInt(5000000000000000000) // 5 ETH
-	TransToken(t, ctx, client, fundingAmount, DeploymentAddress.String())
+	TransTokenWithFrom(t, ctx, client, DefaultRichPrivateKey, fundingAmount, DeploymentAddress.String())
+
+	adminAddr := common.HexToAddress(DefaultL2AdminAddress)
+	TransTokenWithFrom(t, ctx, client, DefaultRichPrivateKey, fundingAmount, adminAddr.String())
 
 	// Deploy contracts
 	ContractBAddr = DeployContract(t, ctx, client, privateKey, "ContractB", constants.ContractBABIJson, constants.ContractBBytecodeStr)
 	ContractAAddr = DeployContract(t, ctx, client, privateKey, "ContractA", constants.ContractAABIJson, constants.ContractABytecodeStr, ContractBAddr)
 	FactoryAddr = DeployContract(t, ctx, client, privateKey, "ContractFactory", constants.ContractFactoryABIJson, constants.ContractFactoryBytecodeStr)
-
+	ContractCAddr = DeployContract(t, ctx, client, privateKey, "ContractC", constants.ContractCABIJson, constants.ContractCBytecodeStr)
 	ContractsDeployed = true
 }
 
