@@ -577,8 +577,8 @@ func (pool *LegacyPool) Pending(filter txpool.PendingFilter) map[common.Address]
 	if filter.OnlyBlobTxs {
 		return nil
 	}
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
 
 	// Convert the new uint256.Int types to the old big.Int ones used by the legacy pool
 	var (
@@ -1283,6 +1283,8 @@ func (pool *LegacyPool) scheduleReorgLoop() {
 	defer pool.wg.Done()
 
 	var (
+		periodicReorg = time.NewTicker(100 * time.Millisecond)
+
 		curDone       chan struct{} // non-nil while runReorg is active
 		nextDone      = make(chan struct{})
 		launchNextRun bool
@@ -1290,6 +1292,8 @@ func (pool *LegacyPool) scheduleReorgLoop() {
 		dirtyAccounts *accountSet
 		queuedEvents  = make(map[common.Address]*SortedMap)
 	)
+	defer periodicReorg.Stop()
+
 	for {
 		// Launch next background reorg if needed
 		if curDone == nil && launchNextRun {
@@ -1305,6 +1309,10 @@ func (pool *LegacyPool) scheduleReorgLoop() {
 		}
 
 		select {
+		case <-periodicReorg.C:
+			if dirtyAccounts != nil || reset != nil {
+				launchNextRun = true
+			}
 		case req := <-pool.reqResetCh:
 			// Reset request: update head if request is already pending.
 			if reset == nil {
@@ -1322,7 +1330,7 @@ func (pool *LegacyPool) scheduleReorgLoop() {
 			} else {
 				dirtyAccounts.merge(req)
 			}
-			launchNextRun = true
+			//launchNextRun = true
 			pool.reorgDoneCh <- nextDone
 
 		case tx := <-pool.queueTxEventCh:
