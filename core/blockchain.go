@@ -288,11 +288,6 @@ type BlockChain struct {
 	payloadCache *PayloadCache
 }
 
-// SetPayloadCache sets the payload cache for the blockchain
-func (bc *BlockChain) SetPayloadCache(cache *PayloadCache) {
-	bc.payloadCache = cache
-}
-
 // NewBlockChain returns a fully initialised block chain using information
 // available in the database. It initialises the default Ethereum Validator
 // and Processor.
@@ -2011,7 +2006,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		}()
 	}
 	// Try to use cached payload result first
-	res, cachedState, cacheHit := bc.fetchCachedBlock(block.Hash())
+	res, cachedState := bc.fetchCachedBlock(block.Hash())
 	pstart := time.Now()
 	// If not cached, process normally
 	if res == nil {
@@ -2111,7 +2106,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	blockWriteTimer.Update(time.Since(wstart) - max(statedb.AccountCommits, statedb.StorageCommits) /* concurrent */ - statedb.SnapshotCommits - statedb.TrieDBCommits)
 	blockInsertTimer.UpdateSince(start)
 
-	logStatistic(block, statedb, start, cacheHit, ptime, vtime, triehash, trieUpdate, xvtime, wstart, proctime)
+	logStatistic(block, statedb, start, cachedState != nil, ptime, vtime, triehash, trieUpdate, xvtime, wstart, proctime)
 
 	// Log successful block finalization
 	monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainFinalize.ID,

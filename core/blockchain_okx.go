@@ -45,7 +45,12 @@ func logStatistic(block *types.Block, statedb *state.StateDB, start time.Time, c
 	}
 }
 
-func (bc *BlockChain) fetchCachedBlock(hash common.Hash) (*ProcessResult, *state.StateDB, bool) {
+// SetPayloadCache sets the payload cache for the blockchain
+func (bc *BlockChain) SetPayloadCache(cache *PayloadCache) {
+	bc.payloadCache = cache
+}
+
+func (bc *BlockChain) fetchCachedBlock(hash common.Hash) (*ProcessResult, *state.StateDB) {
 	if bc.payloadCache != nil {
 		if cached, ok := bc.payloadCache.Get(hash); ok {
 			// Use cached result
@@ -53,7 +58,6 @@ func (bc *BlockChain) fetchCachedBlock(hash common.Hash) (*ProcessResult, *state
 			copyStart := time.Now()
 			cachedState := CopyStateDB(cached.StateDB)
 			copyTime := time.Since(copyStart)
-			cacheHit := true
 
 			// Update metrics
 			metrics.PayloadCacheCopyTimeTimer.Update(copyTime)
@@ -62,8 +66,8 @@ func (bc *BlockChain) fetchCachedBlock(hash common.Hash) (*ProcessResult, *state
 				"hash", hash,
 				"copy_time", copyTime)
 
-			return res, cachedState, cacheHit
+			return res, cachedState
 		}
 	}
-	return nil, nil, false
+	return nil, nil
 }
