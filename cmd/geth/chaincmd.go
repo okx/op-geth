@@ -812,7 +812,6 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 
 	stateDB := state.NewDatabase(triedb, nil)
 
-	log.Info("total accts", "size", len(genesis.Alloc))
 	accountsToVerify := make([]common.Address, 0)
 
 	for addr, _ := range genesis.Alloc {
