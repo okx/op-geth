@@ -23,8 +23,9 @@ type Entries struct {
 }
 
 // SetReader sets the reader for the state database.
-func (s *StateDB) SetReader(reader Reader) {
+func (s *StateDB) SetReaderXLayer(reader Reader) {
 	s.reader = reader
+	s.RealtimeReaderFlag = true
 }
 
 func CollectChangeset(entries Entries) *realtimeTypes.Changeset {

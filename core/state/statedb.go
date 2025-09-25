@@ -157,6 +157,9 @@ type StateDB struct {
 
 	// singlethreaded avoids creation of additional threads when set to true for compatibility with cannon.
 	singlethreaded bool
+
+	// For X Layer, realtime
+	RealtimeReaderFlag bool
 }
 
 // New creates a new state from a given trie.
@@ -691,6 +694,10 @@ func (s *StateDB) CreateContract(addr common.Address) {
 func (s *StateDB) Copy() *StateDB {
 	// Copy all the basic fields, initialize the memory ones
 	reader, _ := s.db.Reader(s.originalRoot) // impossible to fail
+	// For X Layer, realtime
+	if s.RealtimeReaderFlag {
+		reader = s.reader
+	}
 	state := &StateDB{
 		db:                   s.db,
 		trie:                 mustCopyTrie(s.trie),

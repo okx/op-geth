@@ -141,7 +141,7 @@ func (api *RealtimeAPIImpl) GetStateDbWithCacheReader(ctx context.Context, reade
 		return nil, err
 	}
 	// Override the reader with the realtime state cache layer
-	statedb.SetReader(reader)
+	statedb.SetReaderXLayer(reader)
 
 	return statedb, nil
 }
