@@ -122,8 +122,7 @@ type Miner struct {
 	lifeCtxCancel context.CancelFunc
 	lifeCtx       context.Context
 
-	// proposeStats holds per-propose-cycle statistics collector
-	proposeStats metrics.Statistics
+	// (stats are passed per-call; no miner-level statistics field)
 }
 
 // New creates a new miner with provided config.
@@ -140,7 +139,6 @@ func New(eth Backend, config Config, engine consensus.Engine) *Miner {
 		// To interrupt background tasks that may be attached to external processes
 		lifeCtxCancel: cancel,
 		lifeCtx:       ctx,
-		proposeStats:  metrics.NewLogStatistics(),
 	}
 }
 
