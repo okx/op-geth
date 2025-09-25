@@ -2005,12 +2005,18 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 			bc.logger.OnBlockEnd(blockEndErr)
 		}()
 	}
+	var (
+		res         *ProcessResult
+		cachedState *state.StateDB
+		err         error
+	)
+
 	// Try to use cached payload result first
-	res, cachedState := bc.fetchCachedBlock(block.Hash())
+	res, cachedState = bc.fetchCachedBlock(block.Hash())
 	pstart := time.Now()
 	// If not cached, process normally
 	if res == nil {
-		res, err := bc.processor.Process(block, statedb, bc.vmConfig)
+		res, err = bc.processor.Process(block, statedb, bc.vmConfig)
 		if err != nil {
 			monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainInsert.ID,
 				monitor.StepBlockchainInsert.Key, blockHeight, blockHash, block.Time(),
@@ -2086,7 +2092,6 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	var (
 		wstart = time.Now()
 		status WriteStatus
-		err    error
 	)
 	if !setHead {
 		// Don't set the head, only insert the block
