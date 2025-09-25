@@ -174,13 +174,13 @@ func IsEmptyAccount(acct types.Account) bool {
 }
 
 func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *types.Account) types.Account {
-
 	var destAccount types.Account
 	switch addr {
 	// black hole on XLayer with no code or storage
 	// WETH preinstalled on OP-stack
+	// xlayer has balance but no code or storage
+	// op has code but no balance or storage
 	// so we use nonce from xlayer, but code from op
-	// both xlayer and op have no storage for this address
 	case common.HexToAddress("0x4200000000000000000000000000000000000006"):
 		destAccount.Nonce = xlayerErigonAcct.Nonce
 		// The address 0x4200000000000000000000000000000000000006 has only a small amount of OKB, 0.000011 on 11th Sep.
@@ -193,8 +193,9 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 		if len(xlayerErigonAcct.Storage) != 0 {
 			logger.Error("mergeAlloc: black hole has storage", "storage length", len(xlayerErigonAcct.Storage))
 		}
-		// `create2Deployer` on both xlayer and op stack
-		// op uses a version of code that does not have an owner, so we use nonce and balance from xlayer, but the code from op
+	// `create2Deployer` on both xlayer and op stack
+	// both xlayer and op have no storage
+	// op uses a version of code that does not have an owner, so we use nonce and balance from xlayer, but the code from op
 	case common.HexToAddress("0x13b0d85ccb8bf860b6b79af3029fca081ae9bef2"):
 		destAccount.Nonce = xlayerErigonAcct.Nonce
 		destAccount.Balance = xlayerErigonAcct.Balance
@@ -205,7 +206,7 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 		if len(xlayerErigonAcct.Storage) != 0 {
 			logger.Error("mergeAlloc: create2Deployer has storage", "storage length", len(xlayerErigonAcct.Storage))
 		}
-		// Permit2 use code and storage from xlayer
+	// Permit2 use code and storage from xlayer
 	case common.HexToAddress("000000000022d473030f116ddee9f6b43ac78ba3"):
 		destAccount.Nonce = xlayerErigonAcct.Nonce
 		destAccount.Balance = xlayerErigonAcct.Balance
@@ -217,11 +218,18 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 		if len(xlayerErigonAcct.Storage) != 0 {
 			logger.Error("mergeAlloc: permit2 has storage", "storage length", len(xlayerErigonAcct.Storage))
 		}
+	// default case should use xlayer data if no code conflct and op has no storage
 	default:
-		destAccount.Balance = opGenesisAcct.Balance
-		destAccount.Nonce = opGenesisAcct.Nonce
-		destAccount.Code = opGenesisAcct.Code
-		destAccount.Storage = opGenesisAcct.Storage
+		destAccount.Balance = xlayerErigonAcct.Balance
+		destAccount.Nonce = xlayerErigonAcct.Nonce
+		destAccount.Code = xlayerErigonAcct.Code
+		destAccount.Storage = xlayerErigonAcct.Storage
+		if len(xlayerErigonAcct.Code) != len(opGenesisAcct.Code) {
+			logger.Error("mergeAlloc: default case has different code length", "address", addr.Hex(), "xlayer code length", len(xlayerErigonAcct.Code), "op code length", len(opGenesisAcct.Code))
+		}
+		if len(opGenesisAcct.Storage) != 0 {
+			logger.Error("mergeAlloc: default case has storage", "address", addr.Hex(), "storage length", len(opGenesisAcct.Storage))
+		}
 	}
 
 	return destAccount
