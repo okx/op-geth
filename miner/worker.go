@@ -246,8 +246,10 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 	if block != nil {
 		// Store the statistics instance directly; it is local and no longer written after this point
 		metrics.GlobalStatsStore.Put(block.Hash(), proposeStats)
+		miner.cacheBlock(block, work, requests, allLogs)
 	}
-	result := &newPayloadResult{
+
+	return &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),
 		sidecars: work.sidecars,
@@ -256,32 +258,6 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		requests: requests,
 		witness:  work.witness,
 	}
-
-	// Cache the payload execution result if enabled
-	if miner.config.EnablePayloadCache && miner.payloadCache != nil && result.block != nil {
-		cached := &core.CachedPayloadResult{
-			ProcessResult: &core.ProcessResult{
-				Receipts: work.receipts,
-				Requests: requests,
-				Logs:     allLogs,
-				GasUsed:  block.GasUsed(),
-			},
-			StateDB:     work.state,
-			BlockHash:   block.Hash(),
-			BlockNumber: block.Number(),
-			ParentHash:  block.ParentHash(),
-		}
-		miner.payloadCache.Add(block.Hash(), cached)
-		log.Info("Cached payload execution result",
-			"cache_store", true,
-			"hash", block.Hash(),
-			"number", block.NumberU64(),
-			"parent", block.ParentHash(),
-			"txs", len(work.receipts),
-			"gasUsed", block.GasUsed())
-	}
-
-	return result
 }
 
 // prepareWork constructs the sealing task according to the given parameters,

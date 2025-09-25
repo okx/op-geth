@@ -2011,39 +2011,11 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		}()
 	}
 	// Try to use cached payload result first
-	var res *ProcessResult
-	var err error
-	var cachedState *state.StateDB
-	var ptime time.Duration
-	var cacheHit bool
+	res, cachedState, cacheHit := bc.fetchCachedBlock(block.Hash())
 	pstart := time.Now()
-
-	if bc.payloadCache != nil {
-		if cached, ok := bc.payloadCache.Get(block.Hash()); ok {
-			// Use cached result
-			res = cached.ProcessResult
-			copyStart := time.Now()
-			cachedState = CopyStateDB(cached.StateDB)
-			copyTime := time.Since(copyStart)
-			ptime = time.Since(pstart)
-			cacheHit = true
-
-			// Update metrics
-			metrics.PayloadCacheTimeSavedTimer.Update(ptime)
-			metrics.PayloadCacheCopyTimeTimer.Update(copyTime)
-
-			log.Info("Using cached payload result",
-				"cache", true,
-				"block", block.NumberU64(),
-				"hash", block.Hash(),
-				"saved_time", ptime,
-				"copy_time", copyTime)
-		}
-	}
-
 	// If not cached, process normally
 	if res == nil {
-		res, err = bc.processor.Process(block, statedb, bc.vmConfig)
+		res, err := bc.processor.Process(block, statedb, bc.vmConfig)
 		if err != nil {
 			monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainInsert.ID,
 				monitor.StepBlockchainInsert.Key, blockHeight, blockHash, block.Time(),
@@ -2051,25 +2023,11 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 			bc.reportBlock(block, res, err)
 			return nil, err
 		}
-		ptime = time.Since(pstart)
-		log.Debug("Processed block without cache",
-			"cache", false,
-			"block", block.NumberU64(),
-			"hash", block.Hash(),
-			"process_time", ptime)
 	} else {
 		// Use cached state instead of the original statedb
 		statedb = cachedState
 	}
-	ptime = time.Since(pstart)
-	// Export to a fresh LogStatistics instance (no global singleton)
-	ls := metrics.NewLogStatistics()
-
-	// Record cache hit status
-	if cacheHit {
-		ls.CumulativeValue(metrics.PayloadCacheHitCounter, 1)
-	}
-
+	ptime := time.Since(pstart)
 	vstart := time.Now()
 	if err := bc.validator.ValidateState(block, statedb, res, false); err != nil {
 		monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainValidate.ID,
@@ -2133,6 +2091,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	var (
 		wstart = time.Now()
 		status WriteStatus
+		err    error
 	)
 	if !setHead {
 		// Don't set the head, only insert the block
@@ -2152,41 +2111,12 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	blockWriteTimer.Update(time.Since(wstart) - max(statedb.AccountCommits, statedb.StorageCommits) /* concurrent */ - statedb.SnapshotCommits - statedb.TrieDBCommits)
 	blockInsertTimer.UpdateSince(start)
 
-	// Export to LogStatistics
-	ls.CumulativeValue(metrics.BlockNumberTag, int64(block.NumberU64()))
-	ls.CumulativeValue(metrics.TxCounter, int64(block.Transactions().Len()))
-	ls.CumulativeValue(metrics.GasUsedCounter, int64(block.GasUsed()))
-	ls.CumulativeTiming(metrics.AccountReadMs, statedb.AccountReads)
-	ls.CumulativeTiming(metrics.StorageReadMs, statedb.StorageReads)
-	ls.CumulativeTiming(metrics.AccountUpdateMs, statedb.AccountUpdates)
-	ls.CumulativeTiming(metrics.StorageUpdateMs, statedb.StorageUpdates)
-	ls.CumulativeTiming(metrics.AccountHashMs, statedb.AccountHashes)
-	ls.CumulativeTiming(metrics.TrieUpdateMs, statedb.AccountUpdates+statedb.StorageUpdates)
-	ls.CumulativeTiming(metrics.EvmExecPureMs, ptime-(statedb.AccountReads+statedb.StorageReads))
-	ls.CumulativeTiming(metrics.ValidationPureMs, vtime-(triehash+trieUpdate))
-	ls.CumulativeTiming(metrics.CrossValidateMs, xvtime)
-	ls.CumulativeTiming(metrics.WriteBlockMs, time.Since(wstart))
-	ls.CumulativeTiming(metrics.AccountCommitMs, statedb.AccountCommits)
-	ls.CumulativeTiming(metrics.StorageCommitMs, statedb.StorageCommits)
-	ls.CumulativeTiming(metrics.SnapshotCommitMs, statedb.SnapshotCommits)
-	ls.CumulativeTiming(metrics.TrieDBCommitMs, statedb.TrieDBCommits)
-	ls.CumulativeTiming(metrics.TotalBuildMs, time.Since(start))
-	ls.CumulativeTiming(metrics.ExecuteMs, proctime)
-	ls.CumulativeTiming(metrics.ValidateMs, vtime-(triehash+trieUpdate))
-
-	// Update the metrics touched during block commit
+	logStatistic(block, statedb, start, cacheHit, ptime, vtime, triehash, trieUpdate, xvtime, wstart, proctime)
 
 	// Log successful block finalization
 	monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainFinalize.ID,
 		monitor.StepBlockchainFinalize.Key, blockHeight, blockHash, block.Time(),
 		0, "finalized", "", res.GasUsed)
-
-	// Try merge propose stats snapshot if exists (and add propose time into final block time)
-	if pstat, ok := metrics.GlobalStatsStore.GetAndDelete(block.Hash()); ok {
-		_ = ls.CombinedSummary(pstat)
-	} else {
-		ls.CombinedSummary(nil)
-	}
 
 	return &blockProcessingResult{usedGas: res.GasUsed, procTime: proctime, status: status}, nil
 }

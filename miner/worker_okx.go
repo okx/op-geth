@@ -3,10 +3,12 @@ package miner
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 )
 
 func (miner *Miner) applyTransaction_okx(env *environment, tx *types.Transaction) (*types.Receipt, error) {
@@ -42,4 +44,31 @@ func (miner *Miner) applyTransaction_okx(env *environment, tx *types.Transaction
 	}
 
 	return receipt, err
+}
+
+func (miner *Miner) cacheBlock(block *types.Block, work *environment, requests [][]byte, allLogs []*types.Log) {
+	// Cache the payload execution result if enabled
+	if miner.config.EnablePayloadCache && miner.payloadCache != nil && block != nil {
+		cached := &core.CachedPayloadResult{
+			ProcessResult: &core.ProcessResult{
+				Receipts: work.receipts,
+				Requests: requests,
+				Logs:     allLogs,
+				GasUsed:  block.GasUsed(),
+			},
+			StateDB:     work.state,
+			BlockHash:   block.Hash(),
+			BlockNumber: block.Number(),
+			ParentHash:  block.ParentHash(),
+		}
+		start := time.Now()
+		miner.payloadCache.Add(block.Hash(), cached)
+		save_time := time.Since(start)
+		metrics.PayloadCacheTimeSavedTimer.Update(save_time)
+		log.Info("Cached payload execution result",
+			"cache_store", true,
+			"hash", block.Hash(),
+			"number", block.NumberU64(),
+			"save_time", save_time)
+	}
 }
