@@ -184,7 +184,7 @@ func TestRealtimeBenchmarNewHeadsSubscription(t *testing.T) {
 	var totalSubTimeDiff time.Duration
 
 	realtimeMsgCh := make(chan realtimeapi.RealtimeSubResult)
-	realtimeSub, err := wsClient.Subscribe(ctx, "eth", realtimeMsgCh, "realtime", map[string]bool{"NewHeads": true, "TransactionExtraInfo": false, "TransactionReceipt": false, "TransactionInnerTxs": false})
+	realtimeSub, err := wsClient.Subscribe(ctx, "eth", realtimeMsgCh, "realtime", map[string]interface{}{"NewHeads": true, "TransactionExtraInfo": false, "TransactionReceipt": false, "TransactionInnerTxs": false})
 	require.NoError(t, err)
 	defer realtimeSub.Unsubscribe()
 

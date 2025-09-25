@@ -6,7 +6,7 @@ const (
 	DefaultL2NetworkRealtimeURL          = "http://localhost:8128"
 	DefaultL2NetworkNoRealtimeURL        = "http://localhost:8124"
 	DefaultL2NetworkWSURL                = "ws://localhost:8548"
-	DefaultL2ChainID              uint64 = 195
+	DefaultL2ChainID              uint64 = 196
 
 	DefaultL2AdminAddress    = "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"
 	DefaultL2AdminPrivateKey = "0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2"

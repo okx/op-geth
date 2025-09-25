@@ -108,6 +108,7 @@ func (cache *BlockStateCache) ApplyChangeset(changeset *realtimeTypes.Changeset,
 
 	// Apply deleted accounts changes
 	for address := range changeset.DeletedAccounts {
+		cache.cache.deletedAccountsCache[address] = struct{}{}
 		// Non-existent / deleted accounts are set to nil
 		addressChanges[address] = nil
 	}
@@ -214,7 +215,10 @@ func (cache *BlockStateCache) Account(addr common.Address) (*types.StateAccount,
 		accCopy := acc.Copy()
 		return accCopy, nil
 	}
-
+	// Check if the account is deleted
+	if _, ok := cache.cache.deletedAccountsCache[addr]; ok {
+		return nil, nil
+	}
 	// Cache miss
 	if cache.prevCache == nil {
 		reader, err := cache.GetDbStateReader()
@@ -235,7 +239,10 @@ func (cache *BlockStateCache) Storage(addr common.Address, slot common.Hash) (co
 	if ok {
 		return storage, nil
 	}
-
+	// Check if the account is deleted
+	if _, ok := cache.cache.deletedAccountsCache[addr]; ok {
+		return common.Hash{}, nil
+	}
 	// Cache miss
 	if cache.prevCache == nil {
 		reader, err := cache.GetDbStateReader()
@@ -257,6 +264,10 @@ func (cache *BlockStateCache) Code(addr common.Address, codeHash common.Hash) ([
 	code, ok := cache.cache.codeCache[codeHash]
 	if ok {
 		return code, nil
+	}
+	// Check if the account is deleted
+	if _, ok := cache.cache.deletedAccountsCache[addr]; ok {
+		return nil, nil
 	}
 	// Cache miss
 	if cache.prevCache == nil {

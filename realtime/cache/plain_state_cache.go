@@ -6,22 +6,27 @@ import (
 )
 
 type plainStateCache struct {
-	accountCache map[common.Address]*types.StateAccount
-	storageCache map[string]common.Hash
-	codeCache    map[common.Hash][]byte
+	accountCache         map[common.Address]*types.StateAccount
+	deletedAccountsCache map[common.Address]struct{}
+	storageCache         map[string]common.Hash
+	codeCache            map[common.Hash][]byte
 }
 
 func newPlainStateCache(size int) *plainStateCache {
 	return &plainStateCache{
-		accountCache: make(map[common.Address]*types.StateAccount, size),
-		storageCache: make(map[string]common.Hash, size),
-		codeCache:    make(map[common.Hash][]byte, size),
+		accountCache:         make(map[common.Address]*types.StateAccount, size),
+		deletedAccountsCache: make(map[common.Address]struct{}, size),
+		storageCache:         make(map[string]common.Hash, size),
+		codeCache:            make(map[common.Hash][]byte, size),
 	}
 }
 
 func (cache *plainStateCache) Clear() {
 	for k := range cache.accountCache {
 		delete(cache.accountCache, k)
+	}
+	for k := range cache.deletedAccountsCache {
+		delete(cache.deletedAccountsCache, k)
 	}
 	for k := range cache.storageCache {
 		delete(cache.storageCache, k)
@@ -36,6 +41,12 @@ func (cache *plainStateCache) Flatten(incoming *plainStateCache) {
 	for address, account := range incoming.accountCache {
 		delete(cache.accountCache, address)
 		cache.accountCache[address] = account
+		// Delete updated accounts from deleted accounts cache
+		delete(cache.deletedAccountsCache, address)
+	}
+
+	for address := range incoming.deletedAccountsCache {
+		cache.deletedAccountsCache[address] = struct{}{}
 	}
 
 	// Apply code changes

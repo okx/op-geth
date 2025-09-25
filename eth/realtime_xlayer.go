@@ -58,20 +58,21 @@ func (eth *Ethereum) InitRealtime() {
 			}
 		} else {
 			// Rpc execution mode
-			eth.realtimeCache = realtimeCache.NewRealtimeCache(context.Background(), eth.blockchain, eth.config.XLayer.Realtime.CacheDumpPath, eth.config.XLayer.Realtime.CacheHeightThreshold)
 			eth.finishChan = make(chan realtimeTypes.FinishedEntry)
 			eth.blockchain.SetRealtimeFinishChan(eth.finishChan)
 			if eth.config.XLayer.Realtime.EnableSubscribe {
 				eth.realtimeSub = realtimeSub.NewRealtimeSubscription()
 				eth.realtimeSub.Start(context.Background())
 			}
+			eth.realtimeCache = realtimeCache.NewRealtimeCache(context.Background(), eth.blockchain, eth.realtimeSub, eth.config.XLayer.Realtime.CacheDumpPath, eth.config.XLayer.Realtime.CacheHeightThreshold)
+
 		}
 	}
 }
 
 func (eth *Ethereum) StartRealtime() {
 	if eth.RealtimeEnabled() {
-		go realtime.ListenRealtimeConsumer(context.Background(), &eth.config.XLayer.Realtime, eth.realtimeCache, eth.finishChan, eth.realtimeSub, eth.config.XLayer.Realtime.RealtimeRpc)
+		go realtime.ListenRealtimeConsumer(context.Background(), &eth.config.XLayer.Realtime, eth.realtimeCache, eth.finishChan, eth.config.XLayer.Realtime.RealtimeRpc)
 		go realtime.ListenRealtimeProducer(context.Background(), eth.kafkaProducer, eth.kafkaBlockInfoChan, eth.kafkaTxInfoChan, eth.config.XLayer.Realtime.RealtimeRpc)
 	}
 }

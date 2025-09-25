@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
@@ -132,6 +133,9 @@ func (cache *StateCache) DebugDumpToFile(cacheDumpPath string) error {
 
 	accountData := make(map[string]string)
 	for addr, acc := range flatten.accountCache {
+		if _, ok := flatten.deletedAccountsCache[addr]; ok {
+			continue
+		}
 		value := types.SlimAccountRLP(*acc)
 		accountData[hex.EncodeToString(addr[:])] = hex.EncodeToString(value)
 	}
@@ -168,6 +172,16 @@ func (cache *StateCache) DebugCompare(statedb vm.StateDB) ([]string, error) {
 
 	mismatches := []string{}
 	for addr, accCache := range flatten.accountCache {
+		if _, ok := flatten.deletedAccountsCache[addr]; ok {
+			accDbBalance := statedb.GetBalance(addr)
+			if accDbBalance.Cmp(common.U2560) != 0 {
+				mismatch := fmt.Sprintf("delete account %s mismatch, cache deleted but account found in database", addr.String())
+				mismatches = append(mismatches, mismatch)
+			}
+			continue
+		}
+
+		// Not deleted account, check for state consistency
 		accDbNonce := statedb.GetNonce(addr)
 		if accCache.Nonce != accDbNonce {
 			mismatch := fmt.Sprintf("nonce mismatch, account %s, cache nonce: %d, db nonce: %d", addr.String(), accCache.Nonce, accDbNonce)

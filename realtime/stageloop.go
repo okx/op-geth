@@ -11,7 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/realtime/cache"
 	"github.com/ethereum/go-ethereum/realtime/kafka"
 	kafkaTypes "github.com/ethereum/go-ethereum/realtime/kafka/types"
-	realtimeSub "github.com/ethereum/go-ethereum/realtime/subscription"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
@@ -79,7 +78,6 @@ func ListenRealtimeConsumer(
 	cfg *RealtimeConfig,
 	realtimeCache *cache.RealtimeCache,
 	finishChan chan realtimeTypes.FinishedEntry,
-	subService *realtimeSub.RealtimeSubscription,
 	isRpc bool) {
 	if !isRpc {
 		log.Info("[Realtime] RealtimeConsumer is disabled on non realtime-rpc, skipping")
@@ -145,10 +143,6 @@ func ListenRealtimeConsumer(
 			if blockMsg.IsConfirmedBlock() {
 				// Confirmed block msg
 				messageCache.ConfirmedBlockMsgCache.Add(&blockMsg)
-				if subService != nil {
-					// Publish block to subscriptions
-					subService.BroadcastNewMsg(&blockMsg, nil)
-				}
 				log.Debug(fmt.Sprintf("[Realtime] Received confirmed block message. blockNum: %d", blockMsg.Header.Number))
 			} else {
 				// New pending block msg
@@ -166,10 +160,6 @@ func ListenRealtimeConsumer(
 				continue
 			}
 			messageCache.TxMsgCache.Add(&txMsg)
-			if subService != nil {
-				// Publish tx to subscriptions
-				subService.BroadcastNewMsg(nil, &txMsg)
-			}
 			log.Debug(fmt.Sprintf("[Realtime] Received transaction message. blockNum: %d, txHash: %x", txMsg.BlockNumber, txMsg.Hash))
 		case errorTriggerMsg := <-errorMsgsChan:
 			resetFlag.Store(true)
