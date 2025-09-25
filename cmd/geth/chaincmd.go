@@ -788,7 +788,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	stack, _ := makeConfigNode(ctx)
 	defer stack.Close()
 
-	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", 512, 1024, ctx.String(utils.AncientFlag.Name), "", true)
+	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", 512*4, 1024, ctx.String(utils.AncientFlag.Name), "", true)
 	if err != nil {
 		utils.Fatalf("Failed to open database: %v", err)
 	}
