@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"runtime/pprof"
 	"slices"
 	"strconv"
 	"sync"
@@ -968,21 +967,6 @@ func migrateGenesis(ctx *cli.Context) error {
 		utils.Fatalf("Failed to write chain config: %v", compatErr)
 	}
 	log.Info("Successfully wrote genesis state with migration", "database", "chaindata", "hash", hash, "elapsed", time.Since(start))
-
-	f, err := os.Create("cpu.prof")
-	if err != nil {
-		log.Error("could not create CPU profile: ", err)
-	}
-	// Start CPU profiling
-	if err := pprof.StartCPUProfile(f); err != nil {
-		log.Error("could not start CPU profile: ", err)
-	}
-
-	// Make sure profiling stops and file is closed when the program ends
-	defer func() {
-		pprof.StopCPUProfile()
-		f.Close()
-	}()
 
 	// Check if verification is requested
 	if !ctx.Bool("no-verify") {
