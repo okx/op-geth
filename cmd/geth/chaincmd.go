@@ -787,7 +787,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	stack, _ := makeConfigNode(ctx)
 	defer stack.Close()
 
-	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", 512, 1024, ctx.String(utils.AncientFlag.Name), "", true)
+	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", 2048, 1024, ctx.String(utils.AncientFlag.Name), "", true)
 	if err != nil {
 		utils.Fatalf("Failed to open database: %v", err)
 	}
@@ -810,10 +810,8 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, genesis.IsVerkle())
 	defer triedb.Close()
 
-	// Create state database (shared across workers)
 	stateDB := state.NewDatabase(triedb, nil)
 
-	// Prepare accounts for verification
 	accountsToVerify := make([]common.Address, 0)
 
 	for addr, _ := range genesis.Alloc {
@@ -856,12 +854,12 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 			defer wg.Done()
 
 			log.Info("Worker started", "worker", workerID, "accounts", len(accounts))
-
+			start := time.Now()
 			for _, addr := range accounts {
 				verifyAccount(addr, genesis.Alloc[addr], stateDB, genesisBlock.Root(), resultChan)
 			}
 
-			log.Info("Worker completed", "worker", workerID, "accounts_processed", len(accounts))
+			log.Info("Worker verifyAccount completed", "worker", workerID, "accounts_processed", len(accounts), "elapsed", common.PrettyDuration(time.Since(start)))
 		}(i, accountsToVerify[startIdx:endIdx])
 	}
 
@@ -915,6 +913,7 @@ func migrateGenesis(ctx *cli.Context) error {
 	if ctx.Args().Len() != 1 {
 		utils.Fatalf("need genesis.json file as the only argument")
 	}
+	start := time.Now()
 	genesisPath := ctx.Args().First()
 	if len(genesisPath) == 0 {
 		utils.Fatalf("invalid path to genesis file")
@@ -926,7 +925,6 @@ func migrateGenesis(ctx *cli.Context) error {
 	}
 	defer file.Close()
 
-	start := time.Now()
 	genesis := new(core.Genesis)
 	if err := json.NewDecoder(file).Decode(genesis); err != nil {
 		utils.Fatalf("invalid genesis file: %v", err)
@@ -971,7 +969,7 @@ func migrateGenesis(ctx *cli.Context) error {
 
 	// Check if verification is requested
 	if !ctx.Bool("no-verify") {
-		log.Info("Starting genesis verification after migration")
+		log.Info("Starting genesis verification after migration", "total account:", len(genesis.Alloc))
 
 		if err := triedb.Close(); err != nil {
 			log.Warn("Failed to close trie database", "error", err)
@@ -990,5 +988,6 @@ func migrateGenesis(ctx *cli.Context) error {
 		log.Info("Genesis verification completed successfully", "elapsed", common.PrettyDuration(time.Since(verifyStart)))
 	}
 
+	log.Info("migration complete", "elapsed", common.PrettyDuration(time.Since(start)))
 	return nil
 }
