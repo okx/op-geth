@@ -28,6 +28,3 @@ go test ./core -cover -run TestMigration -coverprofile=coverage.out
 go tool cover -html=coverage.out -o coverage.html
 open coverage.html
 ```
-
-nohup ./build/bin/geth --datadir=${OP_DATA_DIR} --gcmode=archive migrate --state.scheme=hash --ignore-smt-verify --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=${ERIGON_CHAINDATA_DIR} --smt-db-path=${ERIGON_SMTDATA_DIR} --output=final_genesis.json ${OP_GENESIS_PATH} > migrate.log 2>&1 &
-
