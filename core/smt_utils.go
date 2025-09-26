@@ -1,3 +1,5 @@
+//go:build migrate_xlayer
+
 // Copyright 2024 The go-ethereum Authors
 // This file is part of go-ethereum.
 //

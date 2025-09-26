@@ -1,3 +1,5 @@
+//go:build migrate_xlayer
+
 package core
 
 import (
