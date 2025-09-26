@@ -150,7 +150,7 @@ func deployERC20Contract(
 	require.NoError(t, err)
 
 	// Set up transaction options
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(195))
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(int64(DefaultL2ChainID)))
 	require.NoError(t, err)
 
 	auth.Nonce = big.NewInt(int64(nonce))
