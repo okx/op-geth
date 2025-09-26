@@ -5,10 +5,8 @@ package e2e
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"fmt"
 	"math/big"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -29,8 +27,6 @@ import (
 	"github.com/ethereum/go-ethereum/test/operations"
 	"github.com/holiman/uint256"
 
-	"gopkg.in/yaml.v2"
-
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,7 +46,7 @@ const (
 func TestClaimTx(t *testing.T) {
 	ctx := context.Background()
 	client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
-	transToken(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2AdminAddress)
+	operations.TransToken(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2AdminAddress)
 
 	from := common.HexToAddress(operations.DefaultL2AdminAddress)
 	to := common.HexToAddress(operations.DefaultL2AdminAddress)
@@ -114,162 +110,6 @@ func TestEthTransfer(t *testing.T) {
 	txs = append(txs, signedTx)
 	_, err = operations.ApplyL2Txs(ctx, txs, auth, client, operations.VerifiedConfirmationLevel)
 	require.NoError(t, err)
-}
-
-func transToken(t *testing.T, ctx context.Context, client *ethclient.Client, amount *uint256.Int, toAddress string) string {
-	return transTokenWithFrom(t, ctx, client, operations.DefaultL2AdminPrivateKey, amount, toAddress)
-}
-
-func getNonce(client *ethclient.Client, ctx context.Context, fromPrivateKey string) uint64 {
-	chainID, err := client.ChainID(ctx)
-	if err != nil {
-		log.Info("Get nonce err for get chainID failed: %v", err)
-	}
-	auth, err := operations.GetAuth(fromPrivateKey, chainID.Uint64())
-	if err != nil {
-		log.Info("Get nonce err for get auth failed: %v", err)
-	}
-	nonce, err := client.PendingNonceAt(ctx, auth.From)
-	if err != nil {
-		log.Info("Get nonce err for PendingNonceAt failed: %v", err)
-	}
-	return nonce
-}
-
-func transTokenWithFrom(t *testing.T, ctx context.Context, client *ethclient.Client, fromPrivateKey string, amount *uint256.Int, toAddress string) string {
-	return transTokenWithFromImpl(t, ctx, client, fromPrivateKey, amount, toAddress, getNonce(client, ctx, fromPrivateKey))
-}
-
-func generateSignedTokenTransferTx(t *testing.T, ctx context.Context, client *ethclient.Client, fromPrivateKey string, amount *uint256.Int, toAddress string, nonce uint64) *types.Transaction {
-	chainID, err := client.ChainID(ctx)
-	require.NoError(t, err)
-	auth, err := operations.GetAuth(fromPrivateKey, chainID.Uint64())
-	gasPrice, err := client.SuggestGasPrice(ctx)
-	require.NoError(t, err)
-
-	to := common.HexToAddress(toAddress)
-	gas, err := client.EstimateGas(ctx, ethereum.CallMsg{
-		From:  auth.From,
-		To:    &to,
-		Value: amount.ToBig(),
-	})
-	require.NoError(t, err)
-
-	tx := types.NewTransaction(nonce, to, amount.ToBig(), gas, gasPrice, nil)
-
-	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(fromPrivateKey, "0x"))
-	require.NoError(t, err)
-
-	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
-	signedTx, err := types.SignTx(tx, signer, privateKey)
-	require.NoError(t, err)
-	log.Info("gas: %d, gasPrice: %d, nonce: %d, hash: %v", gas, gasPrice, nonce, signedTx.Hash().Hex())
-	return signedTx
-}
-
-func transTokenWithFromImpl(t *testing.T, ctx context.Context, client *ethclient.Client, fromPrivateKey string, amount *uint256.Int, toAddress string, nonce uint64) string {
-	signedTx := generateSignedTokenTransferTx(t, ctx, client, fromPrivateKey, amount, toAddress, nonce)
-	err := client.SendTransaction(ctx, signedTx)
-	require.NoError(t, err)
-
-	err = operations.WaitTxToBeMined(ctx, client, signedTx, operations.DefaultTimeoutTxToBeMined)
-	require.NoError(t, err)
-
-	return signedTx.Hash().String()
-}
-
-// transTokenFail creates a token transfer transaction that will fail during execution
-func transTokenFail(t *testing.T, ctx context.Context, client *ethclient.Client, fromPrivateKey string, amount *uint256.Int, toAddress string) common.Hash {
-	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(fromPrivateKey, "0x"))
-	require.NoError(t, err)
-	fromAddr := crypto.PubkeyToAddress(privateKey.PublicKey)
-
-	nonce, err := client.PendingNonceAt(ctx, fromAddr)
-	require.NoError(t, err)
-
-	gasPrice, err := client.SuggestGasPrice(ctx)
-	require.NoError(t, err)
-
-	to := common.HexToAddress(toAddress)
-	gasLimit := uint64(50000)
-	tx := types.NewTransaction(nonce, to, amount.ToBig(), gasLimit, gasPrice, nil)
-
-	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
-	signedTx, err := types.SignTx(tx, signer, privateKey)
-	require.NoError(t, err)
-
-	err = client.SendTransaction(ctx, signedTx)
-	require.NoError(t, err, "Transaction should be sent successfully")
-
-	txHash := signedTx.Hash()
-	err = operations.WaitTxToBeMined(ctx, client, signedTx, operations.DefaultTimeoutTxToBeMined)
-	require.Error(t, err, "Transaction should fail during execution")
-
-	// Verify transaction failed
-	receipt, err := client.TransactionReceipt(ctx, txHash)
-	require.NoError(t, err, "Should be able to get receipt for failed transaction")
-	require.Equal(t, uint64(0), receipt.Status, "Transaction should have failed (status=0)")
-
-	return txHash
-}
-
-// makeContractCall is a utility function to make contract calls and return transaction hash
-func makeContractCall(t *testing.T, ctx context.Context, client *ethclient.Client, privateKey *ecdsa.PrivateKey, contractAddr common.Address, calldata []byte, gasLimit uint64, value *big.Int) (common.Hash, error) {
-	from := crypto.PubkeyToAddress(privateKey.PublicKey)
-
-	nonce, err := client.PendingNonceAt(ctx, from)
-	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to get nonce: %w", err)
-	}
-
-	gasPrice, err := client.SuggestGasPrice(ctx)
-	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to get gas price: %w", err)
-	}
-
-	if value == nil {
-		value = big.NewInt(0)
-	}
-
-	tx := types.NewTransaction(nonce, contractAddr, value, gasLimit, gasPrice, calldata)
-
-	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
-	signedTx, err := types.SignTx(tx, signer, privateKey)
-	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to sign transaction: %w", err)
-	}
-
-	err = client.SendTransaction(ctx, signedTx)
-	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to send transaction: %w", err)
-	}
-
-	err = operations.WaitTxToBeMined(ctx, client, signedTx, operations.DefaultTimeoutTxToBeMined)
-	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to wait for transaction to be mined: %w", err)
-	}
-
-	return signedTx.Hash(), nil
-}
-
-type Config struct {
-	HTTPMethodRateLimit string `yaml:"http.methodratelimit"`
-	HTTPAPIKeys         string `yaml:"http.apikeys"`
-}
-
-func LoadConfig(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	var config Config
-	err = yaml.Unmarshal(data, &config)
-	if err != nil {
-		return nil, err
-	}
-
-	return &config, nil
 }
 
 func TestDebugTraceRPC(t *testing.T) {
@@ -370,67 +210,13 @@ func TestDebugTraceRPC(t *testing.T) {
 	})
 }
 
-// setupTestEnvironment creates a test environment with necessary data for tests
-func setupTestEnvironment(t *testing.T) (common.Hash, uint64) {
-	// Wait for at least one block to be available
-	var blockNumber uint64
-	var err error
-	for i := 0; i < 30; i++ {
-		blockNumber, err = operations.GetBlockNumber()
-		require.NoError(t, err)
-		log.Info("Block number: %d, attempt: %v", blockNumber, i)
-		if blockNumber > 0 {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	require.Greater(t, blockNumber, uint64(0), "Block number should be greater than 0")
-
-	// Get a block hash to use for tests
-	blockNum, err := operations.GetBlockNumber()
-	require.NoError(t, err)
-
-	// Try using the refactored RPC method instead of the broken GetBlockByNumber
-	blockNumberHex := fmt.Sprintf("0x%x", blockNum)
-	blockData, err := operations.EthGetBlockByNumber(blockNumberHex, true)
-	require.NoError(t, err)
-	require.NotNil(t, blockData, "Block data should not be nil")
-
-	fmt.Printf("Block data type: %T\n", blockData)
-
-	blockHash := common.Hash{}
-
-	// Extract block hash from the returned data
-	if blockMap, ok := blockData.(map[string]interface{}); ok {
-		if hashStr, exists := blockMap["hash"].(string); exists && hashStr != "" {
-			blockHash = common.HexToHash(hashStr)
-			fmt.Printf("Extracted block hash: %s\n", blockHash.Hex())
-		} else {
-			fmt.Printf("No hash field found in block data\n")
-		}
-	} else {
-		fmt.Printf("Block data is not a map\n")
-	}
-
-	// If we still don't have a valid hash, create a synthetic one for testing
-	if blockHash == (common.Hash{}) {
-		t.Logf("WARNING: Could not extract valid block hash, creating synthetic hash")
-		blockHash = common.BigToHash(big.NewInt(int64(blockNumber)))
-		t.Logf("Using synthetic hash: %s", blockHash.Hex())
-	}
-
-	require.NotEqual(t, common.Hash{}, blockHash, "Block hash should not be empty")
-
-	return blockHash, blockNumber
-}
-
 // TestEthereumBasicRPC tests basic Ethereum RPC methods
 func TestEthereumBasicRPC(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 
-	_, _ = setupTestEnvironment(t)
+	_, _ = operations.SetupTestEnvironment(t)
 
 	// Default test address for tests that require an address
 	testAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
@@ -501,7 +287,7 @@ func TestEthereumBlockRPC(t *testing.T) {
 		t.Skip()
 	}
 
-	blockHash, blockNumber := setupTestEnvironment(t)
+	blockHash, blockNumber := operations.SetupTestEnvironment(t)
 
 	// Test eth_getBlockByHash
 	t.Run("EthGetBlockByHash", func(t *testing.T) {
@@ -584,7 +370,7 @@ func TestEthereumLogsRPC(t *testing.T) {
 		t.Skip()
 	}
 
-	_, blockNumber := setupTestEnvironment(t)
+	_, blockNumber := operations.SetupTestEnvironment(t)
 
 	// Test eth_getLogs
 	t.Run("EthGetLogs", func(t *testing.T) {
@@ -605,7 +391,7 @@ func TestTxPoolRPC(t *testing.T) {
 		t.Skip()
 	}
 
-	_, _ = setupTestEnvironment(t)
+	_, _ = operations.SetupTestEnvironment(t)
 
 	// Test txpool_content - This might return a large object, so only log type
 	t.Run("TxPoolContent", func(t *testing.T) {
@@ -643,7 +429,7 @@ func TestInnerTx(t *testing.T) {
 	// triggerCall() function selector: 0xf18c388a
 	triggerCallData := common.Hex2Bytes("f18c388a")
 
-	signedContractATxHash, err := makeContractCall(t, ctx, client, preexecPrivateKey, operations.ContractAAddr, triggerCallData, 200000, nil)
+	signedContractATxHash, err := operations.MakeContractCall(t, ctx, client, preexecPrivateKey, operations.ContractAAddr, triggerCallData, 200000, nil)
 	require.NoError(t, err)
 
 	contractAReceipt, err := client.TransactionReceipt(ctx, signedContractATxHash)
@@ -651,13 +437,13 @@ func TestInnerTx(t *testing.T) {
 
 	// Call ContractC's setValue function
 	contractCSetValueData := common.Hex2Bytes("552410770000000000000000000000000000000000000000000000000000000000000123")
-	signedContractCSetValueTxHash, err := makeContractCall(t, ctx, client, preexecPrivateKey, operations.ContractCAddr, contractCSetValueData, 200000, nil)
+	signedContractCSetValueTxHash, err := operations.MakeContractCall(t, ctx, client, preexecPrivateKey, operations.ContractCAddr, contractCSetValueData, 200000, nil)
 	require.NoError(t, err)
 	fmt.Printf("signedContractCSetValueTxHash: %s\n", signedContractCSetValueTxHash.Hex())
 
 	// Call ContractC's getValue function
 	contractCGetValueData := common.Hex2Bytes("20965255")
-	signedContractCGetValueTxHash, err := makeContractCall(t, ctx, client, preexecPrivateKey, operations.ContractCAddr, contractCGetValueData, 200000, nil)
+	signedContractCGetValueTxHash, err := operations.MakeContractCall(t, ctx, client, preexecPrivateKey, operations.ContractCAddr, contractCGetValueData, 200000, nil)
 	require.NoError(t, err)
 	contractCGetValueReceipt, err := client.TransactionReceipt(ctx, signedContractCGetValueTxHash)
 	require.NoError(t, err)
@@ -877,7 +663,7 @@ func TestInnerTx(t *testing.T) {
 		amount := uint256.NewInt(params.GWei)
 		toAddress := operations.ContractAAddr.String()
 
-		txHash := transTokenFail(t, ctx, client, operations.TmpSenderPrivateKey, amount, toAddress)
+		txHash := operations.TransTokenFail(t, ctx, client, operations.TmpSenderPrivateKey, amount, toAddress)
 
 		innerTxs, err := operations.EthGetInternalTransactions(txHash)
 		require.NoError(t, err, "Should be able to get inner transactions")
