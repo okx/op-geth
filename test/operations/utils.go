@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"math/big"
 	"strings"
 	"testing"
@@ -25,6 +27,42 @@ import (
 const (
 	TmpSenderPrivateKey = "363ea277eec54278af051fb574931aec751258450a286edce9e1f64401f3b9c8"
 )
+
+// ValidationError represents the error structure in PreResult
+type ValidationError struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+}
+
+// ValidationInnerTx represents an inner transaction for test validation
+type ValidationInnerTx struct {
+	Dept          *big.Int `json:"dept"`
+	InternalIndex *big.Int `json:"internal_index"`
+	CallType      string   `json:"call_type"`
+	Name          string   `json:"name"`
+	TraceAddress  string   `json:"trace_address"`
+	CodeAddress   string   `json:"code_address"`
+	From          string   `json:"from"`
+	To            string   `json:"to"`
+	Input         string   `json:"input"`
+	Output        string   `json:"output"`
+	IsError       bool     `json:"is_error"`
+	GasUsed       uint64   `json:"gas_used"`
+	Value         string   `json:"value"`
+	ValueWei      string   `json:"value_wei"`
+	Error         string   `json:"error"`
+	ReturnGas     uint64   `json:"return_gas"`
+}
+
+// ValidationResult represents a typed structure matching PreResult for test validation
+type ValidationResult struct {
+	InnerTxs    []ValidationInnerTx    `json:"innerTxs"`
+	Logs        []types.Log            `json:"logs"`
+	StateDiff   map[string]interface{} `json:"stateDiff"`
+	Error       ValidationError        `json:"error"`
+	GasUsed     uint64                 `json:"gasUsed"`
+	BlockNumber *big.Int               `json:"blockNumber"`
+}
 
 // Global variables to store deployed contract addresses
 var (
@@ -174,6 +212,9 @@ func EnsureContractsDeployed(t *testing.T) {
 	FactoryAddr = DeployContract(t, ctx, client, privateKey, "ContractFactory", constants.ContractFactoryABIJson, constants.ContractFactoryBytecodeStr)
 	ContractCAddr = DeployContract(t, ctx, client, privateKey, "ContractC", constants.ContractCABIJson, constants.ContractCBytecodeStr)
 	ContractsDeployed = true
+	fmt.Println("ContractAAddr:", ContractAAddr.Hex())
+	fmt.Println("ContractBAddr:", ContractBAddr.Hex())
+
 }
 
 // EncodeTransferCall encodes an ERC20 transfer function call
@@ -207,4 +248,134 @@ func EncodeComplexCall(target common.Address) []byte {
 	copy(data[4+12:36], target.Bytes()) // Address goes in the last 20 bytes
 
 	return data
+}
+
+// validateInnerTransactionMatch validates that two inner transactions match each other
+func ValidateInnerTransactionMatch(t *testing.T, innerTx1, innerTx2 *types.InnerTx, contextMsg string) {
+	require.Equal(t, innerTx1.From, innerTx2.From, "%s: From addresses should match", contextMsg)
+	require.Equal(t, innerTx1.To, innerTx2.To, "%s: To addresses should match", contextMsg)
+	require.Equal(t, innerTx1.Input, innerTx2.Input, "%s: Input data should match", contextMsg)
+	require.Equal(t, innerTx1.Output, innerTx2.Output, "%s: Output data should match", contextMsg)
+	require.Equal(t, innerTx1.IsError, innerTx2.IsError, "%s: Error status should match", contextMsg)
+	require.Equal(t, innerTx1.CallType, innerTx2.CallType, "%s: Call types should match", contextMsg)
+	require.Equal(t, innerTx1.ValueWei, innerTx2.ValueWei, "%s: ValueWei should match", contextMsg)
+	require.Equal(t, innerTx1.CallValueWei, innerTx2.CallValueWei, "%s: CallValueWei should match", contextMsg)
+	require.Equal(t, innerTx1.Error, innerTx2.Error, "%s: Error messages should match", contextMsg)
+	require.Equal(t, innerTx1.Dept, innerTx2.Dept, "%s: Dept should match", contextMsg)
+	require.Equal(t, innerTx1.InternalIndex, innerTx2.InternalIndex, "%s: InternalIndex should match", contextMsg)
+	require.Equal(t, innerTx1.Name, innerTx2.Name, "%s: Name should match", contextMsg)
+	require.Equal(t, innerTx1.TraceAddress, innerTx2.TraceAddress, "%s: TraceAddress should match", contextMsg)
+	require.Equal(t, innerTx1.CodeAddress, innerTx2.CodeAddress, "%s: CodeAddress should match", contextMsg)
+	require.Equal(t, innerTx1.Value, innerTx2.Value, "%s: Value should match", contextMsg)
+}
+
+// CreateBasicTransaction creates a standard transaction with common fields
+func CreateBasicTransaction(from, to, value, gas, gasPrice, nonce, data string) map[string]interface{} {
+	tx := map[string]interface{}{
+		"from":     from,
+		"to":       to,
+		"value":    value,
+		"gas":      gas,
+		"gasPrice": gasPrice,
+		"nonce":    nonce,
+	}
+	if data != "" {
+		tx["data"] = data
+	}
+	return tx
+}
+
+// CreateDefaultStateOverrides creates common state overrides for pre-exec tests
+func CreateDefaultStateOverrides() map[string]interface{} {
+	return map[string]interface{}{
+		"0x0165878a594ca255338adfa4d48449f69242eb8f": map[string]interface{}{
+			"balance": "0x56bc75e2d630eb20000", // Large balance
+			"nonce":   "0x0",
+		},
+	}
+}
+
+// CreateAuthorizationList creates a standard authorization list for EIP-7702 tests
+func CreateAuthorizationList(addresses []string) []map[string]interface{} {
+	var authList []map[string]interface{}
+	for i, addr := range addresses {
+		auth := map[string]interface{}{
+			"chainId": "0x1",
+			"address": addr,
+			"nonce":   fmt.Sprintf("0x%x", i),
+			"yParity": "0x1",
+			"r":       "0x1234567890123456789012345678901234567890123456789012345678901234",
+			"s":       "0x1234567890123456789012345678901234567890123456789012345678901234",
+		}
+		authList = append(authList, auth)
+	}
+	return authList
+}
+
+// ValidateResult validates a single transaction result and returns a typed ValidationResult
+func ValidateResult(t *testing.T, result interface{}, testName string) ValidationResult {
+	resultMap := result.(map[string]interface{})
+
+	jsonBytes, err := json.Marshal(resultMap)
+	require.NoError(t, err, "Failed to marshal result to JSON for %s", testName)
+
+	var validationResult ValidationResult
+	err = json.Unmarshal(jsonBytes, &validationResult)
+	require.NoError(t, err, "Failed to unmarshal result to ValidationResult for %s", testName)
+
+	t.Logf("Gas used for %s: %d", testName, validationResult.GasUsed)
+
+	ValidateStateDiff(t, validationResult, testName)
+
+	return validationResult
+}
+
+func ValidateStateDiff(t *testing.T, result ValidationResult, testName string) {
+	for addrStr, addrData := range result.StateDiff {
+		addrDataMap := addrData.(map[string]interface{})
+
+		balanceData, exists := addrDataMap["balance"]
+		require.True(t, exists, "Balance field should exist for address %s in %s", addrStr, testName)
+
+		balanceMap, ok := balanceData.(map[string]interface{})
+		require.True(t, ok, "Balance data should be a map for address %s in %s", addrStr, testName)
+
+		before, beforeExists := balanceMap["before"]
+		after, afterExists := balanceMap["after"]
+		require.True(t, beforeExists, "Before balance should exist for address %s in %s", addrStr, testName)
+		require.True(t, afterExists, "After balance should exist for address %s in %s", addrStr, testName)
+
+		beforeStr, ok1 := before.(string)
+		afterStr, ok2 := after.(string)
+		require.True(t, ok1, "Before balance should be a string for address %s in %s", addrStr, testName)
+		require.True(t, ok2, "After balance should be a string for address %s in %s", addrStr, testName)
+
+		if beforeStr != "0" && afterStr != "0" {
+			require.NotEqual(t, beforeStr, afterStr, "Before and after balances should be different for address %s in %s", addrStr, testName)
+		}
+	}
+}
+
+// CheckSuccessfulResult validates that a result represents a successful transaction and checks from address in stateDiff
+func CheckSuccessfulResult(t *testing.T, result ValidationResult, fromAddress string, testName string) {
+	require.Equal(t, 0, result.Error.Code, "%s should succeed", testName)
+	require.Empty(t, result.Error.Msg, "%s should not have error message", testName)
+
+	// Check if the from address exists in stateDiff
+	if result.StateDiff != nil {
+		fromAddr := common.HexToAddress(fromAddress)
+		found := false
+		for addrStr := range result.StateDiff {
+			if common.HexToAddress(addrStr) == fromAddr {
+				found = true
+				break
+			}
+		}
+		require.True(t, found, "From address %s should exist in stateDiff for %s", fromAddress, testName)
+	}
+}
+
+// CheckErrorResult validates that a result contains a specific error (typed version)
+func CheckErrorResult(t *testing.T, result ValidationResult, expectedError string, testName string) {
+	require.Contains(t, result.Error.Msg, expectedError, "Error should mention %s for %s", expectedError, testName)
 }

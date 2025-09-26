@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 // DebugTraceBlockByHash traces all transactions in the block given by block hash
@@ -475,7 +476,7 @@ func EthGetInternalTransactions(txHash common.Hash) ([]*types.InnerTx, error) {
 }
 
 // EthGetBlockInternalTransactions returns the internal transactions for a given block number
-func EthGetBlockInternalTransactions(blockNumber string) (map[common.Hash][]*types.InnerTx, error) {
+func EthGetBlockInternalTransactions(blockNumber rpc.BlockNumber) (map[common.Hash][]*types.InnerTx, error) {
 
 	var result map[common.Hash][]*types.InnerTx
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
