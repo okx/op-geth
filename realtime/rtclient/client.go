@@ -233,7 +233,11 @@ func (rc *RealtimeClient) RealtimeGetTokenBalance(
 	}
 
 	// Make the realtime eth_call
-	result, err := rc.RealtimeCall(ctx, fromAddress, erc20Addr, "0x100000", "0x1", "0x0", fmt.Sprintf("0x%x", data))
+	gasprice, err := rc.SuggestGasPrice(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get gas price: %v", err)
+	}
+	result, err := rc.RealtimeCall(ctx, fromAddress, erc20Addr, "0x100000", fmt.Sprintf("0x%x", gasprice), "0x0", fmt.Sprintf("0x%x", data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call contract: %v", err)
 	}
