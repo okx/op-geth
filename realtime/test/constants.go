@@ -5,7 +5,7 @@ import "time"
 const (
 	DefaultL2NetworkRealtimeURL          = "http://localhost:8128"
 	DefaultL2NetworkNoRealtimeURL        = "http://localhost:8124"
-	DefaultL2NetworkWSURL                = "ws://localhost:8548"
+	DefaultL2NetworkWSURL                = "ws://localhost:7546"
 	DefaultL2ChainID              uint64 = 196
 
 	DefaultL2AdminAddress    = "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"
