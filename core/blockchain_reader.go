@@ -424,12 +424,7 @@ func (bc *BlockChain) TxIndexProgress() (TxIndexProgress, error) {
 func (bc *BlockChain) HistoryPruningCutoff() (uint64, common.Hash) {
 	pt := bc.historyPrunePoint.Load()
 	if pt == nil {
-		// get genesis block number
-		genesisHash := rawdb.ReadCanonicalHash(bc.db, 0)
-		genesisHeader := rawdb.ReadHeader(bc.db, genesisHash, 0)
-		genesisBlockNumber := genesisHeader.Number.Uint64()
-
-		return genesisBlockNumber, genesisHash
+		return 0, bc.genesisBlock.Hash()
 	}
 	return pt.BlockNumber, pt.BlockHash
 }

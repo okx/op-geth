@@ -620,6 +620,20 @@ func (bc *BlockChain) loadLastState() error {
 func (bc *BlockChain) initializeHistoryPruning(latest uint64) error {
 	freezerTail, _ := bc.db.Tail()
 
+	// For xlayer
+	// update the prune point to the LegacyXLayerBlock
+	if bc.chainConfig.LegacyXLayerBlock != nil {
+		log.Info("LegacyXLayerBlock detected, use the block as prune point", "legacyBlock", bc.chainConfig.LegacyXLayerBlock.Uint64())
+		legacyBlock := bc.chainConfig.LegacyXLayerBlock.Uint64()
+		legacyBlockHash := rawdb.ReadCanonicalHash(bc.db, legacyBlock)
+		legacyPrunePoint := &history.PrunePoint{
+			BlockNumber: legacyBlock,
+			BlockHash:   legacyBlockHash,
+		}
+		bc.historyPrunePoint.Store(legacyPrunePoint)
+		return nil
+	}
+
 	switch bc.cacheConfig.ChainHistoryMode {
 	case history.KeepAll:
 		if freezerTail == 0 {

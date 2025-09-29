@@ -170,6 +170,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if chainConfig.IsXLayer() {
+		if err := core.CommitXLayerFirstBlock(chainDb, chainConfig); err != nil {
+			return nil, err
+		}
+	}
+
 	engine, err := ethconfig.CreateConsensusEngine(chainConfig, chainDb)
 	if err != nil {
 		return nil, err
