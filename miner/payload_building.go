@@ -114,6 +114,9 @@ type Payload struct {
 
 	rpcCtx    context.Context // context to limit RPC-coupled payload checks
 	rpcCancel context.CancelFunc
+
+	// For X Layer, realtime
+	realtimeEnabled bool
 }
 
 // newPayload initializes the payload object.
@@ -170,6 +173,8 @@ func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration) {
 		payload.sidecars = r.sidecars
 		payload.requests = r.requests
 		payload.fullWitness = r.witness
+		// For X Layer, realtime
+		payload.realtimeEnabled = r.realtimeEnabled
 
 		feesInEther := new(big.Float).Quo(new(big.Float).SetInt(r.fees), big.NewFloat(params.Ether))
 		log.Info("Updated payload",
@@ -244,7 +249,7 @@ func (payload *Payload) resolve(onlyFull bool) *engine.ExecutionPayloadEnvelope 
 	if payload.full != nil {
 		envelope := engine.BlockToExecutableData(payload.full, payload.fullFees, payload.sidecars, payload.requests)
 		// For X Layer, realtime
-		envelope.ExecutionPayload.RealtimeEnabled = payload.full.RealtimeEnabled
+		envelope.ExecutionPayload.RealtimeEnabled = payload.realtimeEnabled
 		if payload.fullWitness != nil {
 			envelope.Witness = new(hexutil.Bytes)
 			*envelope.Witness, _ = rlp.EncodeToBytes(payload.fullWitness) // cannot fail

@@ -100,6 +100,8 @@ type newPayloadResult struct {
 	receipts []*types.Receipt       // Receipts collected during construction
 	requests [][]byte               // Consensus layer requests collected during block construction
 	witness  *stateless.Witness     // Witness is an optional stateless proof
+	// For X Layer, realtime
+	realtimeEnabled bool
 }
 
 // generateParams wraps various settings for generating sealing task.
