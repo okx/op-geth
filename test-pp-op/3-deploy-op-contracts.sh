@@ -6,6 +6,39 @@ source utils.sh
 
 cd $PWD_DIR
 
+
+deploy_transactor_contract() {
+  # Deploy Transactor contract first
+  echo "🔧 Deploying Transactor contract..."
+  TRANSACTOR_DEPLOY_OUTPUT=$(docker run \
+    --network "$DOCKER_NETWORK" \
+    -v "$(pwd)/$CONFIG_DIR:/deployments" \
+    -w /app \
+    "${OP_CONTRACTS_IMAGE_TAG}" \
+    bash -c "
+      set -e
+      cd /app/packages/contracts-bedrock
+      cast send --rpc-url $L1_RPC_URL_IN_DOCKER --private-key $DEPLOYER_PRIVATE_KEY --create \"\$(forge inspect src/periphery/Transactor.sol:Transactor bytecode)\$(cast abi-encode 'constructor(address)' $ADMIN_OWNER_ADDRESS | sed 's/0x//')\" --json
+    ")
+
+  # Extract contract address from deployment output
+  TRANSACTOR_ADDRESS=$(echo "$TRANSACTOR_DEPLOY_OUTPUT" | jq -r '.contractAddress // empty')
+  if [ -z "$TRANSACTOR_ADDRESS" ] || [ "$TRANSACTOR_ADDRESS" = "null" ]; then
+    echo "❌ Failed to extract Transactor contract address from deployment output"
+    echo "Deployment output: $TRANSACTOR_DEPLOY_OUTPUT"
+    exit 1
+  fi
+
+  echo "✅ Transactor contract deployed at: $TRANSACTOR_ADDRESS"
+
+  # Update .env file with Transactor address
+  sed_inplace "s/TRANSACTOR=.*/TRANSACTOR=$TRANSACTOR_ADDRESS/" .env
+  source .env
+  echo "✅ Updated TRANSACTOR address in .env: $TRANSACTOR_ADDRESS"
+
+
+}
+
 # bootstrapping superchain with op-deployer
 # output: after deploy, it will output `supperchain.json` under config-op
 # e.g. {
@@ -124,37 +157,6 @@ echo "genesis.json and rollup.json are generated in deployments folder"
 echo "🎉 OP Stack deployment preparation completed!"
 }
 
-deploy_transactor_contract() {
-  # Deploy Transactor contract first
-  echo "🔧 Deploying Transactor contract..."
-  TRANSACTOR_DEPLOY_OUTPUT=$(docker run \
-    --network "$DOCKER_NETWORK" \
-    -v "$(pwd)/$CONFIG_DIR:/deployments" \
-    -w /app \
-    "${OP_CONTRACTS_IMAGE_TAG}" \
-    bash -c "
-      set -e
-      cd /app/packages/contracts-bedrock
-      cast send --rpc-url $L1_RPC_URL_IN_DOCKER --private-key $DEPLOYER_PRIVATE_KEY --create \"\$(forge inspect src/periphery/Transactor.sol:Transactor bytecode)\$(cast abi-encode 'constructor(address)' $ADMIN_OWNER_ADDRESS | sed 's/0x//')\" --json
-    ")
-
-  # Extract contract address from deployment output
-  TRANSACTOR_ADDRESS=$(echo "$TRANSACTOR_DEPLOY_OUTPUT" | jq -r '.contractAddress // empty')
-  if [ -z "$TRANSACTOR_ADDRESS" ] || [ "$TRANSACTOR_ADDRESS" = "null" ]; then
-    echo "❌ Failed to extract Transactor contract address from deployment output"
-    echo "Deployment output: $TRANSACTOR_DEPLOY_OUTPUT"
-    exit 1
-  fi
-
-  echo "✅ Transactor contract deployed at: $TRANSACTOR_ADDRESS"
-
-  # Update .env file with Transactor address
-  sed_inplace "s/TRANSACTOR=.*/TRANSACTOR=$TRANSACTOR_ADDRESS/" .env
-  source .env
-  echo "✅ Updated TRANSACTOR address in .env: $TRANSACTOR_ADDRESS"
-
-
-}
 
 deploy_transactor_contract
 deploy_op_stack_bootstrap_superchain
