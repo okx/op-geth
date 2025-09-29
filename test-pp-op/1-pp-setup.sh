@@ -8,8 +8,6 @@ fi
 
 source .env
 
-
-
 setup_xlayer_erigon() {
   PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
