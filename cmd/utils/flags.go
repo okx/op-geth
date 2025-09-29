@@ -1656,9 +1656,17 @@ func setGPO(ctx *cli.Context, cfg *gasprice.Config) {
 	if ctx.IsSet(GpoDefaultL2CoinPrice.Name) {
 		cfg.XLayer.DefaultL2CoinPrice = ctx.Float64(GpoDefaultL2CoinPrice.Name)
 	}
-
 	if ctx.IsSet(GpoFactor.Name) {
 		cfg.XLayer.Factor = ctx.Float64(GpoFactor.Name)
+	}
+	if ctx.IsSet(GpoGasPriceUsdt.Name) {
+		cfg.XLayer.GasPriceUsdt = ctx.Float64(GpoGasPriceUsdt.Name)
+	}
+	if ctx.IsSet(GpoCongestionThreshold.Name) {
+		cfg.XLayer.CongestionThreshold = ctx.Int(GpoCongestionThreshold.Name)
+	}
+	if ctx.IsSet(GpoUpdatePeriod.Name) {
+		cfg.XLayer.UpdatePeriod = ctx.Duration(GpoUpdatePeriod.Name)
 	}
 }
 

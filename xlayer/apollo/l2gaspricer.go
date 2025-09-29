@@ -26,9 +26,7 @@ func (c *Client) loadL2GasPricer(value interface{}) {
 
 // fireL2GasPricer fires the apollo l2gaspricer config change
 func (c *Client) fireL2GasPricer(ctx *cli.Context, value *storage.ConfigChange) {
-	log.Info("About to call loadL2GasPricerConfig")
 	loadL2GasPricerConfig(ctx)
-	log.Info("loadL2GasPricerConfig completed")
 	log.Info(fmt.Sprintf("apollo l2gaspricer old config : %+v", value.OldValue.(string)))
 	log.Info(fmt.Sprintf("apollo l2gaspricer config changed: %+v", value.NewValue.(string)))
 }
@@ -38,7 +36,6 @@ func loadL2GasPricerConfig(ctx *cli.Context) {
 	UnsafeGetApolloConfig().Lock()
 	defer UnsafeGetApolloConfig().Unlock()
 
-	log.Info("loadL2GasPricerConfig started")
 	config := UnsafeGetApolloConfig()
 	if config == nil {
 		log.Warn("Apollo config is nil, skipping L2GasPricer config load")
