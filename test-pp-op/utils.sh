@@ -9,10 +9,8 @@ ROOT_DIR="$(dirname "$PWD_DIR")"
 
 setup_xlayer_erigon() {
   PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  rm -rf $PWD_DIR/tmp/xlayer-erigon
-  mkdir -p $PWD_DIR/tmp
-  cd $PWD_DIR/tmp/
-   if [ ! -d "$PWD_DIR/tmp/xlayer-erigon" ]; then
+
+  if [ ! -d "$PWD_DIR/tmp/xlayer-erigon" ]; then
     echo "Cloning xlayer-erigon repository..."
     mkdir -p $PWD_DIR/tmp
     cd $PWD_DIR/tmp/
