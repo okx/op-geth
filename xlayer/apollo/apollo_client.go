@@ -100,13 +100,17 @@ func GetInstance(ethCfg *ethconfig.Config) (*Client, error) {
 	// Create and attach change listener
 	listener := &CustomChangeListener{}
 
+	GpoFlags := []cli.Flag{
+		utils.GpoBlocksFlag, utils.GpoPercentileFlag, utils.GpoMaxGasPriceFlag, utils.GpoIgnoreGasPriceFlag, utils.GpoMinSuggestedPriorityFeeFlag,
+	}
+
 	// Create singleton instance
 	instance = &Client{
 		config:       cfg,
 		client:       client,
 		listener:     listener,
 		namespaceMap: nsMap,
-		flags:        utils.XLayerFlags,
+		flags:        append(utils.XLayerFlags, GpoFlags...),
 	}
 
 	// Set up the listener reference

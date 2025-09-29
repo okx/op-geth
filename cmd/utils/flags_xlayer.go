@@ -123,34 +123,16 @@ var (
 		Value: "application",
 	}
 
-	DefaultGasPrice = &cli.Uint64Flag{
-		Name:  "xlayer.default-gas-price",
-		Usage: "Set the default/min gas price",
-		Value: 0,
+	GpoType = &cli.StringFlag{
+		Name:  "gpo.type",
+		Usage: "GPO type",
+		Value: "follower",
 	}
 
-	EffectiveGasPriceEthTransfer = &cli.Float64Flag{
-		Name:  "xlayer.effective-gas-price-eth-transfer",
-		Usage: "Set the effective gas price in percentage for native transfers",
-		Value: 0,
-	}
-
-	EffectiveGasPriceERC20Transfer = &cli.Float64Flag{
-		Name:  "xlayer.effective-gas-price-erc20-transfer",
-		Usage: "Set the effective gas price in percentage for ERC20 transfers",
-		Value: 0,
-	}
-
-	EffectiveGasPriceContractInvocation = &cli.Float64Flag{
-		Name:  "xlayer.effective-gas-price-contract-invocation",
-		Usage: "Set the effective gas price in percentage for contract invocation",
-		Value: 0,
-	}
-
-	EffectiveGasPriceContractDeployment = &cli.Float64Flag{
-		Name:  "xlayer.effective-gas-price-contract-deployment",
-		Usage: "Set the effective gas price in percentage for contract deployment",
-		Value: 0,
+	GpoUpdatePeriod = &cli.Uint64Flag{
+		Name:  "gpo.update-period",
+		Usage: "GPO update period",
+		Value: 100000000000,
 	}
 
 	GpoFactor = &cli.Float64Flag{
@@ -159,10 +141,64 @@ var (
 		Value: 0,
 	}
 
+	GpoKafkaURL = &cli.StringFlag{
+		Name:  "gpo.kafka-url",
+		Usage: "GPO kafka url",
+		Value: "localhost:9092",
+	}
+
+	GpoTopic = &cli.StringFlag{
+		Name:  "gpo.topic",
+		Usage: "GPO topic",
+		Value: "middle_coinPrice_push",
+	}
+
+	GpoGroupID = &cli.StringFlag{
+		Name:  "gpo.group-id",
+		Usage: "GPO group id",
+		Value: "geth-consumer",
+	}
+
+	GpoL1CoinId = &cli.Uint64Flag{
+		Name:  "gpo.l1-coin-id",
+		Usage: "GPO l1 coin id",
+		Value: 15756,
+	}
+
+	GpoL2CoinId = &cli.Uint64Flag{
+		Name:  "gpo.l2-coin-id",
+		Usage: "GPO l2 coin id",
+		Value: 7184,
+	}
+
+	GpoDefaultL1CoinPrice = &cli.Float64Flag{
+		Name:  "gpo.default-l1-coin-price",
+		Usage: "GPO default l1 coin price",
+		Value: 2000.0,
+	}
+
+	GpoDefaultL2CoinPrice = &cli.Float64Flag{
+		Name:  "gpo.default-l2-coin-price",
+		Usage: "GPO default l2 coin price",
+		Value: 0.5,
+	}
+
+	GpoGasPriceUsdt = &cli.Float64Flag{
+		Name:  "gpo.gas-price-usdt",
+		Usage: "GPO gas price usdt",
+		Value: 0,
+	}
+
 	GpoCongestionThreshold = &cli.Uint64Flag{
 		Name:  "gpo.congestion-threshold",
-		Usage: "Used to determine whether pending tx has reached the threshold for congestion",
+		Usage: "GPO congestion threshold",
 		Value: 0,
+	}
+
+	GpoDefault = &cli.StringFlag{
+		Name:  "gpo.default",
+		Usage: "GPO default",
+		Value: "100000000",
 	}
 
 	// XLayerFlags are the default flags for X Layer features
@@ -184,13 +220,19 @@ var (
 		ApolloIPFlag,
 		ApolloClusterFlag,
 		ApolloNamespaceFlag,
-		DefaultGasPrice,
-		EffectiveGasPriceEthTransfer,
-		EffectiveGasPriceERC20Transfer,
-		EffectiveGasPriceContractInvocation,
-		EffectiveGasPriceContractDeployment,
-		GpoFactor,
+		GpoType,
+		GpoUpdatePeriod,
+		GpoDefault,
+		GpoKafkaURL,
+		GpoTopic,
+		GpoGroupID,
+		GpoL1CoinId,
+		GpoL2CoinId,
+		GpoDefaultL1CoinPrice,
+		GpoDefaultL2CoinPrice,
+		GpoGasPriceUsdt,
 		GpoCongestionThreshold,
+		GpoFactor,
 	}
 )
 
