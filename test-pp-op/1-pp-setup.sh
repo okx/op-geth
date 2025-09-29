@@ -3,7 +3,7 @@ set -e
 set -x
 
 if ! [ -f .env ]; then
-  cp example.env .env
+  echo "need to provide .env file"
 fi
 
 source .env
