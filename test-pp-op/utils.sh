@@ -14,5 +14,12 @@ setup_xlayer_erigon() {
   cd $PWD_DIR/tmp/
   git clone -b feat/cliff/op-migration-test https://github.com/okx/xlayer-erigon.git
 
-  cd $PWD_DIR
+  cd $PWD_DIR/tmp/xlayer-erigon/test-pp-op
+
+  if [ "$ENV" = "mainnet" ]; then
+    make mainnet
+  else
+    make local
+  fi
+  cd cd $PWD_DIR
 }
