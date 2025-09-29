@@ -8,10 +8,9 @@ import (
 
 // XLayerConfig is the X Layer config used on the eth backend
 type XLayerConfig struct {
-	OkPay         OkPayConfig     `toml:",omitempty"`
-	Apollo        ApolloConfig    `toml:",omitempty"`
-	LegacyPp      MigrationConfig `toml:",omitempty"` // The erigon RPC endpoint URL for pre-migration blocks
-	ApolloChanged []string        `toml:",omitempty"`
+	OkPay    OkPayConfig     `toml:",omitempty"`
+	Apollo   ApolloConfig    `toml:",omitempty"`
+	LegacyPp MigrationConfig `toml:",omitempty"` // The erigon RPC endpoint URL for pre-migration blocks
 }
 
 type MigrationConfig struct {
