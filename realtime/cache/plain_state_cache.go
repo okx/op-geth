@@ -47,6 +47,7 @@ func (cache *plainStateCache) Flatten(incoming *plainStateCache) {
 
 	for address := range incoming.deletedAccountsCache {
 		cache.deletedAccountsCache[address] = struct{}{}
+		delete(cache.accountCache, address)
 	}
 
 	// Apply code changes
