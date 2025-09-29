@@ -260,6 +260,8 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		receipts: work.receipts,
 		requests: requests,
 		witness:  work.witness,
+		// For X Layer, realtime
+		realtimeEnabled: params.realtimeEnabled,
 	}
 }
 
