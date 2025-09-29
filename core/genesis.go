@@ -899,14 +899,14 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 
 	start := time.Now()
 	// Marshal the genesis state specification and persist.
-	blob, err := json.Marshal(g.Alloc)
-	if err != nil {
-		return nil, err
-	}
+	//blob, err := json.Marshal(g.Alloc)
+	//if err != nil {
+	//  return nil, err
+	//}
 	log.Info("marshal alloc", "elapsed", time.Since(start))
 	start = time.Now()
 	batch := db.NewBatch()
-	rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
+	//rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
 	rawdb.WriteBlock(batch, block)
 	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), nil)
 	rawdb.WriteCanonicalHash(batch, block.Hash(), block.NumberU64())
