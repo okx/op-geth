@@ -404,23 +404,6 @@ func WriteHeader(db ethdb.KeyValueWriter, header *types.Header) {
 	}
 }
 
-func WriteGenesisHeader(db ethdb.KeyValueWriter, header *types.Header) {
-	var (
-		hash   = header.Hash()
-		number = uint64(0)
-	)
-
-	// Write the encoded header
-	data, err := rlp.EncodeToBytes(header)
-	if err != nil {
-		log.Crit("Failed to RLP encode header", "err", err)
-	}
-	key := headerKey(number, hash)
-	if err := db.Put(key, data); err != nil {
-		log.Crit("Failed to store header", "err", err)
-	}
-}
-
 // DeleteHeader removes all block header data associated with a hash.
 func DeleteHeader(db ethdb.KeyValueWriter, hash common.Hash, number uint64) {
 	deleteHeaderWithoutNumber(db, hash, number)
