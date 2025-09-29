@@ -8,20 +8,6 @@ cd $PWD_DIR
 
 deploy() {
 
-# Extract contract address from deployment output
-TRANSACTOR_ADDRESS=$(echo "$TRANSACTOR_DEPLOY_OUTPUT" | jq -r '.contractAddress // empty')
-if [ -z "$TRANSACTOR_ADDRESS" ] || [ "$TRANSACTOR_ADDRESS" = "null" ]; then
-  echo "❌ Failed to extract Transactor contract address from deployment output"
-  echo "Deployment output: $TRANSACTOR_DEPLOY_OUTPUT"
-  exit 1
-fi
-
-echo "✅ Transactor contract deployed at: $TRANSACTOR_ADDRESS"
-
-# Update .env file with Transactor address
-sed_inplace "s/TRANSACTOR=.*/TRANSACTOR=$TRANSACTOR_ADDRESS/" .env
-source .env
-echo "✅ Updated TRANSACTOR address in .env: $TRANSACTOR_ADDRESS"
 
 echo "🔧 Bootstrapping superchain with op-deployer..."
 
@@ -136,6 +122,22 @@ deploy_transactor_contract() {
       cd /app/packages/contracts-bedrock
       cast send --rpc-url $L1_RPC_URL_IN_DOCKER --private-key $DEPLOYER_PRIVATE_KEY --create \"\$(forge inspect src/periphery/Transactor.sol:Transactor bytecode)\$(cast abi-encode 'constructor(address)' $ADMIN_OWNER_ADDRESS | sed 's/0x//')\" --json
     ")
+
+  # Extract contract address from deployment output
+  TRANSACTOR_ADDRESS=$(echo "$TRANSACTOR_DEPLOY_OUTPUT" | jq -r '.contractAddress // empty')
+  if [ -z "$TRANSACTOR_ADDRESS" ] || [ "$TRANSACTOR_ADDRESS" = "null" ]; then
+    echo "❌ Failed to extract Transactor contract address from deployment output"
+    echo "Deployment output: $TRANSACTOR_DEPLOY_OUTPUT"
+    exit 1
+  fi
+
+  echo "✅ Transactor contract deployed at: $TRANSACTOR_ADDRESS"
+
+  # Update .env file with Transactor address
+  sed_inplace "s/TRANSACTOR=.*/TRANSACTOR=$TRANSACTOR_ADDRESS/" .env
+  source .env
+  echo "✅ Updated TRANSACTOR address in .env: $TRANSACTOR_ADDRESS"
+
 
 }
 
