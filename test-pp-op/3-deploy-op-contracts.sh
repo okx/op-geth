@@ -6,34 +6,36 @@ source utils.sh
 
 cd $PWD_DIR
 
-deploy() {
+deploy_op_stack_bootstrap_superchain() {
+  echo "🔧 Bootstrapping superchain with op-deployer..."
 
+  docker run \
+    --network "$DOCKER_NETWORK" \
+    -v "$(pwd)/$CONFIG_DIR:/deployments" \
+    -w /app \
+    "${OP_CONTRACTS_IMAGE_TAG}" \
+    bash -c "
+      set -e
+      /app/op-deployer/bin/op-deployer bootstrap superchain \
+        --l1-rpc-url $L1_RPC_URL_IN_DOCKER \
+        --private-key $DEPLOYER_PRIVATE_KEY \
+        --artifacts-locator file:///app/packages/contracts-bedrock/forge-artifacts \
+        --superchain-proxy-admin-owner $TRANSACTOR_ADDRESS \
+        --protocol-versions-owner $ADMIN_OWNER_ADDRESS \
+        --guardian $ADMIN_OWNER_ADDRESS \
+        --outfile /deployments/superchain.json
+    "
 
-echo "🔧 Bootstrapping superchain with op-deployer..."
+  echo "🔧 Bootstrapping implementations with op-deployer..."
 
-docker run \
-  --network "$DOCKER_NETWORK" \
-  -v "$(pwd)/$CONFIG_DIR:/deployments" \
-  -w /app \
-  "${OP_CONTRACTS_IMAGE_TAG}" \
-  bash -c "
-    set -e
-    /app/op-deployer/bin/op-deployer bootstrap superchain \
-      --l1-rpc-url $L1_RPC_URL_IN_DOCKER \
-      --private-key $DEPLOYER_PRIVATE_KEY \
-      --artifacts-locator file:///app/packages/contracts-bedrock/forge-artifacts \
-      --superchain-proxy-admin-owner $TRANSACTOR_ADDRESS \
-      --protocol-versions-owner $ADMIN_OWNER_ADDRESS \
-      --guardian $ADMIN_OWNER_ADDRESS \
-      --outfile /deployments/superchain.json
-  "
+  SUPERCHAIN_JSON="$CONFIG_DIR/superchain.json"
+  PROTOCOL_VERSIONS_PROXY=$(jq -r '.protocolVersionsProxyAddress' "$SUPERCHAIN_JSON")
+  SUPERCHAIN_CONFIG_PROXY=$(jq -r '.superchainConfigProxyAddress' "$SUPERCHAIN_JSON")
+  PROXY_ADMIN=$(jq -r '.proxyAdminAddress' "$SUPERCHAIN_JSON")
+}
 
-echo "🔧 Bootstrapping implementations with op-deployer..."
+deploy_op_stack() {
 
-SUPERCHAIN_JSON="$CONFIG_DIR/superchain.json"
-PROTOCOL_VERSIONS_PROXY=$(jq -r '.protocolVersionsProxyAddress' "$SUPERCHAIN_JSON")
-SUPERCHAIN_CONFIG_PROXY=$(jq -r '.superchainConfigProxyAddress' "$SUPERCHAIN_JSON")
-PROXY_ADMIN=$(jq -r '.proxyAdminAddress' "$SUPERCHAIN_JSON")
 
 docker run \
   --network "$DOCKER_NETWORK" \
@@ -142,4 +144,5 @@ deploy_transactor_contract() {
 }
 
 deploy_transactor_contract
+deploy_op_stack_bootstrap_superchain
 
