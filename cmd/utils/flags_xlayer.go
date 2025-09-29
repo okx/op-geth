@@ -5,12 +5,13 @@ import (
 
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/filters"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
+	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/urfave/cli/v2"
 )
@@ -122,6 +123,48 @@ var (
 		Value: "application",
 	}
 
+	DefaultGasPrice = &cli.Uint64Flag{
+		Name:  "xlayer.default-gas-price",
+		Usage: "Set the default/min gas price",
+		Value: 0,
+	}
+
+	EffectiveGasPriceEthTransfer = &cli.Float64Flag{
+		Name:  "xlayer.effective-gas-price-eth-transfer",
+		Usage: "Set the effective gas price in percentage for native transfers",
+		Value: 0,
+	}
+
+	EffectiveGasPriceERC20Transfer = &cli.Float64Flag{
+		Name:  "xlayer.effective-gas-price-erc20-transfer",
+		Usage: "Set the effective gas price in percentage for ERC20 transfers",
+		Value: 0,
+	}
+
+	EffectiveGasPriceContractInvocation = &cli.Float64Flag{
+		Name:  "xlayer.effective-gas-price-contract-invocation",
+		Usage: "Set the effective gas price in percentage for contract invocation",
+		Value: 0,
+	}
+
+	EffectiveGasPriceContractDeployment = &cli.Float64Flag{
+		Name:  "xlayer.effective-gas-price-contract-deployment",
+		Usage: "Set the effective gas price in percentage for contract deployment",
+		Value: 0,
+	}
+
+	GpoFactor = &cli.Float64Flag{
+		Name:  "gpo.factor",
+		Usage: "raw gas price factor (Follower mode only)",
+		Value: 0,
+	}
+
+	GpoCongestionThreshold = &cli.Uint64Flag{
+		Name:  "gpo.congestion-threshold",
+		Usage: "Used to determine whether pending tx has reached the threshold for congestion",
+		Value: 0,
+	}
+
 	// XLayerFlags are the default flags for X Layer features
 	XLayerFlags = []cli.Flag{
 		OkPayPriorityEnableFlag,
@@ -141,6 +184,13 @@ var (
 		ApolloIPFlag,
 		ApolloClusterFlag,
 		ApolloNamespaceFlag,
+		DefaultGasPrice,
+		EffectiveGasPriceEthTransfer,
+		EffectiveGasPriceERC20Transfer,
+		EffectiveGasPriceContractInvocation,
+		EffectiveGasPriceContractDeployment,
+		GpoFactor,
+		GpoCongestionThreshold,
 	}
 )
 
@@ -255,4 +305,9 @@ func setMonitor(ctx *cli.Context, cfg *ethconfig.MonitorConfig) {
 		cfg.TraceLogPath = ctx.String(TraceLogPath.Name)
 	}
 
+}
+
+// SetApolloGPOXLayer is a public wrapper function to internally call setGPO
+func SetApolloGPOXLayer(ctx *cli.Context, cfg *gasprice.Config) {
+	setGPO(ctx, cfg)
 }
