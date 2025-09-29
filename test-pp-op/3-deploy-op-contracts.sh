@@ -85,7 +85,7 @@ sed_inplace "s/^opcmAddress = \".*\"/opcmAddress = \"$OPCM_ADDRESS\"/" ./config-
 echo "✅ Updated opcmAddress ($OPCM_ADDRESS) in intent.toml"
 }
 
-deploy_op_stack() {
+deploy_op_stack_contracts() {
 
 
 # deploy contracts, TODO, should we need to modify source code to deploy contracts?
@@ -159,4 +159,5 @@ deploy_transactor_contract() {
 deploy_transactor_contract
 deploy_op_stack_bootstrap_superchain
 deploy_op_stack_bootstrap_implementations
+deploy_op_stack_contracts
 
