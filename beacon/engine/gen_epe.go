@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
 var _ = (*executionPayloadEnvelopeMarshaling)(nil)
@@ -23,6 +24,8 @@ func (e ExecutionPayloadEnvelope) MarshalJSON() ([]byte, error) {
 		Override              bool            `json:"shouldOverrideBuilder"`
 		Witness               *hexutil.Bytes  `json:"witness,omitempty"`
 		ParentBeaconBlockRoot *common.Hash    `json:"parentBeaconBlockRoot,omitempty"`
+		// For X Layer, realtime
+		Changeset *realtimeTypes.Changeset `json:"changeset,omitempty"`
 	}
 	var enc ExecutionPayloadEnvelope
 	enc.ExecutionPayload = e.ExecutionPayload
@@ -37,6 +40,8 @@ func (e ExecutionPayloadEnvelope) MarshalJSON() ([]byte, error) {
 	enc.Override = e.Override
 	enc.Witness = e.Witness
 	enc.ParentBeaconBlockRoot = e.ParentBeaconBlockRoot
+	// For X Layer, realtime
+	enc.Changeset = e.Changeset
 	return json.Marshal(&enc)
 }
 
@@ -50,6 +55,8 @@ func (e *ExecutionPayloadEnvelope) UnmarshalJSON(input []byte) error {
 		Override              *bool           `json:"shouldOverrideBuilder"`
 		Witness               *hexutil.Bytes  `json:"witness,omitempty"`
 		ParentBeaconBlockRoot *common.Hash    `json:"parentBeaconBlockRoot,omitempty"`
+		// For X Layer, realtime
+		Changeset *realtimeTypes.Changeset `json:"changeset,omitempty"`
 	}
 	var dec ExecutionPayloadEnvelope
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -80,6 +87,10 @@ func (e *ExecutionPayloadEnvelope) UnmarshalJSON(input []byte) error {
 	}
 	if dec.ParentBeaconBlockRoot != nil {
 		e.ParentBeaconBlockRoot = dec.ParentBeaconBlockRoot
+	}
+	// For X Layer, realtime
+	if dec.Changeset != nil {
+		e.Changeset = dec.Changeset
 	}
 	return nil
 }

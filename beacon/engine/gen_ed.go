@@ -36,8 +36,6 @@ func (e ExecutableData) MarshalJSON() ([]byte, error) {
 		ExcessBlobGas    *hexutil.Uint64         `json:"excessBlobGas"`
 		ExecutionWitness *types.ExecutionWitness `json:"executionWitness,omitempty"`
 		WithdrawalsRoot  *common.Hash            `json:"withdrawalsRoot,omitempty"`
-		// For X Layer, realtime
-		RealtimeEnabled bool `json:"realtimeEnabled,omitempty"`
 	}
 	var enc ExecutableData
 	enc.ParentHash = e.ParentHash
@@ -64,8 +62,6 @@ func (e ExecutableData) MarshalJSON() ([]byte, error) {
 	enc.ExcessBlobGas = (*hexutil.Uint64)(e.ExcessBlobGas)
 	enc.ExecutionWitness = e.ExecutionWitness
 	enc.WithdrawalsRoot = e.WithdrawalsRoot
-	// For X Layer, realtime
-	enc.RealtimeEnabled = e.RealtimeEnabled
 	return json.Marshal(&enc)
 }
 
@@ -91,8 +87,6 @@ func (e *ExecutableData) UnmarshalJSON(input []byte) error {
 		ExcessBlobGas    *hexutil.Uint64         `json:"excessBlobGas"`
 		ExecutionWitness *types.ExecutionWitness `json:"executionWitness,omitempty"`
 		WithdrawalsRoot  *common.Hash            `json:"withdrawalsRoot,omitempty"`
-		// For X Layer, realtime
-		RealtimeEnabled *bool `json:"realtimeEnabled,omitempty"`
 	}
 	var dec ExecutableData
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -171,10 +165,6 @@ func (e *ExecutableData) UnmarshalJSON(input []byte) error {
 	}
 	if dec.WithdrawalsRoot != nil {
 		e.WithdrawalsRoot = dec.WithdrawalsRoot
-	}
-	// For X Layer, realtime
-	if dec.RealtimeEnabled != nil {
-		e.RealtimeEnabled = *dec.RealtimeEnabled
 	}
 	return nil
 }

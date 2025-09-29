@@ -50,7 +50,6 @@ func (eth *Ethereum) InitRealtime() {
 				eth.kafkaProducer = kafkaProducer
 				eth.kafkaBlockInfoChan = make(chan *realtimeTypes.BlockInfo, realtimeKafka.DefaultKafkaBufferSize)
 				eth.kafkaTxInfoChan = make(chan state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
-				eth.blockchain.SetRealtimeBlockInfoChan(eth.kafkaBlockInfoChan)
 
 				// Send error trigger message on EL restart
 				if err := eth.kafkaProducer.SendKafkaErrorTrigger(0); err != nil {

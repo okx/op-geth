@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -101,9 +102,6 @@ type ExecutableData struct {
 	// instead of computing the root from a withdrawals list, set it directly.
 	// The "withdrawals" list attribute must be non-nil but empty.
 	WithdrawalsRoot *common.Hash `json:"withdrawalsRoot,omitempty"`
-
-	// For X Layer, realtime
-	RealtimeEnabled bool `json:"realtimeEnabled,omitempty" gencodec:"optional"`
 }
 
 // JSON type overrides for executableData.
@@ -139,6 +137,8 @@ type ExecutionPayloadEnvelope struct {
 	Witness          *hexutil.Bytes  `json:"witness,omitempty"`
 	// OP-Stack: Ecotone specific fields
 	ParentBeaconBlockRoot *common.Hash `json:"parentBeaconBlockRoot,omitempty"`
+	// For X Layer, realtime
+	Changeset *realtimeTypes.Changeset `json:"changeset,omitempty"`
 }
 
 type BlobsBundleV1 struct {
@@ -250,8 +250,6 @@ func ExecutableDataToBlock(data ExecutableData, versionedHashes []common.Hash, b
 	if block.Hash() != data.BlockHash {
 		return nil, fmt.Errorf("blockhash mismatch, want %x, got %x", data.BlockHash, block.Hash())
 	}
-	// For X Layer, realtime
-	block.RealtimeEnabled = data.RealtimeEnabled
 	return block, nil
 }
 
