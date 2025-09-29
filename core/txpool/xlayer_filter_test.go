@@ -17,11 +17,15 @@ import (
 // mockXLayerGpricer implements L2GasPricer for testing
 type mockXLayerGpricer struct {
 	minGasPrice *big.Int
+	gasCache    *xlayer.GasPriceCache
 }
 
 func newMockXLayerGpricer(minGasPrice *big.Int) *mockXLayerGpricer {
+	cache := xlayer.NewGasPriceCache()
+	cache.SetLatestRawGP(minGasPrice)
 	return &mockXLayerGpricer{
 		minGasPrice: minGasPrice,
+		gasCache:    cache,
 	}
 }
 
@@ -39,12 +43,18 @@ func (m *mockXLayerGpricer) GetLastRawGP() *big.Int {
 
 func (m *mockXLayerGpricer) GetConfig() gasprice.Config {
 	return gasprice.Config{
-		Default: m.minGasPrice,
+		XLayer: gasprice.XLayerConfig{
+			Default: m.minGasPrice,
+		},
 	}
 }
 
 func (m *mockXLayerGpricer) GetCtx() context.Context {
 	return context.Background()
+}
+
+func (m *mockXLayerGpricer) GetGasCache() *xlayer.GasPriceCache {
+	return m.gasCache
 }
 
 // mockBlockchainReader implements BlockchainReader for testing
@@ -62,40 +72,57 @@ func (m *mockBlockchainReader) CurrentBlock() *types.Header {
 	return m.currentHeader
 }
 
-// mockGasPriceCache implements GasPriceCache for testing
-type mockGasPriceCache struct {
-	latestRawGP *big.Int
-}
-
-func newMockGasPriceCache(latestRawGP *big.Int) *xlayer.GasPriceCache {
-	// Create a real GasPriceCache and set the latest raw GP
-	cache := xlayer.NewGasPriceCache()
-	cache.SetLatestRawGP(latestRawGP)
-	return cache
-}
-
 func TestNewXLayerFilter(t *testing.T) {
-	config := gasprice.Config{
-		Default: big.NewInt(10 * params.GWei),
-		XLayer: gasprice.XLayerConfig{
-			Type: gasprice.DefaultType,
+	tests := []struct {
+		name           string
+		config         gasprice.Config
+		expectedMinGas *big.Int
+	}{
+		{
+			name: "With default XLayer price",
+			config: gasprice.Config{
+				XLayer: gasprice.XLayerConfig{
+					Default: big.NewInt(10 * params.GWei),
+				},
+			},
+			expectedMinGas: big.NewInt(10 * params.GWei),
+		},
+		{
+			name: "With zero XLayer price",
+			config: gasprice.Config{
+				XLayer: gasprice.XLayerConfig{
+					Default: big.NewInt(0),
+				},
+			},
+			expectedMinGas: gasprice.DefaultXLayerPrice,
+		},
+		{
+			name: "With nil XLayer price",
+			config: gasprice.Config{
+				XLayer: gasprice.XLayerConfig{
+					Default: nil,
+				},
+			},
+			expectedMinGas: gasprice.DefaultXLayerPrice,
 		},
 	}
 
-	minGasPrice := big.NewInt(10 * params.GWei)
-	gpricer := newMockXLayerGpricer(minGasPrice)
-	blockchain := newMockBlockchainReader(&types.Header{
-		BaseFee: big.NewInt(0),
-	})
-	xlayerCache := newMockGasPriceCache(minGasPrice)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gpricer := newMockXLayerGpricer(tt.expectedMinGas)
+			blockchain := newMockBlockchainReader(&types.Header{})
+			xlayerCache := xlayer.NewGasPriceCache()
+			xlayerCache.SetLatestRawGP(tt.expectedMinGas)
 
-	filter := NewXLayerFilter(config, gpricer, blockchain, xlayerCache)
-	if filter == nil {
-		t.Fatal("Failed to create XLayerFilter")
-	}
+			filter := NewXLayerFilter(tt.config, gpricer, blockchain, xlayerCache)
+			if filter == nil {
+				t.Fatal("Failed to create XLayerFilter")
+			}
 
-	if filter.minGasPrice.Cmp(minGasPrice) != 0 {
-		t.Errorf("Expected minGasPrice %s, got %s", minGasPrice, filter.minGasPrice)
+			if filter.minGasPrice.Cmp(tt.expectedMinGas) != 0 {
+				t.Errorf("Expected minGasPrice %s, got %s", tt.expectedMinGas, filter.minGasPrice)
+			}
+		})
 	}
 }
 
@@ -106,17 +133,17 @@ func TestXLayerFilterFilterTx_NoXLayerConfig(t *testing.T) {
 		},
 	}
 
-	gpricer := newMockXLayerGpricer(big.NewInt(10 * params.GWei))
-	blockchain := newMockBlockchainReader(&types.Header{
-		BaseFee: big.NewInt(0),
-	})
-	xlayerCache := newMockGasPriceCache(big.NewInt(10 * params.GWei))
+	minGasPrice := big.NewInt(10 * params.GWei)
+	gpricer := newMockXLayerGpricer(minGasPrice)
+	blockchain := newMockBlockchainReader(&types.Header{})
+	xlayerCache := xlayer.NewGasPriceCache()
+	xlayerCache.SetLatestRawGP(minGasPrice)
 	filter := NewXLayerFilter(config, gpricer, blockchain, xlayerCache)
 
 	// Create a transaction with low gas price
 	tx := types.NewTransaction(
 		0,                        // nonce
-		[20]byte{},               // to
+		common.Address{},         // to
 		big.NewInt(0),            // value
 		21000,                    // gas
 		big.NewInt(1*params.Wei), // gasPrice
@@ -130,219 +157,282 @@ func TestXLayerFilterFilterTx_NoXLayerConfig(t *testing.T) {
 	}
 }
 
-func TestXLayerFilterFilterTx_DefaultType(t *testing.T) {
+func TestXLayerFilterFilterTx_LegacyTx(t *testing.T) {
 	config := gasprice.Config{
-		Default: big.NewInt(10 * params.GWei),
 		XLayer: gasprice.XLayerConfig{
-			Type: gasprice.DefaultType,
+			Type:    gasprice.DefaultType,
+			Default: big.NewInt(10 * params.GWei),
 		},
 	}
 
 	minGasPrice := big.NewInt(10 * params.GWei)
 	gpricer := newMockXLayerGpricer(minGasPrice)
-	blockchain := newMockBlockchainReader(&types.Header{
-		BaseFee: big.NewInt(0),
-	})
-	xlayerCache := newMockGasPriceCache(minGasPrice)
+	blockchain := newMockBlockchainReader(&types.Header{})
+	xlayerCache := xlayer.NewGasPriceCache()
+	xlayerCache.SetLatestRawGP(minGasPrice)
 	filter := NewXLayerFilter(config, gpricer, blockchain, xlayerCache)
 
-	// Test transaction with sufficient gas price
-	tx := types.NewTransaction(
-		0,                          // nonce
-		[20]byte{},                 // to
-		big.NewInt(0),              // value
-		21000,                      // gas
-		big.NewInt(15*params.GWei), // gasPrice - higher than min
-		nil,                        // data
-	)
-
-	result := filter.FilterTx(context.Background(), tx)
-	if !result {
-		t.Error("Expected transaction with sufficient gas price to be allowed")
+	tests := []struct {
+		name     string
+		gasPrice *big.Int
+		want     bool
+	}{
+		{
+			name:     "Sufficient gas price",
+			gasPrice: big.NewInt(15 * params.GWei),
+			want:     true,
+		},
+		{
+			name:     "Insufficient gas price",
+			gasPrice: big.NewInt(5 * params.GWei),
+			want:     false,
+		},
+		{
+			name:     "Equal to minimum gas price",
+			gasPrice: big.NewInt(10 * params.GWei),
+			want:     true,
+		},
 	}
 
-	// Test transaction with insufficient gas price
-	tx = types.NewTransaction(
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tx := types.NewTransaction(
+				0,                // nonce
+				common.Address{}, // to
+				big.NewInt(0),    // value
+				21000,            // gas
+				tt.gasPrice,      // gasPrice
+				nil,              // data
+			)
+
+			result := filter.FilterTx(context.Background(), tx)
+			if result != tt.want {
+				t.Errorf("FilterTx() = %v, want %v", result, tt.want)
+			}
+		})
+	}
+}
+
+func TestXLayerFilterFilterTx_EIP1559(t *testing.T) {
+	config := gasprice.Config{
+		XLayer: gasprice.XLayerConfig{
+			Type:    gasprice.DefaultType,
+			Default: big.NewInt(10 * params.GWei),
+		},
+	}
+
+	minGasPrice := big.NewInt(10 * params.GWei) // minGasPrice is 10 GWei
+	baseFee := big.NewInt(5 * params.GWei)      // baseFee is 5 GWei
+	gpricer := newMockXLayerGpricer(minGasPrice)
+	blockchain := newMockBlockchainReader(&types.Header{
+		BaseFee: baseFee,
+	})
+	xlayerCache := xlayer.NewGasPriceCache()
+	xlayerCache.SetLatestRawGP(minGasPrice)
+	filter := NewXLayerFilter(config, gpricer, blockchain, xlayerCache)
+
+	tests := []struct {
+		name      string
+		gasTipCap *big.Int
+		gasFeeCap *big.Int
+		want      bool
+	}{
+		{
+			name:      "High tip, high cap",
+			gasTipCap: big.NewInt(8 * params.GWei),  // tip + baseFee = 13 GWei
+			gasFeeCap: big.NewInt(20 * params.GWei), // feeCap is 20 GWei, so effective gas price is 13 GWei > minGasPrice
+			want:      true,
+		},
+		{
+			name:      "Low tip, low cap",
+			gasTipCap: big.NewInt(2 * params.GWei), // tip + baseFee = 7 GWei
+			gasFeeCap: big.NewInt(5 * params.GWei), // feeCap is 5 GWei, so effective gas price is 5 GWei < minGasPrice
+			want:      false,
+		},
+		{
+			name:      "High tip, low cap",
+			gasTipCap: big.NewInt(10 * params.GWei), // tip + baseFee = 15 GWei
+			gasFeeCap: big.NewInt(8 * params.GWei),  // feeCap is 8 GWei, so effective gas price is 8 GWei < minGasPrice
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tx := types.NewTx(&types.DynamicFeeTx{
+				ChainID:   big.NewInt(1),
+				Nonce:     0,
+				GasTipCap: tt.gasTipCap,
+				GasFeeCap: tt.gasFeeCap,
+				Gas:       21000,
+				To:        &common.Address{},
+				Value:     big.NewInt(0),
+				Data:      nil,
+			})
+
+			result := filter.FilterTx(context.Background(), tx)
+			if result != tt.want {
+				t.Errorf("FilterTx() = %v, want %v", result, tt.want)
+			}
+		})
+	}
+}
+
+func TestXLayerFilterFilterTx_NilMinPrice(t *testing.T) {
+	config := gasprice.Config{
+		XLayer: gasprice.XLayerConfig{
+			Type:    gasprice.DefaultType,
+			Default: big.NewInt(10 * params.GWei),
+		},
+	}
+
+	minGasPrice := big.NewInt(10 * params.GWei)
+	gpricer := newMockXLayerGpricer(minGasPrice)
+	blockchain := newMockBlockchainReader(&types.Header{})
+	xlayerCache := xlayer.NewGasPriceCache()
+	// Intentionally not setting latest raw GP
+	filter := NewXLayerFilter(config, gpricer, blockchain, xlayerCache)
+
+	tx := types.NewTransaction(
 		0,                         // nonce
-		[20]byte{},                // to
+		common.Address{},          // to
 		big.NewInt(0),             // value
 		21000,                     // gas
 		big.NewInt(5*params.GWei), // gasPrice - lower than min
 		nil,                       // data
 	)
 
-	result = filter.FilterTx(context.Background(), tx)
-	if result {
-		t.Error("Expected transaction with insufficient gas price to be rejected")
-	}
-}
-
-func TestXLayerFilterFilterTx_EIP1559(t *testing.T) {
-	config := gasprice.Config{
-		Default: big.NewInt(10 * params.GWei),
-		XLayer: gasprice.XLayerConfig{
-			Type: gasprice.DefaultType,
-		},
-	}
-
-	minGasPrice := big.NewInt(10 * params.GWei)
-	gpricer := newMockXLayerGpricer(minGasPrice)
-	blockchain := newMockBlockchainReader(&types.Header{
-		BaseFee: big.NewInt(5 * params.GWei), // Set a base fee for EIP-1559 testing
-	})
-	xlayerCache := newMockGasPriceCache(minGasPrice)
-	filter := NewXLayerFilter(config, gpricer, blockchain, xlayerCache)
-
-	// Test EIP-1559 transaction with sufficient fee cap
-	tx := types.NewTx(&types.DynamicFeeTx{
-		ChainID:   big.NewInt(1),
-		Nonce:     0,
-		GasTipCap: big.NewInt(8 * params.GWei),  // 8 + 5 = 13 GWei > 10 GWei
-		GasFeeCap: big.NewInt(20 * params.GWei), // Higher than min
-		Gas:       21000,
-		To:        &common.Address{},
-		Value:     big.NewInt(0),
-		Data:      nil,
-	})
-
+	// Should allow transaction when minimum price is nil
 	result := filter.FilterTx(context.Background(), tx)
 	if !result {
-		t.Error("Expected EIP-1559 transaction with sufficient fee cap to be allowed")
-	}
-
-	// Test EIP-1559 transaction with insufficient fee cap
-	tx = types.NewTx(&types.DynamicFeeTx{
-		ChainID:   big.NewInt(1),
-		Nonce:     0,
-		GasTipCap: big.NewInt(2 * params.GWei),
-		GasFeeCap: big.NewInt(5 * params.GWei), // Lower than min
-		Gas:       21000,
-		To:        &common.Address{},
-		Value:     big.NewInt(0),
-		Data:      nil,
-	})
-
-	result = filter.FilterTx(context.Background(), tx)
-	if result {
-		t.Error("Expected EIP-1559 transaction with insufficient fee cap to be rejected")
-	}
-}
-
-func TestXLayerFilterFilterTx_FollowerType(t *testing.T) {
-	config := gasprice.Config{
-		Default: big.NewInt(10 * params.GWei),
-		XLayer: gasprice.XLayerConfig{
-			Type: gasprice.FollowerType,
-		},
-	}
-
-	minGasPrice := big.NewInt(10 * params.GWei)
-	gpricer := newMockXLayerGpricer(minGasPrice)
-	blockchain := newMockBlockchainReader(&types.Header{
-		BaseFee: big.NewInt(0),
-	})
-	xlayerCache := newMockGasPriceCache(minGasPrice)
-	filter := NewXLayerFilter(config, gpricer, blockchain, xlayerCache)
-
-	// Test transaction with sufficient gas price
-	tx := types.NewTransaction(
-		0,                          // nonce
-		[20]byte{},                 // to
-		big.NewInt(0),              // value
-		21000,                      // gas
-		big.NewInt(15*params.GWei), // gasPrice - higher than min
-		nil,                        // data
-	)
-
-	result := filter.FilterTx(context.Background(), tx)
-	if !result {
-		t.Error("Expected transaction with sufficient gas price to be allowed in follower type")
-	}
-}
-
-func TestXLayerFilterFilterTx_FixedType(t *testing.T) {
-	config := gasprice.Config{
-		Default: big.NewInt(10 * params.GWei),
-		XLayer: gasprice.XLayerConfig{
-			Type: gasprice.FixedType,
-		},
-	}
-
-	minGasPrice := big.NewInt(10 * params.GWei)
-	gpricer := newMockXLayerGpricer(minGasPrice)
-	blockchain := newMockBlockchainReader(&types.Header{
-		BaseFee: big.NewInt(0),
-	})
-	xlayerCache := newMockGasPriceCache(minGasPrice)
-	filter := NewXLayerFilter(config, gpricer, blockchain, xlayerCache)
-
-	// Test transaction with sufficient gas price
-	tx := types.NewTransaction(
-		0,                          // nonce
-		[20]byte{},                 // to
-		big.NewInt(0),              // value
-		21000,                      // gas
-		big.NewInt(15*params.GWei), // gasPrice - higher than min
-		nil,                        // data
-	)
-
-	result := filter.FilterTx(context.Background(), tx)
-	if !result {
-		t.Error("Expected transaction with sufficient gas price to be allowed in fixed type")
-	}
-}
-
-func TestXLayerFilterGetMinGasPrice(t *testing.T) {
-	config := gasprice.Config{
-		Default: big.NewInt(10 * params.GWei),
-		XLayer: gasprice.XLayerConfig{
-			Type: gasprice.DefaultType,
-		},
-	}
-
-	minGasPrice := big.NewInt(10 * params.GWei)
-	gpricer := newMockXLayerGpricer(minGasPrice)
-	blockchain := newMockBlockchainReader(&types.Header{
-		BaseFee: big.NewInt(0),
-	})
-	xlayerCache := newMockGasPriceCache(minGasPrice)
-	filter := NewXLayerFilter(config, gpricer, blockchain, xlayerCache)
-
-	result := filter.GetMinGasPrice()
-	if result.Cmp(minGasPrice) != 0 {
-		t.Errorf("Expected minGasPrice %s, got %s", minGasPrice, result)
+		t.Error("Expected transaction to be allowed when minimum price is nil")
 	}
 }
 
 func TestXLayerFilterUpdateConfig(t *testing.T) {
-	config := gasprice.Config{
-		Default: big.NewInt(10 * params.GWei),
+	initialConfig := gasprice.Config{
 		XLayer: gasprice.XLayerConfig{
-			Type: gasprice.DefaultType,
+			Type:    gasprice.DefaultType,
+			Default: big.NewInt(10 * params.GWei),
 		},
 	}
 
 	minGasPrice := big.NewInt(10 * params.GWei)
 	gpricer := newMockXLayerGpricer(minGasPrice)
-	blockchain := newMockBlockchainReader(&types.Header{
-		BaseFee: big.NewInt(0),
-	})
-	xlayerCache := newMockGasPriceCache(minGasPrice)
-	filter := NewXLayerFilter(config, gpricer, blockchain, xlayerCache)
+	blockchain := newMockBlockchainReader(&types.Header{})
+	xlayerCache := xlayer.NewGasPriceCache()
+	xlayerCache.SetLatestRawGP(minGasPrice)
+	filter := NewXLayerFilter(initialConfig, gpricer, blockchain, xlayerCache)
 
-	// Update config with new default gas price
-	newConfig := gasprice.Config{
-		Default: big.NewInt(20 * params.GWei),
-		XLayer: gasprice.XLayerConfig{
-			Type: gasprice.DefaultType,
+	tests := []struct {
+		name          string
+		newConfig     gasprice.Config
+		expectedPrice *big.Int
+	}{
+		{
+			name: "Update to higher price",
+			newConfig: gasprice.Config{
+				XLayer: gasprice.XLayerConfig{
+					Type:    gasprice.DefaultType,
+					Default: big.NewInt(20 * params.GWei),
+				},
+			},
+			expectedPrice: big.NewInt(20 * params.GWei),
+		},
+		{
+			name: "Update to zero price",
+			newConfig: gasprice.Config{
+				XLayer: gasprice.XLayerConfig{
+					Type:    gasprice.DefaultType,
+					Default: big.NewInt(0),
+				},
+			},
+			expectedPrice: big.NewInt(20 * params.GWei), // Should keep previous price
+		},
+		{
+			name: "Update with nil price",
+			newConfig: gasprice.Config{
+				XLayer: gasprice.XLayerConfig{
+					Type:    gasprice.DefaultType,
+					Default: nil,
+				},
+			},
+			expectedPrice: big.NewInt(20 * params.GWei), // Should keep previous price
 		},
 	}
 
-	filter.UpdateConfig(newConfig)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filter.UpdateConfig(tt.newConfig)
+			if filter.GetMinGasPrice().Cmp(tt.expectedPrice) != 0 {
+				t.Errorf("Expected minGasPrice %s, got %s", tt.expectedPrice, filter.GetMinGasPrice())
+			}
+		})
+	}
+}
 
-	expected := big.NewInt(20 * params.GWei)
-	result := filter.GetMinGasPrice()
-	if result.Cmp(expected) != 0 {
-		t.Errorf("Expected minGasPrice %s, got %s", expected, result)
+func TestXLayerFilterFilterTx_EIP1559_And_UpdatePrice(t *testing.T) {
+	config := gasprice.Config{
+		XLayer: gasprice.XLayerConfig{
+			Type:    gasprice.DefaultType,
+			Default: big.NewInt(10 * params.GWei),
+		},
+	}
+
+	minGasPrice := big.NewInt(10 * params.GWei) // minGasPrice is 10 GWei
+	baseFee := big.NewInt(5 * params.GWei)      // baseFee is 5 GWei
+	gpricer := newMockXLayerGpricer(minGasPrice)
+	blockchain := newMockBlockchainReader(&types.Header{
+		BaseFee: baseFee,
+	})
+	xlayerCache := xlayer.NewGasPriceCache()
+	xlayerCache.SetLatestRawGP(minGasPrice)
+	filter := NewXLayerFilter(config, gpricer, blockchain, xlayerCache)
+
+	// effective gas price is 13 GWei
+	tx := types.NewTx(&types.DynamicFeeTx{
+		ChainID:   big.NewInt(1),
+		Nonce:     0,
+		GasTipCap: big.NewInt(8 * params.GWei),  // tip + baseFee = 13 GWei
+		GasFeeCap: big.NewInt(20 * params.GWei), // feeCap is 20 GWei, so effective gas price is 13 GWei
+		Gas:       21000,
+		To:        &common.Address{},
+		Value:     big.NewInt(0),
+		Data:      nil,
+	})
+
+	tests := []struct {
+		name           string
+		changeGasPrice *big.Int
+		want           bool
+	}{
+		{
+			name:           "Update to higher price",
+			changeGasPrice: big.NewInt(20 * params.GWei), // change gas price to 20 GWei > tx.effectiveGasPrice, so it's not allowed
+			want:           false,
+		},
+		{
+			name:           "Update to lower price",
+			changeGasPrice: big.NewInt(5 * params.GWei), // change gas price to 5 GWei < tx.effectiveGasPrice, so it's allowed
+			want:           true,
+		},
+		{
+			name:           "Update to same price",
+			changeGasPrice: big.NewInt(13 * params.GWei), // change gas price to 13 GWei = tx.effectiveGasPrice, so it's allowed
+			want:           true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for i := 0; i < 100; i++ {
+				// update 100 times to ensure the price has been slowly updated to tt.changeGasPrice
+				xlayerCache.SetLatestRawGP(tt.changeGasPrice)
+			}
+			result := filter.FilterTx(context.Background(), tx)
+			if result != tt.want {
+				t.Errorf("FilterTx() = %v, want %v", result, tt.want)
+			}
+		})
 	}
 }

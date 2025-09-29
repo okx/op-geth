@@ -36,6 +36,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/internal/ethapi/override"
+	"github.com/ethereum/go-ethereum/eth/gasprice/xlayer"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
@@ -800,6 +801,14 @@ func (b testBackend) HistoricalRPCService() *rpc.Client {
 }
 func (b testBackend) Genesis() *types.Block {
 	panic("implement me")
+}
+
+func (b testBackend) XLayerGpricer() xlayer.L2GasPricer {
+	return nil
+}
+
+func (b testBackend) SequencerRPCService() *rpc.Client {
+	return nil
 }
 
 func TestEstimateGas(t *testing.T) {
