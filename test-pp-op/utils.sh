@@ -27,6 +27,7 @@ setup_xlayer_erigon() {
     cp example.env .env
   fi
 
+  echo "${ENV}"
   if [ "$ENV" = "mainnet" ]; then
     make mainnet
   else
