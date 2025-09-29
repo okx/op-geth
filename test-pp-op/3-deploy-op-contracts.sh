@@ -6,6 +6,15 @@ source utils.sh
 
 cd $PWD_DIR
 
+# bootstrapping superchain with op-deployer
+# output: after deploy, it will output `supperchain.json` under config-op
+# e.g. {
+#  "protocolVersionsImplAddress": "0x37e15e4d6dffa9e5e320ee1ec036922e563cb76c",
+#  "protocolVersionsProxyAddress": "0xfb5a7622e23e0f807b97a8ed608d50d56d202688",
+#  "superchainConfigImplAddress": "0xce28685eb204186b557133766eca00334eb441e4",
+#  "superchainConfigProxyAddress": "0x8c15b9d397b5bf29e114aebff0663fdd34976756",
+#  "proxyAdminAddress": "0x210879bec4c74c7e4e6df5e919f9525d75e15183"
+#  }
 deploy_op_stack_bootstrap_superchain() {
   echo "🔧 Bootstrapping superchain with op-deployer..."
 
@@ -34,7 +43,7 @@ deploy_op_stack_bootstrap_superchain() {
   PROXY_ADMIN=$(jq -r '.proxyAdminAddress' "$SUPERCHAIN_JSON")
 }
 
-deploy_op_stack() {
+deploy_op_stack_bootstrap_implementations() {
 
 
 docker run \
@@ -74,6 +83,10 @@ fi
 # Replace the opcmAddress field in intent.toml with the new value
 sed_inplace "s/^opcmAddress = \".*\"/opcmAddress = \"$OPCM_ADDRESS\"/" ./config-op/intent.toml
 echo "✅ Updated opcmAddress ($OPCM_ADDRESS) in intent.toml"
+}
+
+deploy_op_stack() {
+
 
 # deploy contracts, TODO, should we need to modify source code to deploy contracts?
 docker run \
@@ -145,4 +158,5 @@ deploy_transactor_contract() {
 
 deploy_transactor_contract
 deploy_op_stack_bootstrap_superchain
+deploy_op_stack_bootstrap_implementations
 
