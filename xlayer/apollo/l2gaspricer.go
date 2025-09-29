@@ -28,7 +28,9 @@ func (c *Client) loadL2GasPricer(value interface{}) {
 
 // fireL2GasPricer fires the apollo l2gaspricer config change
 func (c *Client) fireL2GasPricer(ctx *cli.Context, value *storage.ConfigChange) {
+	log.Info("About to call loadL2GasPricerConfig")
 	loadL2GasPricerConfig(ctx)
+	log.Info("loadL2GasPricerConfig completed")
 	log.Info(fmt.Sprintf("apollo l2gaspricer old config : %+v", value.OldValue.(string)))
 	log.Info(fmt.Sprintf("apollo l2gaspricer config changed: %+v", value.NewValue.(string)))
 }
@@ -38,6 +40,12 @@ func loadL2GasPricerConfig(ctx *cli.Context) {
 	UnsafeGetApolloConfig().Lock()
 	defer UnsafeGetApolloConfig().Unlock()
 
+	log.Info("loadL2GasPricerConfig started")
+	config := UnsafeGetApolloConfig()
+	if config == nil {
+		log.Warn("Apollo config is nil, skipping L2GasPricer config load")
+		return
+	}
 	loadNodeL2GasPricerConfig(ctx, &UnsafeGetApolloConfig().NodeCfg)
 	loadEthL2GasPricerConfig(ctx, &UnsafeGetApolloConfig().EthCfg)
 }
@@ -87,14 +95,14 @@ func loadEthL2GasPricerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 		ethCfg.GPO.XLayer.CongestionThreshold = ctx.Int(utils.GpoCongestionThreshold.Name)
 	}
 
-	log.Info(fmt.Sprintf("apollo new value effective gas price eth transfer: %+v", ethCfg.XLayer.L2GasPricer.EffectiveGasPriceEthTransfer))
-	log.Info(fmt.Sprintf("apollo new value effective gas price erc20 transfer: %+v", ethCfg.XLayer.L2GasPricer.EffectiveGasPriceERC20Transfer))
-	log.Info(fmt.Sprintf("apollo new value effective gas price contract invocation: %+v", ethCfg.XLayer.L2GasPricer.EffectiveGasPriceContractInvocation))
-	log.Info(fmt.Sprintf("apollo new value effective gas price contract deployment: %+v", ethCfg.XLayer.L2GasPricer.EffectiveGasPriceContractDeployment))
-	log.Info(fmt.Sprintf("apollo new value default gas price: %+v", ethCfg.XLayer.L2GasPricer.DefaultGasPrice))
-	log.Info(fmt.Sprintf("apollo new value gpo max gas price: %+v", ethCfg.GPO.MaxPrice))
-	log.Info(fmt.Sprintf("apollo new value gpo factor: %+v", ethCfg.GPO.XLayer.Factor))
-	log.Info(fmt.Sprintf("apollo new value gpo congestion threshold: %+v", ethCfg.GPO.XLayer.CongestionThreshold))
+	log.Info(fmt.Sprintf("apollo new value effective gas price eth transfer: %v", ethCfg.XLayer.L2GasPricer.EffectiveGasPriceEthTransfer))
+	log.Info(fmt.Sprintf("apollo new value effective gas price erc20 transfer: %v", ethCfg.XLayer.L2GasPricer.EffectiveGasPriceERC20Transfer))
+	log.Info(fmt.Sprintf("apollo new value effective gas price contract invocation: %v", ethCfg.XLayer.L2GasPricer.EffectiveGasPriceContractInvocation))
+	log.Info(fmt.Sprintf("apollo new value effective gas price contract deployment: %v", ethCfg.XLayer.L2GasPricer.EffectiveGasPriceContractDeployment))
+	log.Info(fmt.Sprintf("apollo new value default gas price: %v", ethCfg.XLayer.L2GasPricer.DefaultGasPrice))
+	log.Info(fmt.Sprintf("apollo new value gpo max gas price: %v", ethCfg.GPO.MaxPrice))
+	log.Info(fmt.Sprintf("apollo new value gpo factor: %v", ethCfg.GPO.XLayer.Factor))
+	log.Info(fmt.Sprintf("apollo new value gpo congestion threshold: %v", ethCfg.GPO.XLayer.CongestionThreshold))
 
 	ethCfg.GPO = ethconfig.Defaults.GPO
 	utils.SetApolloGPOXLayer(ctx, &ethCfg.GPO)

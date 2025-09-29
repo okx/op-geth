@@ -52,7 +52,6 @@ import (
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
 	"github.com/ethereum/go-ethereum/eth/tracers"
-	"github.com/ethereum/go-ethereum/eth/xlayer/apollo"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
@@ -406,20 +405,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		log.Info("Unprotected transactions allowed")
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, config.GPO, config.Miner.GasPrice)
-
-	// Initialize Apollo client for dynamic configuration if enabled
-	if config.XLayer.Apollo.Enable {
-		nodeCfg := stack.Config()
-		apollo.SetApolloConfig(*config, *nodeCfg)
-		if _, err := apollo.GetInstance(config); err != nil {
-			log.Warn("Failed to initialize Apollo client", "error", err)
-		} else {
-			log.Info("Apollo client initialized for dynamic gas price configuration")
-
-			// Start listening for gas price configuration changes
-			go eth.listenApollo(context.Background(), config)
-		}
-	}
 
 	// Set up migration configuration if configured
 	if config.XLayer.LegacyPp.MigrationBlock != nil && config.XLayer.LegacyPp.PPRPCUrl != "" {

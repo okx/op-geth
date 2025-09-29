@@ -34,7 +34,6 @@ var (
 // If an instance already exists, it returns the existing instance.
 // To reinitialize with new config, call ResetInstance() first.
 func GetInstance(ethCfg *ethconfig.Config) (*Client, error) {
-	log.Info("apollo client called get instance 37")
 	mu.RLock()
 	if instance != nil {
 		mu.RUnlock()
