@@ -239,6 +239,9 @@ type Block struct {
 	// inter-peer block relay.
 	ReceivedAt   time.Time
 	ReceivedFrom interface{}
+
+	// For X Layer, realtime
+	RealtimeEnabled bool
 }
 
 // "external" block encoding. used for eth protocol, etc.

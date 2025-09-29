@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/params"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -164,14 +165,20 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.chain.engine.Finalize(p.chain, header, tracingStateDB, block.Body())
 
+	// For X Layer, realtime
+	var changeset *realtimeTypes.Changeset
+	if block.RealtimeEnabled {
+		changeset = statedb.GenerateChangeset()
+	}
+
 	return &ProcessResult{
 		Receipts: receipts,
 		Requests: requests,
 		Logs:     allLogs,
 		GasUsed:  *usedGas,
-
 		// For X Layer
-		InnerTxs: allInnerTxs,
+		InnerTxs:  allInnerTxs,
+		Changeset: changeset,
 	}, nil
 }
 

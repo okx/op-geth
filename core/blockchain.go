@@ -286,7 +286,8 @@ type BlockChain struct {
 	lastForkReadyAlert time.Time // Last time there was a fork readiness print out
 
 	// For X Layer, realtime
-	realtimeFinishChan chan realtimeTypes.FinishedEntry
+	realtimeFinishChan    chan realtimeTypes.FinishedEntry
+	realtimeBlockInfoChan chan *realtimeTypes.BlockInfo
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -2095,6 +2096,11 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	if err != nil {
 		return nil, err
 	}
+	// For X Layer, realtime
+	if block.RealtimeEnabled {
+		bc.RealtimeSendConfirmedBlock(block, res.Changeset)
+	}
+
 	// Update the metrics touched during block commit
 	accountCommitTimer.Update(statedb.AccountCommits)   // Account commits are complete, we can mark them
 	storageCommitTimer.Update(statedb.StorageCommits)   // Storage commits are complete, we can mark them
@@ -2578,12 +2584,7 @@ func (bc *BlockChain) SetCanonical(head *types.Block) (common.Hash, error) {
 		context = append(context, []interface{}{"age", common.PrettyAge(timestamp)}...)
 	}
 	// For X Layer, realtime
-	if bc.realtimeFinishChan != nil {
-		bc.realtimeFinishChan <- realtimeTypes.FinishedEntry{
-			Height: head.Number().Uint64(),
-			Root:   head.Header().Root,
-		}
-	}
+	bc.RealtimeUpdateExecutionHeight(head)
 	log.Info("Chain head was updated", context...)
 	return head.Hash(), nil
 }

@@ -6,12 +6,12 @@ import (
 )
 
 type Changeset struct {
-	DeletedAccounts map[common.Address]struct{}                    `json:"deletedAccounts"`
-	BalanceChanges  map[common.Address]*uint256.Int                `json:"balanceChanges"`
-	NonceChanges    map[common.Address]uint64                      `json:"nonceChanges"`
-	CodeHashChanges map[common.Address]common.Hash                 `json:"codeHashChanges"`
-	CodeChanges     map[common.Hash][]byte                         `json:"codeChanges"`
-	StorageChanges  map[common.Address]map[common.Hash]common.Hash `json:"storageChanges"`
+	DeletedAccounts map[common.Address]struct{}
+	BalanceChanges  map[common.Address]*uint256.Int
+	NonceChanges    map[common.Address]uint64
+	CodeHashChanges map[common.Address]common.Hash
+	CodeChanges     map[common.Hash][]byte
+	StorageChanges  map[common.Address]map[common.Hash]common.Hash
 }
 
 func NewChangeset() *Changeset {

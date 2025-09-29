@@ -39,7 +39,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
-	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 	"github.com/holiman/uint256"
 )
 
@@ -101,8 +100,6 @@ type newPayloadResult struct {
 	receipts []*types.Receipt       // Receipts collected during construction
 	requests [][]byte               // Consensus layer requests collected during block construction
 	witness  *stateless.Witness     // Witness is an optional stateless proof
-	// For X Layer, realtime
-	changeset *realtimeTypes.Changeset
 }
 
 // generateParams wraps various settings for generating sealing task.
@@ -254,14 +251,13 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		metrics.GlobalStatsStore.Put(block.Hash(), proposeStats)
 	}
 	return &newPayloadResult{
-		block:     block,
-		fees:      totalFees(block, work.receipts),
-		sidecars:  work.sidecars,
-		stateDB:   work.state,
-		receipts:  work.receipts,
-		requests:  requests,
-		witness:   work.witness,
-		changeset: work.state.GenerateChangeset(),
+		block:    block,
+		fees:     totalFees(block, work.receipts),
+		sidecars: work.sidecars,
+		stateDB:  work.state,
+		receipts: work.receipts,
+		requests: requests,
+		witness:  work.witness,
 	}
 }
 

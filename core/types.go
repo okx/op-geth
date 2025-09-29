@@ -22,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
 // Validator is an interface which defines the standard for block validation. It
@@ -59,5 +60,6 @@ type ProcessResult struct {
 	GasUsed  uint64
 
 	// For X Layer
-	InnerTxs [][]*types.InnerTx // Inner transactions for each transaction in the block
+	InnerTxs  [][]*types.InnerTx // Inner transactions for each transaction in the block
+	Changeset *realtimeTypes.Changeset
 }
