@@ -199,8 +199,7 @@ func (c *Client) LoadConfig() (loaded bool) {
 				loaded = true
 				switch prefix {
 				case L2GasPricer:
-					// TODO: Implement L2GasPricer configuration update logic for op-geth
-					//c.loadL2GasPricer(value)
+					c.loadL2GasPricer(value)
 				}
 				return true
 			})

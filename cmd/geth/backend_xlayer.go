@@ -24,5 +24,6 @@ func addXLayerBackend(stack *node.Node, cfg *gethConfig) {
 		}
 		// Register cleanup function for Apollo
 		stack.RegisterLifecycle(client)
+		client.LoadConfig()
 	}
 }
