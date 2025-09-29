@@ -28,12 +28,10 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -272,14 +270,19 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 			if ReadHeadHeaderHash(db) != common.BytesToHash(kvgenesis) {
 				// Key-value store contains more data than the genesis block, make sure we
 				// didn't freeze anything yet.
-				trueGenesisNumber := getGenesisBlockNumber(db)
-				nextBlockNumber := trueGenesisNumber + 1
+				firstBlockNumber := getFirstBlockNumber(db)
+				var blockNumberShouldNotExistInAncientDb uint64
+				if firstBlockNumber == 0 {
+					blockNumberShouldNotExistInAncientDb = 1
+				} else {
+					blockNumberShouldNotExistInAncientDb = firstBlockNumber
+				}
 
-				if kvblob, _ := db.Get(headerHashKey(nextBlockNumber)); len(kvblob) == 0 {
+				if kvblob, _ := db.Get(headerHashKey(blockNumberShouldNotExistInAncientDb)); len(kvblob) == 0 {
 					printChainMetadata(db)
 					return nil, errors.New("ancient chain segments already extracted, please set --datadir.ancient to the correct path")
 				}
-				// Block after true genesis is still in the database, we're allowed to init a new freezer
+				// Block at firstBlockNumber is still in the database, we're allowed to init a new freezer
 			}
 			// Otherwise, the head header is still the genesis, we're allowed to init a new
 			// freezer.
@@ -685,21 +688,15 @@ func SafeDeleteRange(db ethdb.KeyValueStore, start, end []byte, hashScheme bool,
 	return batch.Write()
 }
 
-// getGenesisBlockNumber returns the actual genesis block number from the database.
+// getFirstBlockNumber returns the actual genesis block number from the database.
 // This is needed for custom genesis logic where the genesis block might not be at block 0.
-func getGenesisBlockNumber(db ethdb.KeyValueStore) uint64 {
+func getFirstBlockNumber(db ethdb.KeyValueStore) uint64 {
 	// First check if there's a genesis block at block 0
 	if genesisHashData, _ := db.Get(headerHashKey(0)); len(genesisHashData) > 0 {
 		genesisHash := common.BytesToHash(genesisHashData)
-		// Try to read the block header to get the number
-		if headerData, _ := db.Get(headerKey(0, genesisHash)); len(headerData) > 0 {
-			var header types.Header
-			if err := rlp.DecodeBytes(headerData, &header); err == nil {
-				// Check if this block has a custom number field
-				if header.Number.Uint64() != 0 {
-					return header.Number.Uint64()
-				}
-			}
+		// Try to read chain config to get LegacyXLayerBlock
+		if config := ReadChainConfig(db, genesisHash); config != nil && config.LegacyXLayerBlock != nil {
+			return config.LegacyXLayerBlock.Uint64()
 		}
 	}
 
