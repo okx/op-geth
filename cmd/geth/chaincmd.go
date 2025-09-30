@@ -965,7 +965,7 @@ func migrateGenesis(ctx *cli.Context) error {
 	if compatErr != nil {
 		utils.Fatalf("Failed to write chain config: %v", compatErr)
 	}
-	log.Info("Successfully wrote genesis state with migration", "database", "chaindata", "hash", hash, "elapsed", time.Since(start))
+	log.Info("Successfully wrote genesis state with migration", "database", "chaindata", "hash", hash.Hex(), "elapsed", time.Since(start))
 
 	// Check if verification is requested
 	if !ctx.Bool("no-verify") {
