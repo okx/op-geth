@@ -265,17 +265,24 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 			// store deletion, but that's fine).
 		} else {
 			// If the freezer is empty, ensure nothing was moved yet from the key-value
-			// store, otherwise we'll end up missing data. We check block #1 to decide
-			// if we froze anything previously or not, but do take care of databases with
-			// only the genesis block.
+			// store, otherwise we'll end up missing data. We check the block after the
+			// true genesis block to decide if we froze anything previously or not.
 			if ReadHeadHeaderHash(db) != common.BytesToHash(kvgenesis) {
 				// Key-value store contains more data than the genesis block, make sure we
 				// didn't freeze anything yet.
-				if kvblob, _ := db.Get(headerHashKey(1)); len(kvblob) == 0 {
+				firstBlockNumber := getFirstBlockNumber(db)
+				var blockNumberShouldNotExistInAncientDb uint64
+				if firstBlockNumber == 0 {
+					blockNumberShouldNotExistInAncientDb = 1
+				} else {
+					blockNumberShouldNotExistInAncientDb = firstBlockNumber
+				}
+
+				if kvblob, _ := db.Get(headerHashKey(blockNumberShouldNotExistInAncientDb)); len(kvblob) == 0 {
 					printChainMetadata(db)
 					return nil, errors.New("ancient chain segments already extracted, please set --datadir.ancient to the correct path")
 				}
-				// Block #1 is still in the database, we're allowed to init a new freezer
+				// Block at firstBlockNumber is still in the database, we're allowed to init a new freezer
 			}
 			// Otherwise, the head header is still the genesis, we're allowed to init a new
 			// freezer.
@@ -679,4 +686,20 @@ func SafeDeleteRange(db ethdb.KeyValueStore, start, end []byte, hashScheme bool,
 		}
 	}
 	return batch.Write()
+}
+
+// getFirstBlockNumber returns the actual genesis block number from the database.
+// This is needed for custom genesis logic where the genesis block might not be at block 0.
+func getFirstBlockNumber(db ethdb.KeyValueStore) uint64 {
+	// First check if there's a genesis block at block 0
+	if genesisHashData, _ := db.Get(headerHashKey(0)); len(genesisHashData) > 0 {
+		genesisHash := common.BytesToHash(genesisHashData)
+		// Try to read chain config to get LegacyXLayerBlock
+		if config := ReadChainConfig(db, genesisHash); config != nil && config.LegacyXLayerBlock != nil {
+			return config.LegacyXLayerBlock.Uint64()
+		}
+	}
+
+	// If no custom number found, return 0 as default
+	return 0
 }
