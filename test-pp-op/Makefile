@@ -12,9 +12,8 @@ DOCKER_COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker
 
 RUN_DOCKER_MOCK_L1_NETWORK := $(DOCKER_COMPOSE) up -d xlayer-mock-l1-network
 
-STOP := $(DOCKER_COMPOSE) down --remove-orphans; \
+PAUSE := $(DOCKER_COMPOSE) down --remove-orphans; \
 	sleep 3; \
-	rm -rf data; \
 	rm -Rf ./l1-geth/consensus/beacondata; \
 	rm -Rf ./l1-geth/consensus/validatordata; \
 	rm -Rf ./l1-geth/consensus/genesis.ssz; \
@@ -30,6 +29,7 @@ STOP := $(DOCKER_COMPOSE) down --remove-orphans; \
 	rm -Rf ./config-op/implementations.json; \
 	git checkout config-op/intent.toml; \
 	git checkout config-op/state.json; \
+
 
 DEPLOY_ERC20_L1 := cd contracts && forge create OKBToken.sol:StandardERC20 --private-key $(SEQUENCER_PRIVATE_KEY) --rpc-url $(L1_RPC_URL) --legacy --broadcast --constructor-args "OKBToken" "OKB" 1000000000
 INIT_ACCOUNT_1 := cast send -f $(SEQUENCER_ADDRESS)  --private-key $(SEQUENCER_PRIVATE_KEY) --value 1000ether $(DEPLOYER_ADDRESS) --legacy --rpc-url $(L1_RPC_URL)
@@ -94,7 +94,7 @@ show-env:
 	@echo "Current ENV: $(ENV)"
 	@echo "Using compose file: $(COMPOSE_FILE)"
 
-.PHONY: local
+.PHONY: run_erigon
 local: stop show-env ## Runs a minimal node
 	echo $(DOCKER_RPC)
 	$(RUN_DOCKER_MOCK_L1_NETWORK)
@@ -105,9 +105,16 @@ local: stop show-env ## Runs a minimal node
 	sleep 5
 	$(DOCKER_COMPOSE) up -d xlayer-rpc
 
+
+.PHONY: pause
+pause: ## Stops all services
+	$(PAUSE)
+	rm -rf data
+
 .PHONY: stop
-stop: ## Stops all services
-	$(STOP)
+stop: pause
+	rm -rf data
+
 
 .PHONY: build-docker
 build-docker: ## Build cdk-erigoin for sequencer and rpc
