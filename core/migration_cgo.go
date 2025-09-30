@@ -777,6 +777,17 @@ func dumpGenesis(genesis *Genesis, outputPath string) {
 	log.Info("dumpGenesis: completed", "elapsed", time.Since(start))
 }
 
+func printL2Info(hash common.Hash, number uint64) {
+	l2Info := map[string]interface{}{
+		"l2": map[string]interface{}{
+			"hash":   hash.String(),
+			"number": number,
+		},
+	}
+	jsonBytes, _ := sonic.MarshalIndent(l2Info, "", "  ")
+	logger.Info("Notice: Update rollup.json file with the following information", "l2", string(jsonBytes))
+}
+
 // SetupGenesisBlockWithMigrationData sets up the genesis block with migration data
 func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.Database, genesis *Genesis, overrides *ChainOverrides, ctx *cli.Context) (*params.ChainConfig, common.Hash, *params.ConfigCompatError, error) {
 	// Get migration path from CLI context
@@ -857,6 +868,12 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 		start := time.Now()
 		cfg, hash, compatErr, setupErr = SetupGenesisBlockWithOverride(chaindb, triedb, genesis, overrides)
 		if smtErr == nil && setupErr == nil {
+			xlayerFirstBlock, err := GenerateFirstXLayerBlock(chaindb, cfg)
+			if err != nil {
+				log.Error("SetupGenesis: failed to generate first xlayer block", "error", err)
+				return
+			}
+			printL2Info(xlayerFirstBlock.Hash(), xlayerFirstBlock.NumberU64())
 			log.Info("SetupGenesis: migration completed successfully", "status", "✅", "elapsed", time.Since(start))
 		}
 	}()
