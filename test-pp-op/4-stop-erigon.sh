@@ -8,8 +8,8 @@ source utils.sh
 cd $PWD_DIR
 
 ## Stop X Layer services
-docker compose stop xlayer-seq
-docker compose stop xlayer-rpc
+${DOCKER_COMPOSE_CMD} stop xlayer-seq
+${DOCKER_COMPOSE_CMD} stop xlayer-rpc
 #
 #docker compose stop xlayer-bridge-service
 #docker compose stop xlayer-bridge-ui

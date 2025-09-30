@@ -1,5 +1,3 @@
-export
-
 ifeq ($(ENV),local)
     COMPOSE_FILE := docker-compose-local.yml
 	include local.env
@@ -89,13 +87,25 @@ mainnet:
 	$(DOCKER_COMPOSE) up -d xlayer-rpc
 
 
+.PHONY: set-env
+set-env:
+	@if [ "$(ENV)" = "local" ]; then \
+		if [ -f local.env ]; then \
+			cp local.env .env; \
+			echo "Using local.env -> .env"; \
+		else \
+			echo "local.env not found"; \
+			exit 1; \
+		fi; \
+	fi
+
 .PHONY: show-env
 show-env:
 	@echo "Current ENV: $(ENV)"
 	@echo "Using compose file: $(COMPOSE_FILE)"
 
 .PHONY: run_erigon
-run_erigon: stop show-env ## Runs a minimal node
+run_erigon: stop set-env show-env ## Runs a minimal node
 	echo $(DOCKER_RPC)
 	$(RUN_DOCKER_MOCK_L1_NETWORK)
 	sleep 3

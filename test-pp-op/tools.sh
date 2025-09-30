@@ -20,4 +20,5 @@ else
   MD5SUM_CMD=md5sum
 fi
 
-DOCKER_COMPOSE_CMD := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+DOCKER_COMPOSE_CMD=$(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+echo "${DOCKER_COMPOSE_CMD}"
