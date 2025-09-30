@@ -1,10 +1,11 @@
-include .env
 export
 
 ifeq ($(ENV),local)
     COMPOSE_FILE := docker-compose-local.yml
+	include local.env
 else
     COMPOSE_FILE := docker-compose.yml
+	include testnet.env
 endif
 
 DOCKER_COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose") -f ${COMPOSE_FILE}
