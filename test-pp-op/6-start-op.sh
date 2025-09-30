@@ -141,11 +141,11 @@ add_game_type_via_transactor() {
       "
 }
 
-docker compose up -d op-batcher
+DOCKER_COMPOSE_CMD up -d op-batcher
 
 sleep 10
 # Check for L2 genesis hash mismatch
-LOG_OUTPUT=$(docker compose logs op-seq 2>&1 | tail -20)
+LOG_OUTPUT=$(DOCKER_COMPOSE_CMD logs op-seq 2>&1 | tail -20)
 if echo "$LOG_OUTPUT" | grep -q "expected L2 genesis hash to match L2 block at genesis block number"; then
     echo "❌ L2 genesis hash mismatch detected!"
     echo "Error details:"
@@ -153,7 +153,7 @@ if echo "$LOG_OUTPUT" | grep -q "expected L2 genesis hash to match L2 block at g
     exit 1
 fi
 
-docker compose up -d op-rpc
+DOCKER_COMPOSE_CMD up -d op-rpc
 
 sleep 10
 
@@ -183,7 +183,7 @@ L2_CHAIN_ID=$(cast call --rpc-url $L1_RPC_URL $PERMISSIONED_GAME "l2ChainId()")
 add_game_type_via_transactor 1 true $TEMP_CLOCK_EXTENSION $TEMP_MAX_CLOCK_DURATION $ABSOLUTE_PRESTATE
 
 export GAME_TYPE=1
-docker compose up -d op-proposer
+DOCKER_COMPOSE_CMD up -d op-proposer
 
 echo "Waiting for op-proposer to create a game..."
 GAME_CREATED=false
@@ -209,7 +209,7 @@ if [ "$GAME_CREATED" = false ]; then
 fi
 
 echo "🛑 Stopping op-proposer..."
-docker compose stop op-proposer
+DOCKER_COMPOSE_CMD stop op-proposer
 
 echo "⏰ Sleeping for ($TEMP_MAX_CLOCK_DURATION seconds)..."
 sleep $TEMP_MAX_CLOCK_DURATION
@@ -306,7 +306,7 @@ docker run --rm \
 export GAME_TYPE=0
 
 sleep $TEMP_GAME_WINDOW
-docker compose up -d op-proposer op-challenger op-dispute-mon
+DOCKER_COMPOSE_CMD up -d op-proposer op-challenger op-dispute-mon
 #
 ## Run appropriate state check based on mode
 #if [ "$CHECK_REGENESIS_STRESS_TEST" = "true" ]; then
