@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/realtime/realtimeapi"
@@ -173,55 +172,6 @@ func TestRealtimeBenchmarkERC20TransferConfirmation(t *testing.T) {
 	// Log out metrics
 	fmt.Printf("Avg RT erc20 tx transfer confirmation took: %s\n", avgRealtimeBalanceDuration)
 	fmt.Printf("Avg ETH erc20 tx transfer confirmation took: %s\n", avgEthBalanceDuration)
-}
-
-func TestRealtimeBenchmarNewHeadsSubscription(t *testing.T) {
-	ctx := context.Background()
-	wsClient, err := rpc.Dial(DefaultL2NetworkWSURL)
-	require.NoError(t, err)
-
-	// Benchmark variables
-	var totalSubTimeDiff time.Duration
-
-	realtimeMsgCh := make(chan realtimeapi.RealtimeSubResult)
-	realtimeSub, err := wsClient.Subscribe(ctx, "eth", realtimeMsgCh, "realtime", map[string]interface{}{"NewHeads": true, "TransactionExtraInfo": false, "TransactionReceipt": false, "TransactionInnerTxs": false})
-	require.NoError(t, err)
-	defer realtimeSub.Unsubscribe()
-
-	ethMsgCh := make(chan types.Header)
-	ethSub, err := wsClient.Subscribe(ctx, "eth", ethMsgCh, "newHeads")
-	require.NoError(t, err)
-	defer ethSub.Unsubscribe()
-
-	// Benchmark realtime vs eth subscibe new block headers
-	heights := make(map[int64]time.Time)
-	count := 0
-	for count < Iterations {
-		select {
-		case msg := <-realtimeMsgCh:
-			if msg.Header != nil {
-				height := msg.Header.Number.Int64()
-				heights[height] = time.Now()
-			}
-		case msg := <-ethMsgCh:
-			height := msg.Number.Int64()
-			_, ok := heights[height]
-			if ok {
-				timeDiff := time.Since(heights[height])
-				count++
-				if count == 1 {
-					continue
-				}
-				totalSubTimeDiff += timeDiff
-				fmt.Printf("RT newHeads sub is faster than ETH newHeads sub by: %s\n", timeDiff)
-			}
-		case err := <-realtimeSub.Err():
-			t.Fatal(err)
-		}
-	}
-
-	avgTimeDiff := time.Duration(int64(totalSubTimeDiff) / int64(Iterations-1))
-	fmt.Printf("Avg RT newHeads sub is faster than ETH newHeads sub by: %s\n", avgTimeDiff)
 }
 
 func TestRealtimeBenchmarNewTransactionSubscription(t *testing.T) {

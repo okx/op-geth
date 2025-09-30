@@ -197,6 +197,7 @@ func (msg TransactionMessage) Validate() error {
 func (msg TransactionMessage) MarshalJSON() ([]byte, error) {
 	type TransactionMessage struct {
 		BlockNumber         uint64                   `json:"blockNumber"`
+		BlockTime           uint64                   `json:"blockTime"`
 		Type                uint8                    `json:"type"`
 		Hash                common.Hash              `json:"hash"`
 		ChainID             *big.Int                 `json:"chainId"`
@@ -225,6 +226,7 @@ func (msg TransactionMessage) MarshalJSON() ([]byte, error) {
 
 	var enc TransactionMessage
 	enc.BlockNumber = msg.BlockNumber
+	enc.BlockTime = msg.BlockTime
 	enc.Type = msg.Type
 	enc.Hash = msg.Hash
 	enc.ChainID = msg.ChainID

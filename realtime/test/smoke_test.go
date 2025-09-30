@@ -165,7 +165,7 @@ func TestRealtimeRPC(t *testing.T) {
 	t.Run("RealtimeCall", func(t *testing.T) {
 		data, err := erc20ABI.Pack("balanceOf", fromAddress)
 		require.NoError(t, err)
-		value, err := client.RealtimeCall(ctx, testAddress, erc20Address, "0x100000", "0x1", "0x0", fmt.Sprintf("0x%x", data))
+		value, err := client.RealtimeCall(ctx, testAddress, erc20Address, "0x100000", "0x0", fmt.Sprintf("0x%x", data))
 		require.NoError(t, err)
 		require.Equal(t, "0x00000000000000000000000000000000000000000052b7d2dcc80cd2e4000000", value, fmt.Sprintf("Balance of %s should be equal to 1000000000000000000000", fromAddress))
 		fmt.Printf("RealtimeCall result for erc20 contract %s calling method balanceOf %s: %s\n", erc20Address, fromAddress, value)
@@ -203,7 +203,7 @@ func TestRealtimeRPC(t *testing.T) {
 		data, err := erc20ABI.Pack("balanceOf", fromAddress)
 		require.NoError(t, err)
 
-		startValue, err := client.RealtimeCall(ctx, testAddress, erc20Address, "0x100000", "0x1", "0x0", fmt.Sprintf("0x%x", data))
+		startValue, err := client.RealtimeCall(ctx, testAddress, erc20Address, "0x100000", "0x0", fmt.Sprintf("0x%x", data))
 		require.NoError(t, err)
 		require.Equal(t, "0x00000000000000000000000000000000000000000052b7d2dcc80cd2e4000000", startValue, fmt.Sprintf("Balance of %s should be equal to 1e+26", fromAddress))
 
@@ -221,7 +221,7 @@ func TestRealtimeRPC(t *testing.T) {
 		require.NotNil(t, receipt)
 		targetBlockNumber := receipt.BlockNumber.Uint64()
 
-		correctValue, err := client.RealtimeCall(ctx, testAddress, erc20Address, "0x100000", "0x1", "0x0", fmt.Sprintf("0x%x", data))
+		correctValue, err := client.RealtimeCall(ctx, testAddress, erc20Address, "0x100000", "0x0", fmt.Sprintf("0x%x", data))
 		require.NoError(t, err)
 		require.Equal(t, "0x00000000000000000000000000000000000000000052b7d2cee7561f3c9c0000", correctValue, fmt.Sprintf("Balance of %s should be equal to 9.9999999e+25 after transfer", fromAddress))
 		require.NotEqual(t, startValue, correctValue)
@@ -231,7 +231,7 @@ func TestRealtimeRPC(t *testing.T) {
 		err = WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
 		require.NoError(t, err)
 
-		endValue, err := client.RealtimeCall(ctx, testAddress, erc20Address, "0x100000", "0x1", "0x0", fmt.Sprintf("0x%x", data))
+		endValue, err := client.RealtimeCall(ctx, testAddress, erc20Address, "0x100000", "0x0", fmt.Sprintf("0x%x", data))
 		require.NoError(t, err)
 		require.NotEqual(t, endValue, correctValue)
 		require.Equal(t, "0x00000000000000000000000000000000000000000052b7d2c1069f6b95380000", endValue, fmt.Sprintf("Balance of %s should be equal to 9.9999998e+25 after transfer", fromAddress))

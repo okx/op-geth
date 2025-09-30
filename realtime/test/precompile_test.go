@@ -53,7 +53,7 @@ func TestPrecompile(t *testing.T) {
 	}
 
 	// Do eth call on precompile contract to execute sha256 operation with RT cache layer
-	result, err := client.RealtimeCall(ctx, common.HexToAddress(DefaultL2AdminAddress), precompileCallerAddr, "0x37E11D600", "0x1", "0x0", "0x4935008e")
+	result, err := client.RealtimeCall(ctx, common.HexToAddress(DefaultL2AdminAddress), precompileCallerAddr, "0x37E11D600", "0x0", "0x4935008e")
 	require.NoError(t, err)
 	require.Equal(t, "0x", result)
 }

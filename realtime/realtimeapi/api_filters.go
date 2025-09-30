@@ -54,6 +54,10 @@ func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.S
 					}
 					result.Header = msg.BlockMsg.Header
 					result.BlockTime = msg.BlockMsg.Header.Time
+					err = notifier.Notify(rpcSub.ID, result)
+					if err != nil {
+						log.Warn("[realtime subscription] error while notifying subscription", "err", err)
+					}
 				}
 				if msg.TxMsg != nil {
 					_, tx, receipt, innerTxs, err := msg.TxMsg.GetAllTxData()
@@ -99,10 +103,10 @@ func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.S
 					if criteria.TransactionInnerTxs {
 						result.InnerTxs = innerTxs
 					}
-				}
-				err = notifier.Notify(rpcSub.ID, result)
-				if err != nil {
-					log.Warn("[realtime subscription] error while notifying subscription", "err", err)
+					err = notifier.Notify(rpcSub.ID, result)
+					if err != nil {
+						log.Warn("[realtime subscription] error while notifying subscription", "err", err)
+					}
 				}
 			case <-rpcSub.Err():
 				return

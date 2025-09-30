@@ -339,7 +339,7 @@ func TestRealtimeComparison(t *testing.T) {
 			data, err := erc20ABI.Pack("balanceOf", fromAddress)
 			require.NoError(t, err)
 
-			realtimeCall, err := client.RealtimeCall(ctx, testAddress, erc20Address, "0x100000", "0x1", "0x0", fmt.Sprintf("0x%x", data))
+			realtimeCall, err := client.RealtimeCall(ctx, testAddress, erc20Address, "0x100000", "0x0", fmt.Sprintf("0x%x", data))
 			require.NoError(t, err)
 
 			callArgs := map[string]interface{}{

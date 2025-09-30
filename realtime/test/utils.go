@@ -400,7 +400,7 @@ func GetContractAddressFromFactory(t *testing.T, ctx context.Context, client *rt
 	// Pack the call to computeAddress
 	computeInput, err := factoryABI.Pack("computeAddress", destroyBytecode, salt)
 	require.NoError(t, err)
-	result, err := client.RealtimeCall(ctx, common.HexToAddress(DefaultL2AdminAddress), factoryAddr, "0x300000", "0x1", "0x0", fmt.Sprintf("0x%x", computeInput))
+	result, err := client.RealtimeCall(ctx, common.HexToAddress(DefaultL2AdminAddress), factoryAddr, "0x300000", "0x0", fmt.Sprintf("0x%x", computeInput))
 	require.NoError(t, err)
 
 	// Unpack the result
@@ -466,7 +466,7 @@ func GetContractAddressFromCreateDestroy(t *testing.T, ctx context.Context, clie
 	// Pack the call to computeAddress
 	computeInput, err := factoryABI.Pack("computeAddress", destroyBytecode, salt)
 	require.NoError(t, err)
-	result, err := client.RealtimeCall(ctx, common.HexToAddress(DefaultL2AdminAddress), createDestroyAddr, "0x300000", "0x1", "0x0", fmt.Sprintf("0x%x", computeInput))
+	result, err := client.RealtimeCall(ctx, common.HexToAddress(DefaultL2AdminAddress), createDestroyAddr, "0x300000", "0x0", fmt.Sprintf("0x%x", computeInput))
 	require.NoError(t, err)
 
 	// Unpack the result
@@ -632,7 +632,7 @@ func RevertReasonRealtime(
 		return "", err
 	}
 
-	hex, err := client.RealtimeCall(ctx, from, *tx.To(), fmt.Sprintf("0x%x", tx.Gas()), fmt.Sprintf("0x%x", tx.GasPrice()), fmt.Sprintf("0x%x", tx.Value()), fmt.Sprintf("0x%x", tx.Data()))
+	hex, err := client.RealtimeCall(ctx, from, *tx.To(), fmt.Sprintf("0x%x", tx.Gas()), fmt.Sprintf("0x%x", tx.Value()), fmt.Sprintf("0x%x", tx.Data()))
 	if err != nil {
 		return "", err
 	}

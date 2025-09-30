@@ -44,14 +44,13 @@ func (rc *RealtimeClient) RealtimeBlockNumber(ctx context.Context, tag string) (
 }
 
 // RealtimeCall executes a new message call immediately without creating a transaction in real-time
-func (rc *RealtimeClient) RealtimeCall(ctx context.Context, from, to common.Address, gas string, gasPrice string, value string, data string) (string, error) {
+func (rc *RealtimeClient) RealtimeCall(ctx context.Context, from, to common.Address, gas string, value string, data string) (string, error) {
 	txParams := map[string]any{
-		"from":     from,
-		"to":       to,
-		"gas":      gas,
-		"gasPrice": gasPrice,
-		"value":    value,
-		"data":     data,
+		"from":  from,
+		"to":    to,
+		"gas":   gas,
+		"value": value,
+		"data":  data,
 	}
 
 	var hex hexutil.Bytes
@@ -233,11 +232,7 @@ func (rc *RealtimeClient) RealtimeGetTokenBalance(
 	}
 
 	// Make the realtime eth_call
-	gasprice, err := rc.SuggestGasPrice(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get gas price: %v", err)
-	}
-	result, err := rc.RealtimeCall(ctx, fromAddress, erc20Addr, "0x100000", fmt.Sprintf("0x%x", gasprice), "0x0", fmt.Sprintf("0x%x", data))
+	result, err := rc.RealtimeCall(ctx, fromAddress, erc20Addr, "0x100000", "0x0", fmt.Sprintf("0x%x", data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call contract: %v", err)
 	}
