@@ -19,3 +19,5 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 else
   MD5SUM_CMD=md5sum
 fi
+
+DOCKER_COMPOSE_CMD := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
