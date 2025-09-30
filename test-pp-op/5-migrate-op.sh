@@ -7,27 +7,6 @@ source utils.sh
 
 cd $PWD_DIR
 
-## Stop X Layer services
-#docker compose stop xlayer-seq
-#docker compose stop xlayer-rpc
-#
-#docker compose stop xlayer-bridge-service
-#docker compose stop xlayer-bridge-ui
-#docker compose stop xlayer-agg-sender
-
-## Get fork block number and parent hash
-#LOG_OUTPUT=$(docker logs xlayer-seq 2>&1)
-#FORK_BLOCK=$(echo "$LOG_OUTPUT" | grep "Finish block" | tail -1 | sed -n 's/.*Finish block \([0-9]*\) with.*/\1/p')
-## Add 1 to FORK_BLOCK
-#FORK_BLOCK=$((FORK_BLOCK + 1))
-#echo "FORK_BLOCK=$FORK_BLOCK"
-
-FORK_BLOCK=38068805
-PARENT_HASH=0x0000000000000000000000000000000000000000000000000000000000000000
-sed_inplace "s/FORK_BLOCK=.*/FORK_BLOCK=$FORK_BLOCK/" .env
-#PARENT_HASH=$(echo "$LOG_OUTPUT" | grep "RPC Daemon notified of new headers" | tail -1 | sed -n 's/.*hash=\([0-9a-fx]*\) .*/\1/p')
-#echo "PARENT_HASH=$PARENT_HASH"
-sed_inplace "s/PARENT_HASH=.*/PARENT_HASH=$PARENT_HASH/" .env
 
 #DATA_DIR="data"
 #if [ $CHECK_TYPE = "mainnet" ]; then
