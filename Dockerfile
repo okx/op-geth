@@ -14,20 +14,23 @@ COPY go.sum /go-ethereum/
 RUN cd /go-ethereum && go mod download
 
 ADD . /go-ethereum
-RUN cd /go-ethereum && go run build/ci.go install -static ./cmd/geth
+# Build both geth and devp2p tools
+RUN cd /go-ethereum && go run build/ci.go install -static ./cmd/geth ./cmd/devp2p
 
 # Pull Geth into a second stage deploy alpine container
-FROM alpine:latest
+FROM alpine:latest AS base
 
 RUN apk add --no-cache ca-certificates
+# Copy both geth and devp2p binaries
 COPY --from=builder /go-ethereum/build/bin/geth /usr/local/bin/
+COPY --from=builder /go-ethereum/build/bin/devp2p /usr/local/bin/
 
+LABEL commit="$COMMIT" version="$VERSION" buildnum="$BUILDNUM"
+
+FROM base AS geth
 EXPOSE 8545 8546 30303 30303/udp
 ENTRYPOINT ["geth"]
 
-# Add some metadata labels to help programmatic image consumption
-ARG COMMIT=""
-ARG VERSION=""
-ARG BUILDNUM=""
-
-LABEL commit="$COMMIT" version="$VERSION" buildnum="$BUILDNUM"
+FROM base AS devp2p
+EXPOSE 30303 30303/udp
+ENTRYPOINT ["devp2p"]
