@@ -199,4 +199,4 @@ fi
 
 prepare
 #migrate
-post_migrate
+#post_migrate
