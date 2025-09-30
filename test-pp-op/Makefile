@@ -95,7 +95,7 @@ show-env:
 	@echo "Using compose file: $(COMPOSE_FILE)"
 
 .PHONY: run_erigon
-local: stop show-env ## Runs a minimal node
+run_erigon: stop show-env ## Runs a minimal node
 	echo $(DOCKER_RPC)
 	$(RUN_DOCKER_MOCK_L1_NETWORK)
 	sleep 3
