@@ -109,7 +109,6 @@ local: stop show-env ## Runs a minimal node
 .PHONY: pause
 pause: ## Stops all services
 	$(PAUSE)
-	rm -rf data
 
 .PHONY: stop
 stop: pause
