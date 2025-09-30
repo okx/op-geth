@@ -2,6 +2,7 @@ set -e
 set -x
 source .env
 source utils.sh
+source tools.sh
 
 # Function to add game type via Transactor
 add_game_type_via_transactor() {

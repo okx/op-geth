@@ -24,7 +24,7 @@ prepare() {
       echo "❌ ERROR: ./config-op/rollup.json not found!"
       exit 1
     fi
-    
+
   cp ./config-op/genesis.json ./config-op/genesis-op-raw.json
 
   #if [ $CHECK_REGENESIS_STRESS_TEST = "true" ]; then
