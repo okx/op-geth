@@ -14,6 +14,17 @@ cd $PWD_DIR
 #fi
 
 prepare() {
+  # Check required files exist
+    if [ ! -f "./config-op/genesis.json" ]; then
+      echo "❌ ERROR: ./config-op/genesis.json not found!"
+      exit 1
+    fi
+
+    if [ ! -f "./config-op/rollup.json" ]; then
+      echo "❌ ERROR: ./config-op/rollup.json not found!"
+      exit 1
+    fi
+    
   cp ./config-op/genesis.json ./config-op/genesis-op-raw.json
 
   #if [ $CHECK_REGENESIS_STRESS_TEST = "true" ]; then
@@ -114,19 +125,20 @@ prepare() {
 }
 
 migrate() {
-
 # init op-geth-seq and op-geth-rpc
 export OP_DATA_DIR=/tmp/data/op_geth_data \
-export OP_GENESIS_PATH=$CONFIG_DIR/genesis-op-after-number.json \
-export ERIGON_CHAINDATA_DIR=~/dev/okx/xlayer-erigon/test-pp-op/data_state2/rpc/chaindata/
-export ERIGON_SMTDATA_DIR=~/dev/okx/xlayer-erigon/test-pp-op/data_state2/rpc/smt
-~/go/bin/geth --datadir=${OP_DATA_DIR} --gcmode=archive migrate --state.scheme=hash --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=${ERIGON_CHAINDATA_DIR} --smt-db-path=${ERIGON_SMTDATA_DIR} ${OP_GENESIS_PATH}
+export OP_GENESIS_PATH=/data1/op-geth/test-pp-op/config-op/genesis-op-after-number.json \
+export ERIGON_CHAINDATA_DIR=/data1/op-geth/test-pp-op/data/rpc/chaindata/ \
+export ERIGON_SMTDATA_DIR=/data1/op-geth/test-pp-op/data/rpc/smt/ \
+export GETH_CMD=/data1/op-geth/build/bin/geth
+${GETH_CMD} --datadir=${OP_DATA_DIR} --gcmode=archive migrate --state.scheme=hash --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=${ERIGON_CHAINDATA_DIR} --smt-db-path=${ERIGON_SMTDATA_DIR} ${OP_GENESIS_PATH} 2>&1 | tee migrate.log
 }
 
 post_migrate() {
 
-#NEW_BLOCK_HASH=$(grep "Successfully wrote genesis state" init.log | jq -r .hash)
-NEW_BLOCK_HASH=0xa2c438c41bc5c9f9a5825e9f3985c306bb2a05c65a73c535daf768bb50864930
+NEW_BLOCK_HASH=$(grep 'Successfully wrote genesis state' migrate.log | tail -1 | sed -n 's/.*hash=\(0x[0-9a-fA-F]\{64\}\).*/\1/p')
+echo "NEW_BLOCK_HASH"
+
 ROLLUP_CONTENT=$(jq ".genesis.l2.hash = \"$NEW_BLOCK_HASH\"" config-op/rollup.json)
 echo $ROLLUP_CONTENT | jq > config-op/rollup.json
 
@@ -197,6 +209,6 @@ fi
 }
 
 
-prepare
-#migrate
+#prepare
+migrate
 #post_migrate
