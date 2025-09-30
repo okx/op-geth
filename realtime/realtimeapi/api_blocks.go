@@ -2,6 +2,7 @@ package realtimeapi
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -36,7 +37,7 @@ func (api *RealtimeAPIImpl) GetBlockTransactionCountByNumber(ctx context.Context
 		return backend.GetBlockTransactionCountByNumber(ctx, blockNr)
 	}
 
-	blockNum, _, _, err := api.getBlockNumber(blockNr)
+	blockNum, _, isPending, err := api.getBlockNumber(blockNr)
 	if err != nil {
 		backend := ethapi.NewTransactionAPI(api.b, nil)
 		return backend.GetBlockTransactionCountByNumber(ctx, blockNr)
@@ -44,8 +45,13 @@ func (api *RealtimeAPIImpl) GetBlockTransactionCountByNumber(ctx context.Context
 
 	_, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
-		backend := ethapi.NewTransactionAPI(api.b, nil)
-		return backend.GetBlockTransactionCountByNumber(ctx, blockNr)
+		if isPending {
+			numOfTx := hexutil.Uint(0)
+			return &numOfTx, nil
+		} else {
+			backend := ethapi.NewTransactionAPI(api.b, nil)
+			return backend.GetBlockTransactionCountByNumber(ctx, blockNr)
+		}
 	}
 
 	txs, ok := api.cacheDB.Stateless.GetBlockTxs(blockNum)
@@ -85,13 +91,12 @@ func (api *RealtimeAPIImpl) GetBlockByNumber(ctx context.Context, blockNr rpc.Bl
 		return backend.GetBlockByNumber(ctx, blockNr, fullTx)
 	}
 
-	blockNum, _, _, err := api.getBlockNumber(blockNr)
+	blockNum, _, isPending, err := api.getBlockNumber(blockNr)
 	if err != nil {
 		backend := ethapi.NewBlockChainAPI(api.b)
 		return backend.GetBlockByNumber(ctx, blockNr, fullTx)
 	}
-
-	response, err := api.tryGetBlockResponseFromNumber(ctx, blockNum, fullTx)
+	response, err := api.tryGetBlockResponseFromNumber(ctx, blockNum, fullTx, isPending)
 	if err != nil {
 		backend := ethapi.NewBlockChainAPI(api.b)
 		return backend.GetBlockByNumber(ctx, blockNr, fullTx)
@@ -101,8 +106,16 @@ func (api *RealtimeAPIImpl) GetBlockByNumber(ctx context.Context, blockNr rpc.Bl
 		for _, field := range []string{"hash", "nonce", "miner"} {
 			response[field] = nil
 		}
+		if fullTx {
+			if txs, ok := response["transactions"].([]interface{}); ok {
+				for _, tx := range txs {
+					if rpcTx, ok := tx.(*ethapi.RPCTransaction); ok {
+						rpcTx.BlockHash = nil
+					}
+				}
+			}
+		}
 	}
-
 	return response, nil
 }
 
@@ -117,8 +130,7 @@ func (api *RealtimeAPIImpl) GetBlockByHash(ctx context.Context, hash common.Hash
 		backend := ethapi.NewBlockChainAPI(api.b)
 		return backend.GetBlockByHash(ctx, hash, fullTx)
 	}
-
-	response, err := api.tryGetBlockResponseFromNumber(ctx, blockNum, fullTx)
+	response, err := api.tryGetBlockResponseFromNumber(ctx, blockNum, fullTx, false)
 	if err != nil {
 		backend := ethapi.NewBlockChainAPI(api.b)
 		return backend.GetBlockByHash(ctx, hash, fullTx)
@@ -133,7 +145,7 @@ func (api *RealtimeAPIImpl) GetBlockInternalTransactions(ctx context.Context, bl
 		return backend.GetBlockInternalTransactions(ctx, blockNr)
 	}
 
-	blockNum, _, _, err := api.getBlockNumber(blockNr)
+	blockNum, _, isPending, err := api.getBlockNumber(blockNr)
 	if err != nil {
 		backend := ethapi.NewTransactionAPI(api.b, nil)
 		return backend.GetBlockInternalTransactions(ctx, blockNr)
@@ -141,8 +153,17 @@ func (api *RealtimeAPIImpl) GetBlockInternalTransactions(ctx context.Context, bl
 
 	_, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
-		backend := ethapi.NewTransactionAPI(api.b, nil)
-		return backend.GetBlockInternalTransactions(ctx, blockNr)
+		if isPending {
+			// Pending block not open yet. Default to latest block
+			blockNum = api.cacheDB.GetHighestConfirmHeight()
+			_, _, _, ok = api.cacheDB.Stateless.GetBlockInfo(blockNum)
+			if !ok {
+				return nil, fmt.Errorf("header not found for block %d", blockNum)
+			}
+		} else {
+			backend := ethapi.NewTransactionAPI(api.b, nil)
+			return backend.GetBlockInternalTransactions(ctx, blockNr)
+		}
 	}
 
 	txHashes, ok := api.cacheDB.Stateless.GetBlockTxs(blockNum)

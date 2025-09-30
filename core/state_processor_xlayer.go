@@ -36,7 +36,7 @@ func ApplyTransaction_XLayer(evm *vm.EVM, gp *GasPool, statedb *state.StateDB, h
 		return nil, nil, nil, err
 	}
 	// Create a new context to be used in the EVM environment
-	return ApplyTransactionWithEVM_XLayer(msg, gp, statedb, header.Number, header.Hash(), tx, usedGas, evm, shouldFinalize)
+	return ApplyTransactionWithEVM_XLayer(msg, gp, statedb, header.Number, common.Hash{}, tx, usedGas, evm, shouldFinalize)
 }
 
 func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, shouldFinalize bool) (receipt *types.Receipt, innerTxs []*types.InnerTx, entries *state.Entries, err error) {

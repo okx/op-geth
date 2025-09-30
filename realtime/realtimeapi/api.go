@@ -167,10 +167,20 @@ func (api *RealtimeAPIImpl) tryGetBlockResponseFromNumber(
 	ctx context.Context,
 	blockNum uint64,
 	fullTx bool,
+	isPending bool,
 ) (map[string]interface{}, error) {
 	header, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
-		return nil, fmt.Errorf("header not found for block %d", blockNum)
+		if isPending {
+			// Pending block not open yet. Default to latest block
+			blockNum = api.cacheDB.GetHighestConfirmHeight()
+			header, _, _, ok = api.cacheDB.Stateless.GetBlockInfo(blockNum)
+			if !ok {
+				return nil, fmt.Errorf("header not found for block %d", blockNum)
+			}
+		} else {
+			return nil, fmt.Errorf("header not found for block %d", blockNum)
+		}
 	}
 
 	var body types.Body

@@ -28,7 +28,7 @@ func (bm *BlockInfoMap) Get(blockNum uint64) (*types.Header, int64, common.Hash,
 	if exists {
 		return blockInfo.Header, blockInfo.TxCount, blockInfo.Hash, true
 	}
-	return nil, 0, common.Hash{}, exists
+	return nil, 0, common.Hash{}, false
 }
 
 func (bm *BlockInfoMap) GetBlockNumberByHash(blockHash common.Hash) (uint64, bool) {

@@ -2,6 +2,7 @@ package realtimeapi
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -61,7 +62,7 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 		return backend.GetBlockReceipts(ctx, number)
 	}
 
-	blockNum, _, _, err := api.getBlockNumberOrHash(number)
+	blockNum, _, isPending, err := api.getBlockNumberOrHash(number)
 	if err != nil {
 		backend := ethapi.NewBlockChainAPI(api.b)
 		return backend.GetBlockReceipts(ctx, number)
@@ -69,8 +70,17 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 
 	header, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.GetBlockReceipts(ctx, number)
+		if isPending {
+			// Pending block not open yet. Default to latest block
+			blockNum = api.cacheDB.GetHighestConfirmHeight()
+			header, _, blockhash, ok = api.cacheDB.Stateless.GetBlockInfo(blockNum)
+			if !ok {
+				return nil, fmt.Errorf("header not found for block %d", blockNum)
+			}
+		} else {
+			backend := ethapi.NewBlockChainAPI(api.b)
+			return backend.GetBlockReceipts(ctx, number)
+		}
 	}
 
 	txHashes, ok := api.cacheDB.Stateless.GetBlockTxs(blockNum)
