@@ -22,7 +22,7 @@ cd $PWD_DIR
 #FORK_BLOCK=$((FORK_BLOCK + 1))
 #echo "FORK_BLOCK=$FORK_BLOCK"
 
-FORK_BLOCK=100
+FORK_BLOCK=38068805
 PARENT_HASH=0x0000000000000000000000000000000000000000000000000000000000000000
 sed_inplace "s/FORK_BLOCK=.*/FORK_BLOCK=$FORK_BLOCK/" .env
 #PARENT_HASH=$(echo "$LOG_OUTPUT" | grep "RPC Daemon notified of new headers" | tail -1 | sed -n 's/.*hash=\([0-9a-fx]*\) .*/\1/p')
@@ -218,6 +218,6 @@ fi
 }
 
 
-#prepare
+prepare
 #migrate
 post_migrate
