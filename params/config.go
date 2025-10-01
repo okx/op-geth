@@ -437,7 +437,7 @@ type ChainConfig struct {
 	ArrowGlacierBlock   *big.Int `json:"arrowGlacierBlock,omitempty"`   // Eip-4345 (bomb delay) switch block (nil = no fork, 0 = already activated)
 	GrayGlacierBlock    *big.Int `json:"grayGlacierBlock,omitempty"`    // Eip-5133 (bomb delay) switch block (nil = no fork, 0 = already activated)
 	MergeNetsplitBlock  *big.Int `json:"mergeNetsplitBlock,omitempty"`  // Virtual fork after The Merge to use as a network splitter
-
+	LegacyXLayerBlock   *big.Int `json:"legacyXLayerBlock,omitempty"`   // The block number of PP X Layer before migration
 	// Fork scheduling was switched from blocks to timestamps here
 
 	ShanghaiTime *uint64 `json:"shanghaiTime,omitempty"` // Shanghai switch time (nil = no fork, 0 = already on shanghai)
@@ -850,6 +850,14 @@ func (c *ChainConfig) IsOptimismJovian(time uint64) bool {
 // IsOptimismPreBedrock returns true iff this is an optimism node & bedrock is not yet active
 func (c *ChainConfig) IsOptimismPreBedrock(num *big.Int) bool {
 	return c.IsOptimism() && !c.IsBedrock(num)
+}
+
+func (c *ChainConfig) IsXLayer() bool {
+	return c.LegacyXLayerBlock != nil && c.LegacyXLayerBlock.Cmp(big.NewInt(0)) > 0
+}
+
+func (c *ChainConfig) IsXLayerFirstBlock(num *big.Int) bool {
+	return c.LegacyXLayerBlock != nil && c.LegacyXLayerBlock.Cmp(num) == 0
 }
 
 // CheckCompatible checks whether scheduled fork transitions have been imported
