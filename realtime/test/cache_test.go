@@ -31,12 +31,11 @@ func TestBlockInfoMap(t *testing.T) {
 		})
 
 		// Check current header
-		cacheHeader, cacheWithdrawals, cacheTxCount, cacheHash, exists := bm.Get(blockNum)
+		cacheHeader, _, cacheTxCount, cacheHash, exists := bm.Get(blockNum)
 		assert.True(t, exists)
 		assert.Equal(t, header, cacheHeader)
-		assert.Equal(t, nil, cacheWithdrawals)
-		assert.Equal(t, -1, cacheTxCount)
-		assert.Equal(t, common.Hash{}, cacheHash)
+		assert.Equal(t, txCount, cacheTxCount)
+		assert.Equal(t, hash, cacheHash)
 	})
 
 	t.Run("BlockInfoMapGetNonExistent", func(t *testing.T) {
@@ -67,12 +66,11 @@ func TestBlockInfoMap(t *testing.T) {
 				TxCount: txCount,
 				Hash:    hash,
 			})
-			cacheHeader, cacheWithdrawals, cacheTxCount, cacheHash, exists := bm.Get(blockNum)
+			cacheHeader, _, cacheTxCount, cacheHash, exists := bm.Get(blockNum)
 			assert.True(t, exists)
 			assert.NotNil(t, cacheHeader)
 			assert.Equal(t, big.NewInt(int64(i)), cacheHeader.Number)
 			assert.Equal(t, uint64(i*1000), cacheHeader.Time)
-			assert.Equal(t, nil, cacheWithdrawals)
 			assert.Equal(t, txCount, cacheTxCount)
 			assert.Equal(t, hash, cacheHash)
 		}

@@ -10,21 +10,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
-	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 	"github.com/ethereum/go-ethereum/rpc"
 )
-
-type txData struct {
-	tx      *types.Transaction
-	receipt *types.Receipt
-	index   uint
-}
-
-func newTxDataList(size int) *realtimeTypes.OrderedList[txData] {
-	return realtimeTypes.NewOrderedList(size, func(a, b txData) int {
-		return int(a.index) - int(b.index)
-	})
-}
 
 // GetTransactionReceipt implements the realtime eth_getTransactionReceipt.
 // Returns the receipt of a transaction given the transaction's hash.

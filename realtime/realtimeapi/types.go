@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/core/types"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
 type RealtimeSubResult struct {
@@ -56,4 +57,16 @@ func (t RealtimeTag) MarshalJSON() ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("invalid RealtimeTag value: %d", int64(t))
 	}
+}
+
+type txData struct {
+	tx      *types.Transaction
+	receipt *types.Receipt
+	index   uint
+}
+
+func newTxDataList(size int) *realtimeTypes.OrderedList[txData] {
+	return realtimeTypes.NewOrderedList(size, func(a, b txData) int {
+		return int(a.index) - int(b.index)
+	})
 }

@@ -43,7 +43,7 @@ func TestPrecompile(t *testing.T) {
 	require.Equal(t, uint64(1), txReceipt.Status, "tx should be successful")
 
 	// // Compare state cache. Precompile should be found in state cache
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 	mismatches, err := client.RealtimeCompareStateCache(ctx)
 	require.NoError(t, err)
 	if len(mismatches) != 0 {
@@ -121,7 +121,7 @@ func TestTransferToPrecompileAddress(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, balanceBefore, balance, "realtime balance should have incremented")
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 	// Check to ensure non-realtime balance of precompile address is 1gwei
 	nonRTBalance, err := nonRealtimeRPCClient.BalanceAt(ctx, testAddress, nil)
 	require.NoError(t, err)

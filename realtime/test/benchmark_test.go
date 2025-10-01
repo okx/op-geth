@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	Iterations = 11
+	Iterations = 111
 )
 
 func TestRealtimeBenchmarkNativeTransferConfirmation(t *testing.T) {
@@ -115,13 +115,13 @@ func TestRealtimeBenchmarkERC20TransferConfirmation(t *testing.T) {
 
 	// Deploy the contract
 	erc20Address := deployERC20Contract(t, ctx, privateKey, client)
-	transferAmount := new(big.Int).Mul(big.NewInt(1), big.NewInt(1e18)) // Adjust for token decimals (18 in this case)
+	transferAmount := new(big.Int).Mul(big.NewInt(1), big.NewInt(1e18))
 
 	startNonce, err := client.PendingNonceAt(context.Background(), fromAddress)
 	require.NoError(t, err)
 
 	// Benchmark erc20 transfer tx
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 	var totalRealtimeBalanceDuration, totalEthBalanceDuration time.Duration
 	for i := 0; i < Iterations; i++ {
 		ethBalance, err := GetErc20Balance(ctx, nonRtClient, testAddress, erc20Address, nil)
@@ -198,6 +198,7 @@ func TestRealtimeBenchmarNewTransactionSubscription(t *testing.T) {
 	for i := 0; i < Iterations; i++ {
 		// Send tx
 		signedTx := nativeTransferTx(t, ctx, client, big.NewInt(Gwei), testAddress.String())
+		fmt.Printf("Iteration %v:\n", i)
 		fmt.Printf("Sent tx: %s\n", signedTx.Hash().String())
 
 		g, _ := errgroup.WithContext(ctx)
@@ -230,8 +231,6 @@ func TestRealtimeBenchmarNewTransactionSubscription(t *testing.T) {
 			continue
 		}
 		totalRealtimeDuration += subDuration
-
-		fmt.Printf("Iteration %v:\n", i)
 		fmt.Printf("RT newTx sub duration: %s\n", subDuration)
 	}
 

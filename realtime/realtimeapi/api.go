@@ -187,13 +187,23 @@ func (api *RealtimeAPIImpl) tryGetBlockResponseFromNumber(
 	if !ok {
 		return nil, fmt.Errorf("header not found for block %d", blockNum)
 	}
-	transactions := make([]*types.Transaction, 0, len(txHashes))
+	txDataList := newTxDataList(len(txHashes))
 	for _, txHash := range txHashes {
-		if tx, _, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash); exists {
-			transactions = append(transactions, tx)
-		} else {
-			return nil, fmt.Errorf("transaction %s not found in cache", txHash.Hex())
+		txn, receipt, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash)
+		if !exists {
+			return nil, fmt.Errorf("transaction %s not found for block %d", txHash.Hex(), blockNum)
 		}
+		txDataList.Add(txData{
+			tx:      txn,
+			receipt: receipt,
+			index:   receipt.TransactionIndex,
+		})
+		txDataList.Sort()
+	}
+
+	transactions := make(types.Transactions, 0, len(txHashes))
+	for _, txData := range txDataList.Items() {
+		transactions = append(transactions, txData.tx)
 	}
 	var bw types.Withdrawals
 	if withdrawals != nil {

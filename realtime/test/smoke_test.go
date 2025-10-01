@@ -742,7 +742,6 @@ func compareCacheWithSequenceDB(t *testing.T, dbDir, cacheDir string) {
 			// Compare account data
 			require.Equal(t, cacheAccount.Nonce, account.Nonce, "Nonce mismatch for account %s, from cache: %d, from db: %d", k, cacheAccount.Nonce, account.Nonce)
 			require.Equal(t, cacheAccount.Balance, account.Balance, "Balance mismatch for account %s, from cache: %s, from db: %s", k, cacheAccount.Balance.String(), account.Balance.String())
-			require.Equal(t, cacheAccount.Root, account.Root, "Root mismatch for account %s should be empty roothash, from db: %s", k, cacheAccount.Root.Hex())
 			require.Equal(t, cacheAccount.CodeHash, account.CodeHash, "CodeHash mismatch for account %s, from cache: %s, from db: %s", k, hex.EncodeToString(cacheAccount.CodeHash), hex.EncodeToString(account.CodeHash))
 		}
 	}

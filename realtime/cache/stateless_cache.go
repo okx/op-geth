@@ -84,15 +84,16 @@ func (cache *StatelessCache) GetReceipts(ctx context.Context, hash common.Hash) 
 	if !ok {
 		return nil, fmt.Errorf("block tx %s not found in cache", hash.Hex())
 	}
-	receipts := make(types.Receipts, len(txHashes))
-	for i, txHash := range txHashes {
+	receipts := newReceiptsList(len(txHashes))
+	for _, txHash := range txHashes {
 		_, receipt, _, _, ok := cache.GetTxInfo(txHash)
 		if !ok {
 			return nil, fmt.Errorf("receipt %s not found in cache", txHash.Hex())
 		}
-		receipts[i] = receipt
+		receipts.Add(receipt)
+		receipts.Sort()
 	}
-	return receipts, nil
+	return receipts.Items(), nil
 }
 
 // -------------- Debug operations --------------
