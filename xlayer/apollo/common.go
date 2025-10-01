@@ -95,7 +95,6 @@ func (ps *NotificationPubSub[T]) Pub(reply *T) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 	for _, ch := range ps.chans {
-		// TODO
 		ch <- reply
 	}
 }
