@@ -127,8 +127,19 @@ stop: pause
 
 .PHONY: build-docker
 build-docker: ## Build cdk-erigoin for sequencer and rpc
-	#docker build -t cdk-erigon -f ../Dockerfile.local ../
-	./setup_images.sh
+	./build_images.sh --all
+
+.PHONY: build-op-geth
+build-op-geth: ## Build op-geth image only
+	./build_images.sh --op-geth
+
+.PHONY: build-op-stack
+build-op-stack: ## Build op-stack images only
+	./build_images.sh --op-stack
+
+.PHONY: build-force
+build-force: ## Force rebuild all images
+	./build_images.sh --all --force
 
 .PHONY: clean
 clean: stop
