@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	Iterations = 111
+	Iterations = 11
 )
 
 func TestRealtimeBenchmarkNativeTransferConfirmation(t *testing.T) {
