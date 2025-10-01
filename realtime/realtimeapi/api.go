@@ -188,9 +188,9 @@ func (api *RealtimeAPIImpl) tryGetBlockResponseFromNumber(
 		return nil, fmt.Errorf("header not found for block %d", blockNum)
 	}
 	transactions := make([]*types.Transaction, 0, len(txHashes))
-	for idx, txHash := range txHashes {
+	for _, txHash := range txHashes {
 		if tx, _, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash); exists {
-			transactions[idx] = tx
+			transactions = append(transactions, tx)
 		} else {
 			return nil, fmt.Errorf("transaction %s not found in cache", txHash.Hex())
 		}
