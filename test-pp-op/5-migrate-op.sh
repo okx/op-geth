@@ -8,11 +8,6 @@ source utils.sh
 cd $PWD_DIR
 
 
-#DATA_DIR="data"
-#if [ $CHECK_TYPE = "mainnet" ]; then
-#    DATA_DIR="mainnet"
-#fi
-
 prepare() {
   # Check required files exist
     if [ ! -f "./config-op/genesis.json" ]; then
@@ -26,20 +21,10 @@ prepare() {
     fi
 
   cp ./config-op/genesis.json ./config-op/genesis-op-raw.json
-
-  #if [ $CHECK_REGENESIS_STRESS_TEST = "true" ]; then
-  #  ./scripts/regenesis-with-stress-test.sh $DATA_DIR
-  #else
-  #  ./scripts/regenesis.sh $DATA_DIR
-  #fi
-
   cp ./config-op/genesis.json ./config-op/genesis-op-before-number.json
 
-  # modify genesis.json & rollup.json for fork block number and parent hash
   sed_inplace 's/"number": 0/"number": '"$FORK_BLOCK"'/' ./config-op/genesis.json
   sed_inplace 's/"parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"/"parentHash": "'"$PARENT_HASH"'"/' ./config-op/genesis.json
-  # FORK_BLOCK_HEX=$(printf "0x%x" "$FORK_BLOCK")
-  # sed_inplace 's/"number": "0x0"/"number": "'"$FORK_BLOCK_HEX"'"/' ./config-op/genesis.json
   jq '.genesis.l2.number = '"$FORK_BLOCK" ./config-op/rollup.json > temp_rollup.json && mv temp_rollup.json ./config-op/rollup.json
 
   cp ./config-op/genesis.json ./config-op/genesis-op-after-number.json
