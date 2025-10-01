@@ -23,7 +23,7 @@ prepare() {
   cp ./config-op/genesis.json ./config-op/genesis-op-raw.json
   cp ./config-op/genesis.json ./config-op/genesis-op-before-number.json
 
-  sed_inplace 's/"number": 0/"number": '"$FORK_BLOCK"'/' ./config-op/genesis.json
+  jq '.config.legacyXLayerBlock = '"$FORK_BLOCK" ./config-op/genesis.json > temp_genesis.json && mv temp_genesis.json ./config-op/genesis.json
   sed_inplace 's/"parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"/"parentHash": "'"$PARENT_HASH"'"/' ./config-op/genesis.json
   jq '.genesis.l2.number = '"$FORK_BLOCK" ./config-op/rollup.json > temp_rollup.json && mv temp_rollup.json ./config-op/rollup.json
 

@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -16,7 +17,9 @@ import (
 // It reads the genesis block and creates a new block with the same content but with LegacyXLayerBlock number.
 func GenerateFirstXLayerBlock(chainDb ethdb.Database, chainConfig *params.ChainConfig) (*types.Block, error) {
 	// Get genesis block hash
+	fmt.Printf("start generate first block\n")
 	genesisHash := rawdb.ReadCanonicalHash(chainDb, 0)
+	fmt.Println("genesis hash", genesisHash)
 	if (genesisHash == common.Hash{}) {
 		return nil, errors.New("commitXLayerFirstBlock: genesis block not found")
 	}
@@ -27,6 +30,7 @@ func GenerateFirstXLayerBlock(chainDb ethdb.Database, chainConfig *params.ChainC
 	}
 
 	fistXLayerBlockHeader := genesisBlock.Header()
+	fmt.Printf("start generate first block\n")
 	fistXLayerBlockHeader.Number = big.NewInt(int64(chainConfig.LegacyXLayerBlock.Uint64()))
 	log.Info("commitXLayerFirstBlock: override genesis block number", "number", fistXLayerBlockHeader.Number.Uint64(), "configNumber", chainConfig.LegacyXLayerBlock.Uint64())
 
