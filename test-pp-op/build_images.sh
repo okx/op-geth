@@ -2,24 +2,36 @@
 set -e
 set -x
 
-## Show help
-# ./build_images.sh --help
-
-## usage
-#./build_images.sh
-
-## Build only op-geth
-# ./build_images.sh --op-geth
-
-## Build only op-stack images
-# ./build_images.sh --op-stack
-
-## Force rebuild all images
-# ./build_images.sh --all --force
-
-## Force rebuild only op-geth
-# ./build_images.sh --op-geth --force
-
+# =============================================================================
+# Build Images Script
+# =============================================================================
+# This script builds Docker images for the OP-Geth project with support for
+# selective building and force rebuilds.
+#
+# USAGE:
+#   ./build_images.sh [OPTIONS]
+#
+# OPTIONS:
+#   --op-geth     Build op-geth image only
+#   --op-stack    Build op-stack images only (contracts + opstack)
+#   --all         Build all images (default if no options specified)
+#   --force       Force rebuild even if images exist
+#   -h, --help    Show this help message
+#
+# EXAMPLES:
+#   ./build_images.sh                    # Build all images (default)
+#   ./build_images.sh --op-geth          # Build op-geth only
+#   ./build_images.sh --op-stack         # Build op-stack only
+#   ./build_images.sh --all --force      # Force rebuild all images
+#   ./build_images.sh --op-geth --force  # Force rebuild op-geth only
+#   ./build_images.sh --help             # Show help
+#
+# IMAGES BUILT:
+#   - OP-Geth: Ethereum client with OP Stack modifications
+#   - OP-Stack: Core OP Stack components (contracts + opstack)
+#   - Bridge Service: Patched zkevm-bridge-service
+#   - AggKit: OKX aggregation toolkit
+# =============================================================================
 
 source .env
 
