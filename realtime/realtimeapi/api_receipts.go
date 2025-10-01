@@ -10,8 +10,21 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 	"github.com/ethereum/go-ethereum/rpc"
 )
+
+type txData struct {
+	tx      *types.Transaction
+	receipt *types.Receipt
+	index   uint
+}
+
+func newTxDataList(size int) *realtimeTypes.OrderedList[txData] {
+	return realtimeTypes.NewOrderedList(size, func(a, b txData) int {
+		return int(a.index) - int(b.index)
+	})
+}
 
 // GetTransactionReceipt implements the realtime eth_getTransactionReceipt.
 // Returns the receipt of a transaction given the transaction's hash.
@@ -71,7 +84,7 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 		return backend.GetBlockReceipts(ctx, number)
 	}
 
-	header, withdrawals, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
+	header, _, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		if isPending {
 			// Pending block not open yet. Default to latest block
@@ -93,48 +106,40 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 	}
 
 	signer := types.MakeSigner(api.b.ChainConfig(), header.Number, header.Time)
-	result := make([]map[string]interface{}, 0, len(txHashes))
-	transactions := make(types.Transactions, 0, len(txHashes))
-	receipts := make(types.Receipts, 0, len(txHashes))
+	txDataList := newTxDataList(len(txHashes))
 	for _, txHash := range txHashes {
 		txn, receipt, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash)
 		if !exists {
 			backend := ethapi.NewBlockChainAPI(api.b)
 			return backend.GetBlockReceipts(ctx, number)
 		}
-		if blockhash != EmptyBlockHash {
-			receipt.BlockHash = blockhash
-			for _, log := range receipt.Logs {
-				log.BlockHash = blockhash
-			}
-		}
-		transactions = append(transactions, txn)
-		receipts = append(receipts, receipt)
+		txDataList.Add(txData{
+			tx:      txn,
+			receipt: receipt,
+			index:   receipt.TransactionIndex,
+		})
+		txDataList.Sort()
 	}
 
-	var bw types.Withdrawals
-	if withdrawals != nil {
-		bw = *withdrawals
+	transactions := make(types.Transactions, 0, len(txHashes))
+	receipts := make(types.Receipts, 0, len(txHashes))
+	for _, txData := range txDataList.Items() {
+		transactions = append(transactions, txData.tx)
+		receipts = append(receipts, txData.receipt)
 	}
-	block := types.NewBlockWithHeader(header).WithBody(types.Body{
-		Transactions: transactions,
-		Withdrawals:  bw,
-	})
-	if err := api.DeriveReceiptFields(ctx, receipts, block); err != nil {
+
+	var blobGasPrice *big.Int
+	if header.ExcessBlobGas != nil {
+		blobGasPrice = eip4844.CalcBlobFee(api.b.ChainConfig(), header)
+	}
+	if err := receipts.DeriveFields(api.b.ChainConfig(), blockhash, header.Number.Uint64(), header.Time, header.BaseFee, blobGasPrice, transactions); err != nil {
 		log.Error(fmt.Sprintf("eth_getBlockReceipts failed to derive receipt fields for block %d. Error: %v", blockNum, err))
 	}
 
+	result := make([]map[string]interface{}, 0, len(txHashes))
 	for idx, receipt := range receipts {
 		result = append(result, ethapi.MarshalReceipt(receipt, header.Number.Uint64(), signer, transactions[idx], api.b.ChainConfig()))
 	}
 
 	return result, nil
-}
-
-func (api *RealtimeAPIImpl) DeriveReceiptFields(ctx context.Context, receipts types.Receipts, block *types.Block) error {
-	var blobGasPrice *big.Int
-	if block.ExcessBlobGas() != nil {
-		blobGasPrice = eip4844.CalcBlobFee(api.b.ChainConfig(), block.Header())
-	}
-	return receipts.DeriveFields(api.b.ChainConfig(), block.Hash(), block.NumberU64(), block.Time(), block.BaseFee(), blobGasPrice, block.Transactions())
 }

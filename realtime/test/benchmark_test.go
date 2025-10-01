@@ -198,6 +198,7 @@ func TestRealtimeBenchmarNewTransactionSubscription(t *testing.T) {
 	for i := 0; i < Iterations; i++ {
 		// Send tx
 		signedTx := nativeTransferTx(t, ctx, client, big.NewInt(Gwei), testAddress.String())
+		fmt.Printf("Sent tx: %s\n", signedTx.Hash().String())
 
 		g, _ := errgroup.WithContext(ctx)
 		var subDuration time.Duration

@@ -343,12 +343,11 @@ func TestRealtimeComparison(t *testing.T) {
 			require.NoError(t, err)
 
 			callArgs := map[string]interface{}{
-				"from":     testAddress.Hex(),
-				"to":       erc20Address.Hex(),
-				"gas":      "0x100000",
-				"gasPrice": "0x1",
-				"value":    "0x0",
-				"data":     fmt.Sprintf("0x%x", data),
+				"from":  testAddress.Hex(),
+				"to":    erc20Address.Hex(),
+				"gas":   "0x100000",
+				"value": "0x0",
+				"data":  fmt.Sprintf("0x%x", data),
 			}
 
 			var nonRealtimeCall string
