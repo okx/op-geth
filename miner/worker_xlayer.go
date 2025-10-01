@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -13,7 +14,7 @@ import (
 
 type RealtimeBackend interface {
 	RealtimeEnabled() bool
-	GetRealtimeHeaderInfoChan() chan *realtimeTypes.HeaderInfo
+	GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo
 	GetRealtimeTxInfoChan() chan state.TxInfo
 }
 
@@ -55,11 +56,14 @@ func (miner *Miner) applyTransaction_XLayer(env *environment, tx *types.Transact
 
 func (miner *Miner) RealtimeSendNewPendingBlock(statedb *state.StateDB, header *types.Header) {
 	if miner.backend.RealtimeEnabled() {
-		headerInfoChan := miner.backend.GetRealtimeHeaderInfoChan()
+		headerInfoChan := miner.backend.GetRealtimeBlockInfoChan()
 		if headerInfoChan != nil {
-			headerInfoChan <- &realtimeTypes.HeaderInfo{
-				Header:    header,
-				Changeset: statedb.GenerateChangeset(),
+			headerInfoChan <- &realtimeTypes.BlockInfo{
+				Header:      header,
+				Withdrawals: nil,
+				TxCount:     -1,
+				Hash:        common.Hash{},
+				Changeset:   statedb.GenerateChangeset(),
 			}
 		}
 	}

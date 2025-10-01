@@ -40,16 +40,15 @@ func NewKafkaConsumer(config KafkaConfig, latestFlag bool) (*KafkaConsumer, erro
 }
 
 type consumerGroupHandler struct {
-	ctx            context.Context
-	headerMsgsChan chan realtimeTypes.HeaderInfo
-	blockMsgsChan  chan realtimeTypes.BlockInfo
-	txMsgsChan     chan kafkaTypes.TransactionMessage
-	errorMsgsChan  chan kafkaTypes.ErrorTriggerMessage
-	errorChan      chan error
-	headerTopic    string
-	blockTopic     string
-	txTopic        string
-	errorTopic     string
+	ctx           context.Context
+	blockMsgsChan chan realtimeTypes.BlockInfo
+	txMsgsChan    chan kafkaTypes.TransactionMessage
+	errorMsgsChan chan kafkaTypes.ErrorTriggerMessage
+	errorChan     chan error
+	headerTopic   string
+	blockTopic    string
+	txTopic       string
+	errorTopic    string
 }
 
 func (h *consumerGroupHandler) Setup(session sarama.ConsumerGroupSession) error {
@@ -74,28 +73,13 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 				continue
 			}
 			switch msg.Topic {
-			case h.headerTopic:
-				var headerMsg realtimeTypes.HeaderInfo
-				if err := json.Unmarshal(msg.Value, &headerMsg); err != nil {
-					log.Warn(fmt.Sprintf("[Realtime] consume claim error, unmarshaling header message. error: %v", err))
-					continue
-				}
-				// Send message to header channel
-				select {
-				case h.headerMsgsChan <- headerMsg:
-					session.MarkMessage(msg, "")
-				case <-h.ctx.Done():
-					err := fmt.Errorf("context cancelled - stopping consume claim")
-					h.errorChan <- err
-					return err
-				}
 			case h.blockTopic:
 				var blockMsg realtimeTypes.BlockInfo
 				if err := json.Unmarshal(msg.Value, &blockMsg); err != nil {
 					log.Warn(fmt.Sprintf("[Realtime] consume claim error, unmarshaling block message. error: %v", err))
 					continue
 				}
-				// Send message to block channel
+				// Send message to header channel
 				select {
 				case h.blockMsgsChan <- blockMsg:
 					session.MarkMessage(msg, "")
@@ -143,18 +127,16 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 }
 
 // ConsumeKafka starts consuming kafka messages from the specified topics
-func (client *KafkaConsumer) ConsumeKafka(ctx context.Context, headerMsgsChan chan realtimeTypes.HeaderInfo, blockMsgsChan chan realtimeTypes.BlockInfo, txMsgsChan chan kafkaTypes.TransactionMessage, errorMsgsChan chan kafkaTypes.ErrorTriggerMessage, errorChan chan error) {
+func (client *KafkaConsumer) ConsumeKafka(ctx context.Context, blockMsgsChan chan realtimeTypes.BlockInfo, txMsgsChan chan kafkaTypes.TransactionMessage, errorMsgsChan chan kafkaTypes.ErrorTriggerMessage, errorChan chan error) {
 	handler := &consumerGroupHandler{
-		ctx:            ctx,
-		headerMsgsChan: headerMsgsChan,
-		blockMsgsChan:  blockMsgsChan,
-		txMsgsChan:     txMsgsChan,
-		errorMsgsChan:  errorMsgsChan,
-		errorChan:      errorChan,
-		headerTopic:    client.config.HeaderTopic,
-		blockTopic:     client.config.BlockTopic,
-		txTopic:        client.config.TxTopic,
-		errorTopic:     client.config.ErrorTopic,
+		ctx:           ctx,
+		blockMsgsChan: blockMsgsChan,
+		txMsgsChan:    txMsgsChan,
+		errorMsgsChan: errorMsgsChan,
+		errorChan:     errorChan,
+		blockTopic:    client.config.BlockTopic,
+		txTopic:       client.config.TxTopic,
+		errorTopic:    client.config.ErrorTopic,
 	}
 
 	topics := []string{client.config.TxTopic, client.config.BlockTopic, client.config.ErrorTopic}

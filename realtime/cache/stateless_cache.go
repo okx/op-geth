@@ -57,8 +57,8 @@ func (cache *StatelessCache) GetBlockTxs(blockNum uint64) ([]common.Hash, bool) 
 }
 
 // -------------- Write operations --------------
-func (cache *StatelessCache) PutNewHeaderInfo(blockNum uint64, headerInfo *realtimeTypes.HeaderInfo) {
-	cache.blockInfoMap.PutNewHeaderInfo(blockNum, headerInfo)
+func (cache *StatelessCache) PutNewBlockInfo(blockNum uint64, blockInfo *realtimeTypes.BlockInfo) {
+	cache.blockInfoMap.PutNewBlockInfo(blockNum, blockInfo)
 }
 
 func (cache *StatelessCache) PutConfirmedBlockInfo(blockNum uint64, blockInfo *realtimeTypes.BlockInfo) {

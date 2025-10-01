@@ -127,11 +127,6 @@ var (
 		Usage: "Kafka sync bootstrap servers",
 		Value: "",
 	}
-	RealtimeKafkaSyncHeaderTopic = &cli.StringFlag{
-		Name:  "realtime.kafka-sync-header-topic",
-		Usage: "Kafka header topic",
-		Value: "",
-	}
 	RealtimeKafkaSyncBlockTopic = &cli.StringFlag{
 		Name:  "realtime.kafka-sync-block-topic",
 		Usage: "Kafka block topic",
@@ -203,7 +198,6 @@ var (
 		RealtimeCacheHeightThreshold,
 		RealtimeSubscribeKafka,
 		RealtimeKafkaSyncBootstrapServers,
-		RealtimeKafkaSyncHeaderTopic,
 		RealtimeKafkaSyncBlockTopic,
 		RealtimeKafkaSyncTxTopic,
 		RealtimeKafkaSyncErrorTopic,
@@ -335,9 +329,6 @@ func setRealtimeXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 	if ctx.IsSet(RealtimeKafkaSyncBootstrapServers.Name) {
 		cfg.XLayer.Realtime.Kafka.BootstrapServers = strings.Split(ctx.String(RealtimeKafkaSyncBootstrapServers.Name), ",")
-	}
-	if ctx.IsSet(RealtimeKafkaSyncHeaderTopic.Name) {
-		cfg.XLayer.Realtime.Kafka.HeaderTopic = ctx.String(RealtimeKafkaSyncHeaderTopic.Name)
 	}
 	if ctx.IsSet(RealtimeKafkaSyncBlockTopic.Name) {
 		cfg.XLayer.Realtime.Kafka.BlockTopic = ctx.String(RealtimeKafkaSyncBlockTopic.Name)

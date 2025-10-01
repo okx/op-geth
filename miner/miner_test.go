@@ -64,9 +64,9 @@ func (m *mockBackend) TxPool() *txpool.TxPool {
 }
 
 // For X Layer, realtime
-func (b *mockBackend) RealtimeEnabled() bool                                     { return false }
-func (b *mockBackend) GetRealtimeHeaderInfoChan() chan *realtimeTypes.HeaderInfo { return nil }
-func (b *mockBackend) GetRealtimeTxInfoChan() chan state.TxInfo                  { return nil }
+func (b *mockBackend) RealtimeEnabled() bool                                   { return false }
+func (b *mockBackend) GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo { return nil }
+func (b *mockBackend) GetRealtimeTxInfoChan() chan state.TxInfo                { return nil }
 
 type testBlockChain struct {
 	root          common.Hash

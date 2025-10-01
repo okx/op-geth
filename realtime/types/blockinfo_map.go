@@ -34,33 +34,20 @@ func (bm *BlockInfoMap) Get(blockNum uint64) (*types.Header, *types.Withdrawals,
 func (bm *BlockInfoMap) GetBlockNumberByHash(blockHash common.Hash) (uint64, bool) {
 	bm.mu.RLock()
 	defer bm.mu.RUnlock()
-
 	blockNum, exists := bm.blockHashToHeight[blockHash]
 	return blockNum, exists
 }
 
-func (bm *BlockInfoMap) PutNewHeaderInfo(blockNum uint64, headerInfo *HeaderInfo) {
+func (bm *BlockInfoMap) PutNewBlockInfo(blockNum uint64, blockInfo *BlockInfo) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
-	bm.blockInfos[blockNum] = &BlockInfo{
-		Header:      headerInfo.Header,
-		Withdrawals: nil,
-		TxCount:     -1,
-		Hash:        common.Hash{},
-		Changeset:   headerInfo.Changeset,
-	}
+	bm.blockInfos[blockNum] = blockInfo
 }
 
 func (bm *BlockInfoMap) PutConfirmedBlockInfo(blockNum uint64, blockInfo *BlockInfo) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
-	bm.blockInfos[blockNum] = &BlockInfo{
-		Header:      blockInfo.Header,
-		Withdrawals: blockInfo.Withdrawals,
-		TxCount:     blockInfo.TxCount,
-		Hash:        blockInfo.Hash,
-		Changeset:   blockInfo.Changeset,
-	}
+	bm.blockInfos[blockNum] = blockInfo
 	bm.blockHashToHeight[blockInfo.Hash] = blockNum
 }
 

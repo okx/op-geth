@@ -127,12 +127,12 @@ type Ethereum struct {
 	nodeCloser func() error
 
 	// For X Layer, realtime
-	kafkaProducer       *realtimeKafka.KafkaProducer
-	realtimeCache       *realtimeCache.RealtimeCache
-	kafkaHeaderInfoChan chan *realtimeTypes.HeaderInfo
-	kafkaTxInfoChan     chan state.TxInfo
-	finishChan          chan realtimeTypes.FinishedEntry
-	realtimeSub         *realtimeSub.RealtimeSubscription
+	kafkaProducer      *realtimeKafka.KafkaProducer
+	realtimeCache      *realtimeCache.RealtimeCache
+	kafkaBlockInfoChan chan *realtimeTypes.BlockInfo
+	kafkaTxInfoChan    chan state.TxInfo
+	finishChan         chan realtimeTypes.FinishedEntry
+	realtimeSub        *realtimeSub.RealtimeSubscription
 
 	// XLayer additions
 	xlayerGpricer   xlayer.L2GasPricer

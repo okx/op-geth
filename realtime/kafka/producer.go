@@ -63,26 +63,6 @@ func (client *KafkaProducer) SendKafkaTransaction(blockNumber uint64, blockTime 
 	return nil
 }
 
-func (client *KafkaProducer) SendKafkaHeaderInfo(msg *realtimeTypes.HeaderInfo) error {
-	// Marshal message to JSON
-	jsonData, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("error marshaling block message: %v", err)
-	}
-	// Create Kafka message
-	kafkaMsg := &sarama.ProducerMessage{
-		Topic: client.config.HeaderTopic,
-		Value: sarama.StringEncoder(jsonData),
-		Key:   sarama.StringEncoder(msg.Header.Number.String()),
-	}
-	// Send message
-	err = client.producer.SendMessage(kafkaMsg)
-	if err != nil {
-		return fmt.Errorf("error sending message to Kafka: %v", err)
-	}
-	return nil
-}
-
 func (client *KafkaProducer) SendKafkaBlockInfo(msg *realtimeTypes.BlockInfo) error {
 	// Marshal message to JSON
 	jsonData, err := json.Marshal(msg)

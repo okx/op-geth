@@ -20,9 +20,9 @@ func (eth *Ethereum) RealtimeEnabled() bool {
 	return eth.config.XLayer.Realtime.Enable
 }
 
-func (eth *Ethereum) GetRealtimeHeaderInfoChan() chan *realtimeTypes.HeaderInfo {
+func (eth *Ethereum) GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo {
 	if eth.config.XLayer.Realtime.Enable {
-		return eth.kafkaHeaderInfoChan
+		return eth.kafkaBlockInfoChan
 	}
 	return nil
 }
@@ -48,7 +48,7 @@ func (eth *Ethereum) InitRealtime() {
 				log.Warn("[Realtime] Failed to initialize kafka producer", "error", err)
 			} else {
 				eth.kafkaProducer = kafkaProducer
-				eth.kafkaHeaderInfoChan = make(chan *realtimeTypes.HeaderInfo, realtimeKafka.DefaultKafkaBufferSize)
+				eth.kafkaBlockInfoChan = make(chan *realtimeTypes.BlockInfo, realtimeKafka.DefaultKafkaBufferSize)
 				eth.kafkaTxInfoChan = make(chan state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
 
 				// Send error trigger message on EL restart
@@ -73,7 +73,7 @@ func (eth *Ethereum) InitRealtime() {
 func (eth *Ethereum) StartRealtime() {
 	if eth.RealtimeEnabled() {
 		go realtime.ListenRealtimeConsumer(context.Background(), &eth.config.XLayer.Realtime, eth.realtimeCache, eth.finishChan, eth.config.XLayer.Realtime.RealtimeRpc)
-		go realtime.ListenRealtimeProducer(context.Background(), eth.kafkaProducer, eth.kafkaHeaderInfoChan, nil, eth.kafkaTxInfoChan, eth.config.XLayer.Realtime.RealtimeRpc)
+		go realtime.ListenRealtimeProducer(context.Background(), eth.kafkaProducer, eth.kafkaBlockInfoChan, eth.kafkaTxInfoChan, eth.config.XLayer.Realtime.RealtimeRpc)
 	}
 }
 

@@ -27,7 +27,6 @@ var (
 func ListenRealtimeProducer(
 	ctx context.Context,
 	kafkaProducer *kafka.KafkaProducer,
-	blockHeaderChan chan *realtimeTypes.HeaderInfo,
 	blockInfoChan chan *realtimeTypes.BlockInfo,
 	txInfoChan chan state.TxInfo,
 	isRpc bool) {
@@ -45,18 +44,6 @@ func ListenRealtimeProducer(
 		select {
 		case <-ctx.Done():
 			return
-		case headerInfo := <-blockHeaderChan:
-			currHeight = headerInfo.Header.Number.Uint64()
-			err := kafkaProducer.SendKafkaHeaderInfo(headerInfo)
-			if err != nil {
-				log.Error(fmt.Sprintf("[Realtime] Failed to send kafka header info message. error: %v, currHeight: %d, blockHash: %x", err, currHeight, headerInfo.Header.Hash()))
-				err = kafkaProducer.SendKafkaErrorTrigger(currHeight)
-				if err != nil {
-					log.Error(fmt.Sprintf("[Realtime] Failed to send error trigger message. error: %v, currHeight: %d", err, currHeight))
-				}
-			} else {
-				log.Debug(fmt.Sprintf("[Realtime] Sent kafka new header info message for block number %d, blockHash: %x", currHeight, headerInfo.Header.Hash()))
-			}
 		case blockInfo := <-blockInfoChan:
 			currHeight = blockInfo.Header.Number.Uint64()
 			err := kafkaProducer.SendKafkaBlockInfo(blockInfo)
@@ -108,7 +95,6 @@ func ListenRealtimeConsumer(
 		return
 	}
 	errorFlag.Store(false)
-	headerMsgsChan := make(chan realtimeTypes.HeaderInfo, MaxMessageChanSize)
 	blockMsgsChan := make(chan realtimeTypes.BlockInfo, MaxMessageChanSize)
 	txMsgsChan := make(chan kafkaTypes.TransactionMessage, MaxMessageChanSize)
 	errorMsgsChan := make(chan kafkaTypes.ErrorTriggerMessage, MaxMessageChanSize)
@@ -122,7 +108,7 @@ func ListenRealtimeConsumer(
 			return
 		}
 		// Start the kafka consumer
-		go kafkaConsumer.ConsumeKafka(ctx, headerMsgsChan, blockMsgsChan, txMsgsChan, errorMsgsChan, errorChan)
+		go kafkaConsumer.ConsumeKafka(ctx, blockMsgsChan, txMsgsChan, errorMsgsChan, errorChan)
 	} else if cfg.SubscribeWebsocket {
 		// TODO: Add ws consumer consume logic
 	} else {
@@ -149,20 +135,21 @@ func ListenRealtimeConsumer(
 				resetFlag.Store(true)
 			}
 			log.Debug(fmt.Sprintf("[Realtime] Received finish signal from execution. finishHeight: %d", finishEntry.Height))
-		case headerMsg := <-headerMsgsChan:
-			if err := headerMsg.Validate(realtimeCache.GetExecutionHeight()); err != nil {
-				log.Error(fmt.Sprintf("[Realtime] Failed to consume new header message from realtime consumer. error: %v", err))
-				continue
-			}
-			messageCache.HeaderMsgCache.Add(&headerMsg)
-			log.Debug(fmt.Sprintf("[Realtime] Received new header message. blockNum: %d", headerMsg.Header.Number))
 		case blockMsg := <-blockMsgsChan:
 			// Confirmed block msg
 			if err := blockMsg.Validate(realtimeCache.GetExecutionHeight()); err != nil {
 				log.Error(fmt.Sprintf("[Realtime] Failed to consume block message from realtime consumer. error: %v", err))
 				continue
 			}
-			messageCache.BlockMsgCache.Add(&blockMsg)
+			if blockMsg.IsConfirmedBlock() {
+				// Confirmed block msg
+				messageCache.ConfirmedBlockMsgCache.Add(&blockMsg)
+				log.Debug(fmt.Sprintf("[Realtime] Received confirmed block message. blockNum: %d", blockMsg.Header.Number))
+			} else {
+				// New pending block msg
+				messageCache.NewBlockMsgCache.Add(&blockMsg)
+				log.Debug(fmt.Sprintf("[Realtime] Received new block message. blockNum: %d", blockMsg.Header.Number))
+			}
 			log.Debug(fmt.Sprintf("[Realtime] Received confirmed block message. blockNum: %d", blockMsg.Header.Number))
 		case txMsg := <-txMsgsChan:
 			if err := txMsg.Validate(); err != nil {
@@ -231,21 +218,21 @@ func realtimeLoop(ctx context.Context, realtimeCache *cache.RealtimeCache) {
 			continue
 		}
 
-		// Handle new header msg
+		// Handle new block msg
 		highestPendingHeight := realtimeCache.GetHighestPendingHeight()
 		if highestPendingHeight == 0 {
 			highestPendingHeight = realtimeCache.GetHighestConfirmHeight()
 		}
 		nextHeight := highestPendingHeight + 1
-		newHeaderMsg, ok := messageCache.HeaderMsgCache.Get(nextHeight)
+		newBlockMsg, ok := messageCache.NewBlockMsgCache.Get(nextHeight)
 		if ok {
-			err := realtimeCache.TryApplyNewHeaderMsg(newHeaderMsg.Header.Number.Uint64(), newHeaderMsg)
+			err := realtimeCache.TryApplyNewBlockMsg(newBlockMsg.Header.Number.Uint64(), newBlockMsg)
 			if err != nil {
 				// Apply state error. Reset cache
 				resetFlag.Store(true)
-				log.Error(fmt.Sprintf("[Realtime] Failed to apply new header msg. error: %v, blockHeight: %d", err, newHeaderMsg.Header.Number.Uint64()))
+				log.Error(fmt.Sprintf("[Realtime] Failed to apply new block msg. error: %v, blockHeight: %d", err, newBlockMsg.Header.Number.Uint64()))
 			}
-			messageCache.HeaderMsgCache.Flush(nextHeight)
+			messageCache.NewBlockMsgCache.Flush(nextHeight)
 		}
 
 		// Handle pending blocks
@@ -258,7 +245,7 @@ func realtimeLoop(ctx context.Context, realtimeCache *cache.RealtimeCache) {
 
 		// Handle confirmed block msg
 		if pendingHeight != 0 {
-			confirmBlockMsg, ok := messageCache.BlockMsgCache.Get(pendingHeight)
+			confirmBlockMsg, ok := messageCache.ConfirmedBlockMsgCache.Get(pendingHeight)
 			if ok {
 				err := realtimeCache.TryCloseBlockFromConfirmedBlockMsg(pendingHeight, confirmBlockMsg)
 				if err != nil {
@@ -266,7 +253,7 @@ func realtimeLoop(ctx context.Context, realtimeCache *cache.RealtimeCache) {
 					resetFlag.Store(true)
 					log.Error(fmt.Sprintf("[Realtime] Failed to apply confirm block msg. error: %v, blockHeight: %d", err, pendingHeight))
 				} else {
-					messageCache.BlockMsgCache.Flush(pendingHeight)
+					messageCache.ConfirmedBlockMsgCache.Flush(pendingHeight)
 				}
 			}
 		}

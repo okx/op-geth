@@ -153,10 +153,9 @@ func (b *testWorkerBackend) BlockChain() *core.BlockChain { return b.chain }
 func (b *testWorkerBackend) TxPool() *txpool.TxPool       { return b.txPool }
 
 // For X Layer, realtime
-func (b *testWorkerBackend) RealtimeEnabled() bool                                     { return false }
-func (b *testWorkerBackend) GetRealtimeHeaderInfoChan() chan *realtimeTypes.HeaderInfo { return nil }
-func (b *testWorkerBackend) GetRealtimeTxInfoChan() chan state.TxInfo                  { return nil }
-func (b *testWorkerBackend) GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo   { return nil }
+func (b *testWorkerBackend) RealtimeEnabled() bool                                   { return false }
+func (b *testWorkerBackend) GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo { return nil }
+func (b *testWorkerBackend) GetRealtimeTxInfoChan() chan state.TxInfo                { return nil }
 
 func newTestWorker(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, blocks int) (*Miner, *testWorkerBackend) {
 	backend := newTestWorkerBackend(t, chainConfig, engine, db, blocks)

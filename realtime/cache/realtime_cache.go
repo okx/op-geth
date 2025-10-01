@@ -191,11 +191,11 @@ func (cache *RealtimeCache) TryInitStateCache(executionHeight uint64) error {
 	return nil
 }
 
-func (cache *RealtimeCache) TryApplyNewHeaderMsg(blockNum uint64, headerMsg *realtimeTypes.HeaderInfo) error {
-	if err := cache.tryCreateNewPendingBlockContext(blockNum, headerMsg); err != nil {
+func (cache *RealtimeCache) TryApplyNewBlockMsg(blockNum uint64, startBlockMsg *realtimeTypes.BlockInfo) error {
+	if err := cache.tryCreateNewPendingBlockContext(blockNum, startBlockMsg); err != nil {
 		return err
 	}
-	cache.Stateless.PutNewHeaderInfo(blockNum, headerMsg)
+	cache.Stateless.PutNewBlockInfo(blockNum, startBlockMsg)
 	return nil
 }
 
@@ -301,7 +301,7 @@ func (cache *RealtimeCache) tryApplyBlockTxMsgs(blockContext *PendingBlockContex
 	return cache.tryCloseBlock(blockContext)
 }
 
-func (cache *RealtimeCache) tryCreateNewPendingBlockContext(blockNum uint64, headerMsg *realtimeTypes.HeaderInfo) error {
+func (cache *RealtimeCache) tryCreateNewPendingBlockContext(blockNum uint64, startBlockMsg *realtimeTypes.BlockInfo) error {
 	confirmHeight := cache.GetHighestConfirmHeight()
 	if cache.pendingBlocks.Size() > PendingBlocksCacheSizeThreshold {
 		// Find the pending block context that is blocking, and log out the block context
@@ -351,7 +351,7 @@ func (cache *RealtimeCache) tryCreateNewPendingBlockContext(blockNum uint64, hea
 		nextTxIndex:         0,
 		pendingTxs:          realtimeTypes.NewOrderedList(DefaultTxMsgSliceSize, CompareTransactionMessages),
 		txCount:             -1,
-		startBlockChangeset: headerMsg.Changeset,
+		startBlockChangeset: startBlockMsg.Changeset,
 		endBlockChangeset:   nil,
 		blockStateCache:     bc,
 	}
