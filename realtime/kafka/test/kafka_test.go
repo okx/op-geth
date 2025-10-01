@@ -58,6 +58,11 @@ func TestKafka(t *testing.T) {
 		err = producer.SendKafkaTransaction(uint64(i), blockTime, signedLegacyTx, txReceipt, txInnerTxs, txChangeset)
 		assert.NilError(t, err)
 
+		err = producer.SendKafkaHeaderInfo(&realtimeTypes.HeaderInfo{
+			Header: blockHeader,
+		})
+		assert.NilError(t, err)
+
 		err = producer.SendKafkaBlockInfo(&realtimeTypes.BlockInfo{
 			Header:  blockHeader,
 			TxCount: int64(i),
@@ -80,11 +85,12 @@ func TestKafka(t *testing.T) {
 	consumer, err := kafka.NewKafkaConsumer(cfg, false)
 	assert.NilError(t, err)
 	ctx, ctxWithCancel := context.WithCancel(context.Background())
-	headersChan := make(chan realtimeTypes.BlockInfo, 20)
+	headersChan := make(chan realtimeTypes.HeaderInfo, 20)
+	blocksChan := make(chan realtimeTypes.BlockInfo, 20)
 	txMsgsChan := make(chan kafkaTypes.TransactionMessage, 20)
 	errorMsgsChan := make(chan kafkaTypes.ErrorTriggerMessage, 20)
 	errorChan := make(chan error, 10)
-	go consumer.ConsumeKafka(ctx, headersChan, txMsgsChan, errorMsgsChan, errorChan)
+	go consumer.ConsumeKafka(ctx, headersChan, blocksChan, txMsgsChan, errorMsgsChan, errorChan)
 
 	// Verify tx messages
 	for i := 1; i <= 10; i++ {
@@ -119,8 +125,10 @@ func TestKafka(t *testing.T) {
 			t.Fatalf("Received error from consumer: %v", err)
 		case rcvHeader := <-headersChan:
 			AssertHeader(t, blockHeader, rcvHeader.Header)
-			assert.Equal(t, rcvHeader.TxCount, int64(i))
-			assert.Equal(t, rcvHeader.Hash, testHash)
+		case rcvBlock := <-blocksChan:
+			AssertHeader(t, blockHeader, rcvBlock.Header)
+			assert.Equal(t, rcvBlock.TxCount, int64(i))
+			assert.Equal(t, rcvBlock.Hash, testHash)
 		}
 	}
 

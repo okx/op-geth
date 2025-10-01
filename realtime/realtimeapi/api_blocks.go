@@ -43,7 +43,7 @@ func (api *RealtimeAPIImpl) GetBlockTransactionCountByNumber(ctx context.Context
 		return backend.GetBlockTransactionCountByNumber(ctx, blockNr)
 	}
 
-	_, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
+	_, _, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		if isPending {
 			numOfTx := hexutil.Uint(0)
@@ -102,7 +102,7 @@ func (api *RealtimeAPIImpl) GetBlockByNumber(ctx context.Context, blockNr rpc.Bl
 		return backend.GetBlockByNumber(ctx, blockNr, fullTx)
 	}
 
-	if blockNr == rpc.PendingBlockNumber {
+	if isPending {
 		for _, field := range []string{"hash", "nonce", "miner"} {
 			response[field] = nil
 		}
@@ -151,12 +151,12 @@ func (api *RealtimeAPIImpl) GetBlockInternalTransactions(ctx context.Context, bl
 		return backend.GetBlockInternalTransactions(ctx, blockNr)
 	}
 
-	_, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
+	_, _, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		if isPending {
 			// Pending block not open yet. Default to latest block
 			blockNum = api.cacheDB.GetHighestConfirmHeight()
-			_, _, _, ok = api.cacheDB.Stateless.GetBlockInfo(blockNum)
+			_, _, _, _, ok = api.cacheDB.Stateless.GetBlockInfo(blockNum)
 			if !ok {
 				return nil, fmt.Errorf("header not found for block %d", blockNum)
 			}

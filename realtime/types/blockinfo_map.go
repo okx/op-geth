@@ -21,14 +21,14 @@ func NewBlockInfoMap(size int) *BlockInfoMap {
 	}
 }
 
-func (bm *BlockInfoMap) Get(blockNum uint64) (*types.Header, int64, common.Hash, bool) {
+func (bm *BlockInfoMap) Get(blockNum uint64) (*types.Header, *types.Withdrawals, int64, common.Hash, bool) {
 	bm.mu.RLock()
 	defer bm.mu.RUnlock()
 	blockInfo, exists := bm.blockInfos[blockNum]
 	if exists {
-		return blockInfo.Header, blockInfo.TxCount, blockInfo.Hash, true
+		return blockInfo.Header, blockInfo.Withdrawals, blockInfo.TxCount, blockInfo.Hash, true
 	}
-	return nil, 0, common.Hash{}, false
+	return nil, nil, 0, common.Hash{}, false
 }
 
 func (bm *BlockInfoMap) GetBlockNumberByHash(blockHash common.Hash) (uint64, bool) {
@@ -39,21 +39,33 @@ func (bm *BlockInfoMap) GetBlockNumberByHash(blockHash common.Hash) (uint64, boo
 	return blockNum, exists
 }
 
-func (bm *BlockInfoMap) PutNewBlockInfo(blockNum uint64, blockInfo *BlockInfo) {
+func (bm *BlockInfoMap) PutNewHeaderInfo(blockNum uint64, headerInfo *HeaderInfo) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
-	bm.blockInfos[blockNum] = blockInfo
+	bm.blockInfos[blockNum] = &BlockInfo{
+		Header:      headerInfo.Header,
+		Withdrawals: nil,
+		TxCount:     -1,
+		Hash:        common.Hash{},
+		Changeset:   headerInfo.Changeset,
+	}
 }
 
 func (bm *BlockInfoMap) PutConfirmedBlockInfo(blockNum uint64, blockInfo *BlockInfo) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
-	bm.blockInfos[blockNum] = blockInfo
+	bm.blockInfos[blockNum] = &BlockInfo{
+		Header:      blockInfo.Header,
+		Withdrawals: blockInfo.Withdrawals,
+		TxCount:     blockInfo.TxCount,
+		Hash:        blockInfo.Hash,
+		Changeset:   blockInfo.Changeset,
+	}
 	bm.blockHashToHeight[blockInfo.Hash] = blockNum
 }
 
 func (bm *BlockInfoMap) Delete(blockNum uint64) {
-	_, _, blockhash, exists := bm.Get(blockNum)
+	_, _, _, blockhash, exists := bm.Get(blockNum)
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 	if exists {

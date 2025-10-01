@@ -3,10 +3,13 @@ package realtimeapi
 import (
 	"context"
 	"fmt"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -23,7 +26,7 @@ func (api *RealtimeAPIImpl) GetTransactionReceipt(ctx context.Context, hash comm
 		backend := ethapi.NewTransactionAPI(api.b, nil)
 		return backend.GetTransactionReceipt(ctx, hash)
 	}
-	header, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(receipt.BlockNumber.Uint64())
+	header, _, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(receipt.BlockNumber.Uint64())
 	if !ok {
 		backend := ethapi.NewTransactionAPI(api.b, nil)
 		return backend.GetTransactionReceipt(ctx, hash)
@@ -68,12 +71,12 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 		return backend.GetBlockReceipts(ctx, number)
 	}
 
-	header, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
+	header, withdrawals, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		if isPending {
 			// Pending block not open yet. Default to latest block
 			blockNum = api.cacheDB.GetHighestConfirmHeight()
-			header, _, blockhash, ok = api.cacheDB.Stateless.GetBlockInfo(blockNum)
+			header, _, _, blockhash, ok = api.cacheDB.Stateless.GetBlockInfo(blockNum)
 			if !ok {
 				return nil, fmt.Errorf("header not found for block %d", blockNum)
 			}
@@ -91,6 +94,8 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 
 	signer := types.MakeSigner(api.b.ChainConfig(), header.Number, header.Time)
 	result := make([]map[string]interface{}, 0, len(txHashes))
+	transactions := make(types.Transactions, 0, len(txHashes))
+	receipts := make(types.Receipts, 0, len(txHashes))
 	for _, txHash := range txHashes {
 		txn, receipt, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash)
 		if !exists {
@@ -103,8 +108,33 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 				log.BlockHash = blockhash
 			}
 		}
-		result = append(result, ethapi.MarshalReceipt(receipt, header.Number.Uint64(), signer, txn, api.b.ChainConfig()))
+		transactions = append(transactions, txn)
+		receipts = append(receipts, receipt)
+	}
+
+	var bw types.Withdrawals
+	if withdrawals != nil {
+		bw = *withdrawals
+	}
+	block := types.NewBlockWithHeader(header).WithBody(types.Body{
+		Transactions: transactions,
+		Withdrawals:  bw,
+	})
+	if err := api.DeriveReceiptFields(ctx, receipts, block); err != nil {
+		log.Error(fmt.Sprintf("eth_getBlockReceipts failed to derive receipt fields for block %d. Error: %v", blockNum, err))
+	}
+
+	for idx, receipt := range receipts {
+		result = append(result, ethapi.MarshalReceipt(receipt, header.Number.Uint64(), signer, transactions[idx], api.b.ChainConfig()))
 	}
 
 	return result, nil
+}
+
+func (api *RealtimeAPIImpl) DeriveReceiptFields(ctx context.Context, receipts types.Receipts, block *types.Block) error {
+	var blobGasPrice *big.Int
+	if block.ExcessBlobGas() != nil {
+		blobGasPrice = eip4844.CalcBlobFee(api.b.ChainConfig(), block.Header())
+	}
+	return receipts.DeriveFields(api.b.ChainConfig(), block.Hash(), block.NumberU64(), block.Time(), block.BaseFee(), blobGasPrice, block.Transactions())
 }

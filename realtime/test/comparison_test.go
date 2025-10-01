@@ -310,11 +310,11 @@ func TestRealtimeComparison(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, receipt, "Transaction receipt should not be nil")
 
-			receiptsByNumber, err := client.RealtimeGetBlockReceiptsByNumber(ctx, receipt.BlockNumber.Uint64())
+			receiptsByNumber, err := client.BlockReceipts(ctx, rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(receipt.BlockNumber.Uint64())))
 			require.NoError(t, err)
 			require.NotNil(t, receiptsByNumber, "Transaction receipts by number should not be nil")
 
-			receiptsByHash, err := client.RealtimeGetBlockReceiptsByHash(ctx, receipt.BlockHash)
+			receiptsByHash, err := client.BlockReceipts(ctx, rpc.BlockNumberOrHashWithHash(receipt.BlockHash, true))
 			require.NoError(t, err)
 			require.NotNil(t, receiptsByHash, "Transaction receipts by hash should not be nil")
 

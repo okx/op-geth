@@ -27,7 +27,6 @@ import (
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/realtime/realtimeapi"
 	"github.com/ethereum/go-ethereum/realtime/rtclient"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/stretchr/testify/require"
@@ -358,7 +357,7 @@ func TestRealtimeRPC(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, receipt, "Transaction receipt should not be nil")
 
-		receiptsByNumber, err := client.RealtimeGetBlockReceiptsByNumber(ctx, receipt.BlockNumber.Uint64())
+		receiptsByNumber, err := client.BlockReceipts(ctx, rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(receipt.BlockNumber.Uint64())))
 		require.NoError(t, err)
 		require.NotNil(t, receiptsByNumber, "Transaction receipts by number should not be nil")
 		for _, receipt := range receiptsByNumber {
@@ -367,7 +366,7 @@ func TestRealtimeRPC(t *testing.T) {
 			log.Info(fmt.Sprintf("RealtimeGetBlockReceiptsByNumber result type: %T", receipt))
 		}
 
-		receiptsByHash, err := client.RealtimeGetBlockReceiptsByHash(ctx, receipt.BlockHash)
+		receiptsByHash, err := client.BlockReceipts(ctx, rpc.BlockNumberOrHashWithHash(receipt.BlockHash, true))
 		require.NoError(t, err)
 		require.NotNil(t, receiptsByHash, "Transaction receipts by hash should not be nil")
 		for _, receipt := range receiptsByHash {
@@ -663,7 +662,7 @@ func TestRealtimeStateIsConsistent(t *testing.T) {
 	// Dump state cache for further checking
 	err = client.RealtimeDumpCache(ctx)
 	require.NoError(t, err)
-	// compareCacheWithSequenceDB(t, DefaultSequncerDBPath, DefaultStateCachePath)
+	compareCacheWithSequenceDB(t, DefaultSequncerDBPath, DefaultStateCachePath)
 }
 
 func compareCacheWithSequenceDB(t *testing.T, dbDir, cacheDir string) {
@@ -688,10 +687,13 @@ func compareCacheWithSequenceDB(t *testing.T, dbDir, cacheDir string) {
 	require.NoError(t, err, "Failed to create temp db dir")
 	defer os.RemoveAll(tempDbDir)
 
-	cmd := exec.Command("cp", "-r", dbDir, tempDbDir)
+	expectedSubDir := filepath.Join(tempDbDir, "test.test", "chaindata")
+	err = os.MkdirAll(expectedSubDir, 0755)
+	require.NoError(t, err, "Failed to create expected subdirectory")
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("cp -r %s/* %s", dbDir, expectedSubDir))
 	output, err := cmd.CombinedOutput()
-	require.NoError(t, err, "Failed to copy db dir with cp -r: %s, output: %s", dbDir, string(output))
-	copiedDbDir := filepath.Join(tempDbDir, filepath.Base(dbDir))
+	require.NoError(t, err, "Failed to copy db files with cp -r: %s, output: %s", dbDir, string(output))
+	copiedDbDir := tempDbDir
 
 	// Create a node stack to access the database
 	stack, err := node.New(&node.Config{
@@ -700,7 +702,7 @@ func compareCacheWithSequenceDB(t *testing.T, dbDir, cacheDir string) {
 	require.NoError(t, err)
 	defer stack.Close()
 
-	db, err := stack.OpenDatabaseWithFreezer("chaindata", 0, 0, "", "eth/db/chaindata/", false)
+	db, err := stack.OpenDatabaseWithFreezer("chaindata", 0, 0, "ancient", "eth/db/chaindata/", false)
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -734,14 +736,13 @@ func compareCacheWithSequenceDB(t *testing.T, dbDir, cacheDir string) {
 
 			// Decode the cache value
 			vBytes, _ := hex.DecodeString(v)
-			var cacheAccount types.StateAccount
-			err = rlp.DecodeBytes(vBytes, &cacheAccount)
+			cacheAccount, err := types.FullAccount(vBytes)
 			require.NoError(t, err)
 
 			// Compare account data
 			require.Equal(t, cacheAccount.Nonce, account.Nonce, "Nonce mismatch for account %s, from cache: %d, from db: %d", k, cacheAccount.Nonce, account.Nonce)
 			require.Equal(t, cacheAccount.Balance, account.Balance, "Balance mismatch for account %s, from cache: %s, from db: %s", k, cacheAccount.Balance.String(), account.Balance.String())
-			require.Equal(t, cacheAccount.Root, types.EmptyRootHash, "Root mismatch for account %s should be empty roothash, from cache: %s", k, cacheAccount.Root.Hex())
+			require.Equal(t, cacheAccount.Root, account.Root, "Root mismatch for account %s should be empty roothash, from db: %s", k, cacheAccount.Root.Hex())
 			require.Equal(t, cacheAccount.CodeHash, account.CodeHash, "CodeHash mismatch for account %s, from cache: %s, from db: %s", k, hex.EncodeToString(cacheAccount.CodeHash), hex.EncodeToString(account.CodeHash))
 		}
 	}

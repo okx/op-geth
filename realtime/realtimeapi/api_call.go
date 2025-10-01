@@ -39,7 +39,7 @@ func (api *RealtimeAPIImpl) Call(ctx context.Context, args ethapi.TransactionArg
 }
 
 func (api *RealtimeAPIImpl) doRealtimeCall(ctx context.Context, args ethapi.TransactionArgs, reader state.Reader, blockNum uint64, overrides *override.StateOverride, blockOverrides *override.BlockOverrides) (hexutil.Bytes, error) {
-	header, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
+	header, _, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		return nil, fmt.Errorf("header not found for block number %d", blockNum)
 	}
@@ -77,7 +77,7 @@ func (api *RealtimeAPIImpl) EstimateGas(ctx context.Context, args ethapi.Transac
 		backend := ethapi.NewBlockChainAPI(api.b)
 		return backend.EstimateGas(ctx, args, blockNrOrHash, overrides, blockOverrides)
 	}
-	header, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
+	header, _, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		return 0, fmt.Errorf("header not found for block number %d", blockNum)
 	}

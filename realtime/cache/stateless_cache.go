@@ -6,10 +6,12 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
 type StatelessCache struct {
+	config       *params.ChainConfig
 	blockInfoMap *realtimeTypes.BlockInfoMap
 	txInfoMap    *realtimeTypes.TxInfoMap
 }
@@ -27,14 +29,14 @@ func (cache *StatelessCache) Clear() {
 }
 
 // -------------- Read operations --------------
-func (cache *StatelessCache) GetBlockInfo(blockNum uint64) (*types.Header, int64, common.Hash, bool) {
+func (cache *StatelessCache) GetBlockInfo(blockNum uint64) (*types.Header, *types.Withdrawals, int64, common.Hash, bool) {
 	return cache.blockInfoMap.Get(blockNum)
 }
 
-func (cache *StatelessCache) GetBlockInfoByHash(blockHash common.Hash) (*types.Header, int64, common.Hash, bool) {
+func (cache *StatelessCache) GetBlockInfoByHash(blockHash common.Hash) (*types.Header, *types.Withdrawals, int64, common.Hash, bool) {
 	blockNum, exists := cache.blockInfoMap.GetBlockNumberByHash(blockHash)
 	if !exists {
-		return nil, 0, common.Hash{}, false
+		return nil, nil, 0, common.Hash{}, false
 	}
 	return cache.blockInfoMap.Get(blockNum)
 }
@@ -48,15 +50,15 @@ func (cache *StatelessCache) GetTxInfo(txHash common.Hash) (*types.Transaction, 
 }
 
 func (cache *StatelessCache) GetBlockTxs(blockNum uint64) ([]common.Hash, bool) {
-	if _, _, _, ok := cache.blockInfoMap.Get(blockNum); !ok {
+	if _, _, _, _, ok := cache.blockInfoMap.Get(blockNum); !ok {
 		return nil, false
 	}
 	return cache.txInfoMap.GetBlockTxs(blockNum), true
 }
 
 // -------------- Write operations --------------
-func (cache *StatelessCache) PutNewBlockInfo(blockNum uint64, blockInfo *realtimeTypes.BlockInfo) {
-	cache.blockInfoMap.PutNewBlockInfo(blockNum, blockInfo)
+func (cache *StatelessCache) PutNewHeaderInfo(blockNum uint64, headerInfo *realtimeTypes.HeaderInfo) {
+	cache.blockInfoMap.PutNewHeaderInfo(blockNum, headerInfo)
 }
 
 func (cache *StatelessCache) PutConfirmedBlockInfo(blockNum uint64, blockInfo *realtimeTypes.BlockInfo) {

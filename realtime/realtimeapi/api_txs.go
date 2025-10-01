@@ -22,7 +22,7 @@ func (api *RealtimeAPIImpl) GetTransactionByHash(ctx context.Context, txnHash co
 		return backend.GetTransactionByHash(ctx, txnHash)
 	}
 
-	header, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
+	header, _, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		backend := ethapi.NewTransactionAPI(api.b, nil)
 		return backend.GetTransactionByHash(ctx, txnHash)

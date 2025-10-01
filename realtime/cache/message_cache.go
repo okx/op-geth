@@ -10,17 +10,17 @@ import (
 
 // -------------- Message Cache --------------
 type MessageCache struct {
-	NewBlockMsgCache       *BlockMessageCache
-	ConfirmedBlockMsgCache *BlockMessageCache
-	TxMsgCache             *TransactionMessageCache
+	HeaderMsgCache *HeaderMessageCache
+	BlockMsgCache  *BlockMessageCache
+	TxMsgCache     *TransactionMessageCache
 }
 
 func NewMessageCache(maxCacheSize int) (*MessageCache, error) {
-	newBlockCache, err := NewBlockMessageCache(maxCacheSize)
+	headerCache, err := NewHeaderMessageCache(maxCacheSize)
 	if err != nil {
 		return nil, err
 	}
-	confirmedBlockCache, err := NewBlockMessageCache(maxCacheSize)
+	blockCache, err := NewBlockMessageCache(maxCacheSize)
 	if err != nil {
 		return nil, err
 	}
@@ -29,15 +29,15 @@ func NewMessageCache(maxCacheSize int) (*MessageCache, error) {
 		return nil, err
 	}
 	return &MessageCache{
-		NewBlockMsgCache:       newBlockCache,
-		ConfirmedBlockMsgCache: confirmedBlockCache,
-		TxMsgCache:             txCache,
+		HeaderMsgCache: headerCache,
+		BlockMsgCache:  blockCache,
+		TxMsgCache:     txCache,
 	}, nil
 }
 
 func (cache *MessageCache) Clear() {
-	cache.NewBlockMsgCache.Clear()
-	cache.ConfirmedBlockMsgCache.Clear()
+	cache.HeaderMsgCache.Clear()
+	cache.BlockMsgCache.Clear()
 	cache.TxMsgCache.Clear()
 }
 
@@ -46,13 +46,79 @@ func (cache *MessageCache) Flush(executionHeight uint64) {
 		return
 	}
 
-	cache.NewBlockMsgCache.Flush(executionHeight)
-	cache.ConfirmedBlockMsgCache.Flush(executionHeight)
+	cache.HeaderMsgCache.Flush(executionHeight)
+	cache.BlockMsgCache.Flush(executionHeight)
 	cache.TxMsgCache.Flush(executionHeight)
 }
 
 func (cache *MessageCache) GetLowestNewBlockHeight() uint64 {
-	return cache.NewBlockMsgCache.GetLowestBlockHeight()
+	return cache.HeaderMsgCache.GetLowestBlockHeight()
+}
+
+// -------------- Header Message Cache --------------
+type HeaderMessageCache struct {
+	mu    sync.RWMutex
+	cache *lru.Cache[uint64, *realtimeTypes.HeaderInfo]
+}
+
+func NewHeaderMessageCache(maxCacheSize int) (*HeaderMessageCache, error) {
+	cache, err := lru.New[uint64, *realtimeTypes.HeaderInfo](maxCacheSize)
+	if err != nil {
+		return nil, err
+	}
+
+	return &HeaderMessageCache{
+		cache: cache,
+	}, nil
+}
+
+func (cache *HeaderMessageCache) Add(headerMsg *realtimeTypes.HeaderInfo) {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	cache.cache.Add(headerMsg.Header.Number.Uint64(), headerMsg)
+}
+
+func (cache *HeaderMessageCache) Clear() {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	cache.cache.Purge()
+}
+
+func (cache *HeaderMessageCache) Size() int {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+	return cache.cache.Len()
+}
+
+func (cache *HeaderMessageCache) Get(blockNumber uint64) (*realtimeTypes.HeaderInfo, bool) {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+	return cache.cache.Get(blockNumber)
+}
+
+func (cache *HeaderMessageCache) Flush(blockNumber uint64) {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	// Get all keys and remove those <= blockNumber
+	for _, k := range cache.cache.Keys() {
+		if k <= blockNumber {
+			cache.cache.Remove(k)
+		}
+	}
+}
+
+func (cache *HeaderMessageCache) GetLowestBlockHeight() uint64 {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+
+	lowestBlockHeight := uint64(0)
+	for _, k := range cache.cache.Keys() {
+		if lowestBlockHeight == 0 || k < lowestBlockHeight {
+			lowestBlockHeight = k
+		}
+	}
+	return lowestBlockHeight
 }
 
 // -------------- Block Message Cache --------------
@@ -66,7 +132,6 @@ func NewBlockMessageCache(maxCacheSize int) (*BlockMessageCache, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return &BlockMessageCache{
 		cache: cache,
 	}, nil
@@ -75,28 +140,24 @@ func NewBlockMessageCache(maxCacheSize int) (*BlockMessageCache, error) {
 func (cache *BlockMessageCache) Add(blockMsg *realtimeTypes.BlockInfo) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-
 	cache.cache.Add(blockMsg.Header.Number.Uint64(), blockMsg)
 }
 
 func (cache *BlockMessageCache) Clear() {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-
 	cache.cache.Purge()
 }
 
 func (cache *BlockMessageCache) Size() int {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
-
 	return cache.cache.Len()
 }
 
 func (cache *BlockMessageCache) Get(blockNumber uint64) (*realtimeTypes.BlockInfo, bool) {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
-
 	return cache.cache.Get(blockNumber)
 }
 
@@ -104,25 +165,11 @@ func (cache *BlockMessageCache) Flush(blockNumber uint64) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
-	// Get all keys and remove those <= blockNumber
 	for _, k := range cache.cache.Keys() {
 		if k <= blockNumber {
 			cache.cache.Remove(k)
 		}
 	}
-}
-
-func (cache *BlockMessageCache) GetLowestBlockHeight() uint64 {
-	cache.mu.RLock()
-	defer cache.mu.RUnlock()
-
-	lowestBlockHeight := uint64(0)
-	for _, k := range cache.cache.Keys() {
-		if lowestBlockHeight == 0 || k < lowestBlockHeight {
-			lowestBlockHeight = k
-		}
-	}
-	return lowestBlockHeight
 }
 
 // -------------- Tx Message Cache --------------

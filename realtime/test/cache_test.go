@@ -23,30 +23,31 @@ func TestBlockInfoMap(t *testing.T) {
 	hash := common.HexToHash("0x123")
 	txCount := int64(10)
 
-	t.Run("BlockInfoMapPutAndGet", func(t *testing.T) {
-		bm.PutNewBlockInfo(blockNum, &realtimeTypes.BlockInfo{
+	t.Run("BlockInfoMapPutBlockAndGet", func(t *testing.T) {
+		bm.PutConfirmedBlockInfo(blockNum, &realtimeTypes.BlockInfo{
 			Header:  header,
 			TxCount: txCount,
 			Hash:    hash,
 		})
 
 		// Check current header
-		cacheHeader, cacheTxCount, cacheHash, exists := bm.Get(blockNum)
+		cacheHeader, cacheWithdrawals, cacheTxCount, cacheHash, exists := bm.Get(blockNum)
 		assert.True(t, exists)
 		assert.Equal(t, header, cacheHeader)
-		assert.Equal(t, txCount, cacheTxCount)
-		assert.Equal(t, hash, cacheHash)
+		assert.Equal(t, nil, cacheWithdrawals)
+		assert.Equal(t, -1, cacheTxCount)
+		assert.Equal(t, common.Hash{}, cacheHash)
 	})
 
 	t.Run("BlockInfoMapGetNonExistent", func(t *testing.T) {
 		nonExistentNum := uint64(888)
-		_, _, _, exists := bm.Get(nonExistentNum)
+		_, _, _, _, exists := bm.Get(nonExistentNum)
 		assert.False(t, exists)
 	})
 
 	t.Run("BlockInfoMapDelete", func(t *testing.T) {
 		bm.Delete(blockNum)
-		_, _, _, exists := bm.Get(blockNum)
+		_, _, _, _, exists := bm.Get(blockNum)
 		assert.False(t, exists)
 	})
 
@@ -60,17 +61,18 @@ func TestBlockInfoMap(t *testing.T) {
 			txCount := int64(i * 5)
 			hash := common.HexToHash(fmt.Sprintf("0x%x", i))
 
-			// Test PutHeader
-			bm.PutNewBlockInfo(blockNum, &realtimeTypes.BlockInfo{
+			// Test put header
+			bm.PutConfirmedBlockInfo(blockNum, &realtimeTypes.BlockInfo{
 				Header:  header,
 				TxCount: txCount,
 				Hash:    hash,
 			})
-			cacheHeader, cacheTxCount, cacheHash, exists := bm.Get(blockNum)
+			cacheHeader, cacheWithdrawals, cacheTxCount, cacheHash, exists := bm.Get(blockNum)
 			assert.True(t, exists)
 			assert.NotNil(t, cacheHeader)
 			assert.Equal(t, big.NewInt(int64(i)), cacheHeader.Number)
 			assert.Equal(t, uint64(i*1000), cacheHeader.Time)
+			assert.Equal(t, nil, cacheWithdrawals)
 			assert.Equal(t, txCount, cacheTxCount)
 			assert.Equal(t, hash, cacheHash)
 		}
@@ -79,7 +81,7 @@ func TestBlockInfoMap(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			blockNum := uint64(i)
 			bm.Delete(blockNum)
-			_, _, _, exists := bm.Get(blockNum)
+			_, _, _, _, exists := bm.Get(blockNum)
 			assert.False(t, exists)
 		}
 	})

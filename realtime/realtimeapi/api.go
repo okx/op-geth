@@ -169,12 +169,12 @@ func (api *RealtimeAPIImpl) tryGetBlockResponseFromNumber(
 	fullTx bool,
 	isPending bool,
 ) (map[string]interface{}, error) {
-	header, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
+	header, withdrawals, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		if isPending {
 			// Pending block not open yet. Default to latest block
 			blockNum = api.cacheDB.GetHighestConfirmHeight()
-			header, _, _, ok = api.cacheDB.Stateless.GetBlockInfo(blockNum)
+			header, _, _, _, ok = api.cacheDB.Stateless.GetBlockInfo(blockNum)
 			if !ok {
 				return nil, fmt.Errorf("header not found for block %d", blockNum)
 			}
@@ -183,24 +183,30 @@ func (api *RealtimeAPIImpl) tryGetBlockResponseFromNumber(
 		}
 	}
 
-	var body types.Body
 	txHashes, ok := api.cacheDB.Stateless.GetBlockTxs(blockNum)
-	if ok {
-		for _, txHash := range txHashes {
-			if tx, _, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash); exists {
-				body.Transactions = append(body.Transactions, tx)
-			} else {
-				return nil, fmt.Errorf("transaction %s not found in cache", txHash.Hex())
-			}
+	if !ok {
+		return nil, fmt.Errorf("header not found for block %d", blockNum)
+	}
+	transactions := make([]*types.Transaction, 0, len(txHashes))
+	for idx, txHash := range txHashes {
+		if tx, _, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash); exists {
+			transactions[idx] = tx
+		} else {
+			return nil, fmt.Errorf("transaction %s not found in cache", txHash.Hex())
 		}
 	}
-
-	block := types.NewBlockWithHeader(header).WithBody(body)
+	var bw types.Withdrawals
+	if withdrawals != nil {
+		bw = *withdrawals
+	}
+	block := types.NewBlockWithHeader(header).WithBody(types.Body{
+		Transactions: transactions,
+		Withdrawals:  bw,
+	})
 
 	response, err := ethapi.RPCMarshalBlock(ctx, block, true, fullTx, api.b.ChainConfig(), api.cacheDB)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal block: %w", err)
 	}
-
 	return response, nil
 }
