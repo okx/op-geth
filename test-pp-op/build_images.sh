@@ -14,6 +14,8 @@ set -x
 # OPTIONS:
 #   --op-geth     Build op-geth image only
 #   --op-stack    Build op-stack images only (contracts + opstack)
+#   --bridge      Build bridge service image only
+#   --aggkit      Build aggkit image only
 #   --all         Build all images (default if no options specified)
 #   --force       Force rebuild even if images exist
 #   -h, --help    Show this help message
@@ -22,6 +24,8 @@ set -x
 #   ./build_images.sh                    # Build all images (default)
 #   ./build_images.sh --op-geth          # Build op-geth only
 #   ./build_images.sh --op-stack         # Build op-stack only
+#   ./build_images.sh --bridge           # Build bridge service only
+#   ./build_images.sh --aggkit           # Build aggkit only
 #   ./build_images.sh --all --force      # Force rebuild all images
 #   ./build_images.sh --op-geth --force  # Force rebuild op-geth only
 #   ./build_images.sh --help             # Show help
@@ -38,6 +42,8 @@ source .env
 # Default values
 BUILD_OP_GETH=false
 BUILD_OP_STACK=false
+BUILD_BRIDGE=false
+BUILD_AGGKIT=false
 BUILD_ALL=false
 FORCE=false
 
@@ -50,6 +56,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --op-stack)
       BUILD_OP_STACK=true
+      shift
+      ;;
+    --bridge)
+      BUILD_BRIDGE=true
+      shift
+      ;;
+    --aggkit)
+      BUILD_AGGKIT=true
       shift
       ;;
     --all)
@@ -65,6 +79,8 @@ while [[ $# -gt 0 ]]; do
       echo "Options:"
       echo "  --op-geth     Build op-geth image only"
       echo "  --op-stack    Build op-stack images only (contracts + opstack)"
+      echo "  --bridge      Build bridge service image only"
+      echo "  --aggkit      Build aggkit image only"
       echo "  --all         Build all images (default if no options specified)"
       echo "  --force       Force rebuild even if images exist"
       echo "  -h, --help    Show this help message"
@@ -79,14 +95,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 # If no specific options provided, build all
-if [ "$BUILD_OP_GETH" = false ] && [ "$BUILD_OP_STACK" = false ] && [ "$BUILD_ALL" = false ]; then
+if [ "$BUILD_OP_GETH" = false ] && [ "$BUILD_OP_STACK" = false ] && [ "$BUILD_BRIDGE" = false ] && [ "$BUILD_AGGKIT" = false ] && [ "$BUILD_ALL" = false ]; then
   BUILD_ALL=true
 fi
 
-# If --all is specified, set both flags
+# If --all is specified, set all flags
 if [ "$BUILD_ALL" = true ]; then
   BUILD_OP_GETH=true
   BUILD_OP_STACK=true
+  BUILD_BRIDGE=true
+  BUILD_AGGKIT=true
 fi
 
 build_patched_zkevm_bridge_service_image() {
@@ -196,19 +214,12 @@ if [ "$BUILD_OP_GETH" = true ]; then
   build_if_needed "$OP_GETH_IMAGE_TAG" "build_op_geth_image" "OP-Geth image"
 fi
 
-# Always build these images (legacy support)
-if [ "$FORCE" = true ] || ! image_exists "$XLAYER_BRIDGE_SERVICE_IMAGE_TAG"; then
-  echo "Building patched zkevm bridge service image..."
-  build_patched_zkevm_bridge_service_image
-else
-  echo "Image $XLAYER_BRIDGE_SERVICE_IMAGE_TAG already exists (use --force to rebuild)"
+if [ "$BUILD_BRIDGE" = true ]; then
+  build_if_needed "$XLAYER_BRIDGE_SERVICE_IMAGE_TAG" "build_patched_zkevm_bridge_service_image" "patched zkevm bridge service"
 fi
 
-if [ "$FORCE" = true ] || ! image_exists "aggkit:local"; then
-  echo "Building aggkit image..."
-  build_aggkit_image
-else
-  echo "Image aggkit:local already exists (use --force to rebuild)"
+if [ "$BUILD_AGGKIT" = true ]; then
+  build_if_needed "aggkit:local" "build_aggkit_image" "aggkit"
 fi
 
 echo "Build completed!"
