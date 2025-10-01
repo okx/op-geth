@@ -67,7 +67,7 @@ func ListenRealtimeProducer(
 					log.Error(fmt.Sprintf("[Realtime] Failed to send error trigger message. error: %v, currHeight: %d", err, currHeight))
 				}
 			} else {
-				log.Debug(fmt.Sprintf("[Realtime] Sent kafka new block info message for block number %d, blockHash: %x", currHeight, blockInfo.Hash))
+				log.Debug(fmt.Sprintf("[Realtime] Sent kafka confirmed block info message for block number %d, blockHash: %x", currHeight, blockInfo.Hash))
 			}
 		case txInfo := <-txInfoChan:
 			currHeight = txInfo.BlockNumber
