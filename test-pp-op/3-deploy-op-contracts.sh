@@ -27,6 +27,7 @@ deploy_transactor_contract() {
   DOCKER_ARGS+=("-e" "CURL_CA_BUNDLE=")
   DOCKER_ARGS+=("-e" "GIT_SSL_NO_VERIFY=true")
   DOCKER_ARGS+=("-e" "NODE_TLS_REJECT_UNAUTHORIZED=0")
+  DOCKER_ARGS+=("-e" "GODEBUG=x509ignoreCN=1")
   
   if [ "$ENV" = "local" ]; then
     DOCKER_ARGS+=("--network" "$DOCKER_NETWORK")
@@ -89,6 +90,8 @@ deploy_transactor_contract() {
 #  "proxyAdminAddress": "0x210879bec4c74c7e4e6df5e919f9525d75e15183"
 # }
 deploy_op_stack_bootstrap_superchain() {
+  source .env
+  TRANSACTOR_ADDRESS=${TRANSACTOR}
   echo "🔧 Bootstrapping superchain with op-deployer..."
 
   # Build docker run command with conditional network flag
@@ -99,10 +102,7 @@ deploy_op_stack_bootstrap_superchain() {
   DOCKER_ARGS+=("-e" "GIT_SSL_NO_VERIFY=true")
   DOCKER_ARGS+=("-e" "NODE_TLS_REJECT_UNAUTHORIZED=0")
   DOCKER_ARGS+=("-e" "GOINSECURE=eth-sepolia.g.alchemy.com")
-  DOCKER_ARGS+=("-e" "GODEBUG=x509ignoreCN=0")
-  DOCKER_ARGS+=("-e" "GODEBUG=x509ignoreCN=1")
-
-
+  DOCKER_ARGS+=("-e" "GODEBUG=x509ignoreCN=1,x509ignoreUnknownCA=1,x509ignoreSystemRoots=1")
 
     if [ "$ENV" = "local" ]; then
       DOCKER_ARGS+=("--network" "$DOCKER_NETWORK")
@@ -114,7 +114,7 @@ deploy_op_stack_bootstrap_superchain() {
 
   DOCKER_ARGS+=("$OP_CONTRACTS_IMAGE_TAG")
 
-  BASH_CMD="set -e && export CURL_CA_BUNDLE= && export GIT_SSL_NO_VERIFY=true && export GOINSECURE=eth-sepolia.g.alchemy.com && export GODEBUG=x509ignoreCN=1 && /app/op-deployer/bin/op-deployer bootstrap superchain --l1-rpc-url $L1_RPC_URL_IN_DOCKER --private-key $DEPLOYER_PRIVATE_KEY --artifacts-locator file:///app/packages/contracts-bedrock/forge-artifacts --superchain-proxy-admin-owner $TRANSACTOR_ADDRESS --protocol-versions-owner $ADMIN_OWNER_ADDRESS --guardian $ADMIN_OWNER_ADDRESS --outfile /deployments/superchain.json"
+  BASH_CMD="set -e && /app/op-deployer/bin/op-deployer bootstrap superchain --l1-rpc-url $L1_RPC_URL_IN_DOCKER --private-key $DEPLOYER_PRIVATE_KEY --artifacts-locator file:///app/packages/contracts-bedrock/forge-artifacts --superchain-proxy-admin-owner $TRANSACTOR_ADDRESS --protocol-versions-owner $ADMIN_OWNER_ADDRESS --guardian $ADMIN_OWNER_ADDRESS --outfile /deployments/superchain.json"
 
   docker run "${DOCKER_ARGS[@]}" bash -c "$BASH_CMD"
 

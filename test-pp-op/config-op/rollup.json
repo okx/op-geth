@@ -6,7 +6,7 @@
     },
     "l2": {
       "hash": "0xa2c438c41bc5c9f9a5825e9f3985c306bb2a05c65a73c535daf768bb50864930",
-      "number": 100
+      "number": 0
     },
     "l2_time": 1759139628,
     "system_config": {
@@ -35,10 +35,11 @@
   "batch_inbox_address": "0x006d918f650e2b4a9f360977c4447e6376eb632e",
   "deposit_contract_address": "0xc2bca9375cde920819ccd08076d13f9294938143",
   "l1_system_config_address": "0xa04231ec46ab11110c2000bf0d5e781227747e93",
-  "protocol_versions_address": "0x7a5d537db040ea4f5daca65e318409f19c970f50",
+  "protocol_versions_address": "0xd1d695b7b67a5cc724dfcc45b1a5baa76a0a808b",
   "chain_op_config": {
     "eip1559Elasticity": 6,
     "eip1559Denominator": 50,
     "eip1559DenominatorCanyon": 250
   }
 }
+

@@ -15348,7 +15348,7 @@
   },
   "number": "0x0",
   "gasUsed": "0x0",
-  "parentHash": "0xfd717e6c933c45a799559f068c3c81ff555e774eb99323742bc139fcca84f215",
+  "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
   "baseFeePerGas": "0x3b9aca00",
   "excessBlobGas": "0x0",
   "blobGasUsed": "0x0"
