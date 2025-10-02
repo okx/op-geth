@@ -111,7 +111,7 @@ prepare() {
 
 migrate() {
 # init op-geth-seq and op-geth-rpc
-export OP_DATA_DIR=/tmp/data/op_geth_data \
+export OP_DATA_DIR=./data/op-geth-seq \
 export OP_GENESIS_PATH=/data1/op-geth/test-pp-op/config-op/genesis-op-after-number.json \
 export ERIGON_CHAINDATA_DIR=/data1/op-geth/test-pp-op/data/rpc/chaindata/ \
 export ERIGON_SMTDATA_DIR=/data1/op-geth/test-pp-op/data/rpc/smt/ \
