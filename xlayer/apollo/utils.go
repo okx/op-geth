@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/urfave/cli/v2"
 )
 
@@ -16,9 +17,12 @@ const (
 
 // createMockContext creates a mock CLI context for testing
 func createMockContext(flags []cli.Flag) *cli.Context {
+	log.Info(fmt.Sprintf("apollo createMockContext invoked, flags: %v", flags))
 	set := flag.NewFlagSet("", flag.ContinueOnError)
 	for _, f := range flags {
-		f.Apply(set)
+		if f != nil {
+			f.Apply(set)
+		}
 	}
 
 	context := cli.NewContext(nil, set, nil)

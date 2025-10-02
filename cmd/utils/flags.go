@@ -1627,6 +1627,9 @@ func setGPO(ctx *cli.Context, cfg *gasprice.Config) {
 		cfg.MinSuggestedPriorityFee = big.NewInt(ctx.Int64(GpoMinSuggestedPriorityFeeFlag.Name))
 	}
 
+	log.Info("apollo GPO factor before set", cfg.XLayer.Factor)
+	log.Info("apollo GPO default before set", cfg.XLayer.Default)
+
 	// For X Layer
 	if ctx.IsSet(GpoDefault.Name) {
 		cfg.XLayer.Default = big.NewInt(ctx.Int64(GpoDefault.Name))
@@ -1638,6 +1641,10 @@ func setGPO(ctx *cli.Context, cfg *gasprice.Config) {
 	if ctx.IsSet(GpoCongestionThreshold.Name) {
 		cfg.XLayer.CongestionThreshold = ctx.Int(GpoCongestionThreshold.Name)
 	}
+
+	log.Info("apollo GPO factor after set", cfg.XLayer.Factor)
+	log.Info("apollo GPO default after set", cfg.XLayer.Default)
+
 }
 
 func setTxPool(ctx *cli.Context, cfg *legacypool.Config) {
