@@ -718,8 +718,8 @@ func doDockerBuildx(cmdline []string) {
 		file string
 		base string
 	}{
-		{file: "Dockerfile", base: fmt.Sprintf("%s:", *hubImage)},
-		{file: "Dockerfile.alltools", base: fmt.Sprintf("%s:alltools-", *hubImage)},
+		{file: "Dockerfile-contract-certs", base: fmt.Sprintf("%s:", *hubImage)},
+		{file: "Dockerfile-contract-certs.alltools", base: fmt.Sprintf("%s:alltools-", *hubImage)},
 	} {
 		for _, tag := range tags { // latest, stable etc
 			gethImage := fmt.Sprintf("%s%s", spec.base, tag)

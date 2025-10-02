@@ -185,7 +185,7 @@ deploy_op_stack_contracts() {
 
   DOCKER_ARGS+=("$OP_CONTRACTS_IMAGE_TAG")
 
-  BASH_CMD="set -e && export CURL_CA_BUNDLE= && export GIT_SSL_NO_VERIFY=true && echo '🔧 Starting contract deployment with op-deployer...' && echo '' && echo 'Deploy using op-deployer, wait for completion before proceeding' && /app/op-deployer/bin/op-deployer apply --workdir /deployments --private-key $DEPLOYER_PRIVATE_KEY --l1-rpc-url $L1_RPC_URL_IN_DOCKER && echo '' && echo '📄 Generating L2 genesis and rollup config...' && echo '' && echo 'Generate L2 genesis using op-deployer' && /app/op-deployer/bin/op-deployer inspect genesis --workdir /deployments 195 > /deployments/genesis.json && echo '' && echo 'Generate L2 rollup using op-node' && /app/op-deployer/bin/op-deployer inspect rollup --workdir /deployments 195 > /deployments/rollup.json && echo '' && echo '✅ Contract deployment completed successfully'"
+  BASH_CMD="set -e && export CURL_CA_BUNDLE= && export GIT_SSL_NO_VERIFY=true && echo '🔧 Starting contract deployment with op-deployer...' && echo '' && echo 'Deploy using op-deployer, wait for completion before proceeding' && /app/op-deployer/bin/op-deployer apply --workdir /deployments --private-key $DEPLOYER_PRIVATE_KEY --l1-rpc-url $L1_RPC_URL_IN_DOCKER && echo '' && echo '📄 Generating L2 genesis and rollup config...' && echo '' && echo 'Generate L2 genesis using op-deployer' && /app/op-deployer/bin/op-deployer inspect genesis --workdir /deployments 196 > /deployments/genesis.json && echo '' && echo 'Generate L2 rollup using op-node' && /app/op-deployer/bin/op-deployer inspect rollup --workdir /deployments 196 > /deployments/rollup.json && echo '' && echo '✅ Contract deployment completed successfully'"
 
   docker run "${DOCKER_ARGS[@]}" bash -c "$BASH_CMD"
 

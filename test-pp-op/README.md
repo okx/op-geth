@@ -11,3 +11,6 @@ RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificat
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 ENV SSL_CERT_DIR=/etc/ssl/certs
 ```
+
+2. deploy contracts
+update intent.toml

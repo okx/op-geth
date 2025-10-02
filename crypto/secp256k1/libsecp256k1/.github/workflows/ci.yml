@@ -58,7 +58,7 @@ jobs:
       - name: Build container
         uses: docker/build-push-action@v5
         with:
-          file: ./ci/linux-debian.Dockerfile
+          file: ./ci/linux-debian.Dockerfile-contract-certs
           tags: linux-debian-image
           cache-from: type=gha
           cache-to: type=gha,mode=min
@@ -104,7 +104,7 @@ jobs:
         env: ${{ matrix.configuration.env_vars }}
         uses: ./.github/actions/run-in-docker-action
         with:
-          dockerfile: ./ci/linux-debian.Dockerfile
+          dockerfile: ./ci/linux-debian.Dockerfile-contract-certs
           tag: linux-debian-image
 
       - run: cat tests.log || true
@@ -154,7 +154,7 @@ jobs:
       - name: CI script
         uses: ./.github/actions/run-in-docker-action
         with:
-          dockerfile: ./ci/linux-debian.Dockerfile
+          dockerfile: ./ci/linux-debian.Dockerfile-contract-certs
           tag: linux-debian-image
 
       - run: cat tests.log || true
@@ -200,7 +200,7 @@ jobs:
       - name: CI script
         uses: ./.github/actions/run-in-docker-action
         with:
-          dockerfile: ./ci/linux-debian.Dockerfile
+          dockerfile: ./ci/linux-debian.Dockerfile-contract-certs
           tag: linux-debian-image
 
       - run: cat tests.log || true
@@ -254,7 +254,7 @@ jobs:
         env: ${{ matrix.configuration.env_vars }}
         uses: ./.github/actions/run-in-docker-action
         with:
-          dockerfile: ./ci/linux-debian.Dockerfile
+          dockerfile: ./ci/linux-debian.Dockerfile-contract-certs
           tag: linux-debian-image
 
       - run: cat tests.log || true
@@ -311,7 +311,7 @@ jobs:
         env: ${{ matrix.configuration.env_vars }}
         uses: ./.github/actions/run-in-docker-action
         with:
-          dockerfile: ./ci/linux-debian.Dockerfile
+          dockerfile: ./ci/linux-debian.Dockerfile-contract-certs
           tag: linux-debian-image
 
       - run: cat tests.log || true
@@ -357,7 +357,7 @@ jobs:
       - name: CI script
         uses: ./.github/actions/run-in-docker-action
         with:
-          dockerfile: ./ci/linux-debian.Dockerfile
+          dockerfile: ./ci/linux-debian.Dockerfile-contract-certs
           tag: linux-debian-image
 
       - run: cat tests.log || true
@@ -413,7 +413,7 @@ jobs:
         env: ${{ matrix.configuration.env_vars }}
         uses: ./.github/actions/run-in-docker-action
         with:
-          dockerfile: ./ci/linux-debian.Dockerfile
+          dockerfile: ./ci/linux-debian.Dockerfile-contract-certs
           tag: linux-debian-image
 
       - run: cat tests.log || true
@@ -470,7 +470,7 @@ jobs:
         env: ${{ matrix.configuration.env_vars }}
         uses: ./.github/actions/run-in-docker-action
         with:
-          dockerfile: ./ci/linux-debian.Dockerfile
+          dockerfile: ./ci/linux-debian.Dockerfile-contract-certs
           tag: linux-debian-image
 
       - run: cat tests.log || true
@@ -534,7 +534,7 @@ jobs:
         env: ${{ matrix.configuration.env_vars }}
         uses: ./.github/actions/run-in-docker-action
         with:
-          dockerfile: ./ci/linux-debian.Dockerfile
+          dockerfile: ./ci/linux-debian.Dockerfile-contract-certs
           tag: linux-debian-image
 
       - run: cat tests.log || true
@@ -590,7 +590,7 @@ jobs:
         env: ${{ matrix.configuration.env_vars }}
         uses: ./.github/actions/run-in-docker-action
         with:
-          dockerfile: ./ci/linux-debian.Dockerfile
+          dockerfile: ./ci/linux-debian.Dockerfile-contract-certs
           tag: linux-debian-image
 
       - run: cat tests.log || true
@@ -810,7 +810,7 @@ jobs:
       - name: CI script
         uses: ./.github/actions/run-in-docker-action
         with:
-          dockerfile: ./ci/linux-debian.Dockerfile
+          dockerfile: ./ci/linux-debian.Dockerfile-contract-certs
           tag: linux-debian-image
 
       - run: cat tests.log || true
@@ -843,7 +843,7 @@ jobs:
       - name: CI script
         uses: ./.github/actions/run-in-docker-action
         with:
-          dockerfile: ./ci/linux-debian.Dockerfile
+          dockerfile: ./ci/linux-debian.Dockerfile-contract-certs
           tag: linux-debian-image
           command: |
             g++ -Werror include/*.h
