@@ -149,8 +149,8 @@ ROOTLESS_DOCKER=$(docker info -f "{{println .SecurityOptions}}" | grep rootless 
 if ! [ -z "$ROOTLESS_DOCKER" ]; then
 docker run --rm --privileged \
     -v "$(pwd)/scripts:/scripts" \
-    -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/195-rollup.json" \
-    -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/195-genesis-l2.json" \
+    -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/196-rollup.json" \
+    -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/196-genesis-l2.json" \
     -v "$EXPORT_DIR:/app/op-program/bin" \
     -w /app \
     ${DOCKER_NETWORK_ARG} \
@@ -170,8 +170,8 @@ docker run --rm --privileged \
 else
 docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/195-rollup.json" \
-    -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/195-genesis-l2.json" \
+    -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/196-rollup.json" \
+    -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/196-genesis-l2.json" \
     -v "$EXPORT_DIR:/app/op-program/bin" \
     -w /app \
     ${DOCKER_NETWORK_ARG} \
