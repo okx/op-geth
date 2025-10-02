@@ -9,10 +9,10 @@ cd $PWD_DIR
 
 migrate() {
 # init op-geth-seq and op-geth-rpc
-export OP_DATA_DIR=./data/op-geth-seq \
-export OP_GENESIS_PATH=/data1/op-geth/test-pp-op/config-op/genesis-op-after-number.json \
-export ERIGON_CHAINDATA_DIR=/data1/op-geth/test-pp-op/data/rpc/chaindata/ \
-export ERIGON_SMTDATA_DIR=/data1/op-geth/test-pp-op/data/rpc/smt/ \
+export OP_DATA_DIR=./data/op-geth-seq
+export OP_GENESIS_PATH=/data1/op-geth/test-pp-op/config-op/genesis-op-after-number.json
+export ERIGON_CHAINDATA_DIR=/data1/op-geth/test-pp-op/data/rpc/chaindata/
+export ERIGON_SMTDATA_DIR=/data1/op-geth/test-pp-op/data/rpc/smt/
 export GETH_CMD=/data1/op-geth/build/bin/geth
 ${GETH_CMD} --datadir=${OP_DATA_DIR} --gcmode=archive migrate --state.scheme=hash --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=${ERIGON_CHAINDATA_DIR} --smt-db-path=${ERIGON_SMTDATA_DIR} ${OP_GENESIS_PATH} 2>&1 | tee migrate.log
 
