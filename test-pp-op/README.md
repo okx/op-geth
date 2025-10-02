@@ -14,3 +14,11 @@ ENV SSL_CERT_DIR=/etc/ssl/certs
 
 2. deploy contracts
 update intent.toml
+
+3. make op-program
+```
+./5-migrate-op.sh
+docker commit my-op-temp my-op-stack:built
+
+```
+

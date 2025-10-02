@@ -5,8 +5,8 @@
       "number": 9323930
     },
     "l2": {
-      "hash": "0x35ba889420c4ce919883d2cba213152edc2f42a4ec10e61ea2f279aaba1c6d2f",
-      "number": 0
+      "hash": "0xfd6300335f1ad41597314cdb18015f6bdc62e7b135a5d1ad3d9c757d980cf650",
+      "number": 38268805
     },
     "l2_time": 1759373208,
     "system_config": {
@@ -42,4 +42,3 @@
     "eip1559DenominatorCanyon": 250
   }
 }
-

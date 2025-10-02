@@ -1,0 +1,34 @@
+FROM op-stack:v1.13.4 as builder
+
+# Install dependencies (docker CLI, make, etc.)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        make \
+        curl \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+
+COPY config-op/rollup.json /app/op-program/chainconfig/configs/196-rollup.json
+COPY config-op/genesis.gz.json /app/op-program/chainconfig/configs/196-genesis-l2.json
+
+
+RUN echo '🚀 Building reproducible-prestate...' && \
+    make reproducible-prestate || echo "⚠️ Make failed during build, check setup"
+
+# Second stage: clean runtime image
+FROM op-stack:v1.13.4
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends docker.io && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+
+COPY --from=builder /app/op-program/bin /app/op-program/bin
+
+CMD [ "bash" ]

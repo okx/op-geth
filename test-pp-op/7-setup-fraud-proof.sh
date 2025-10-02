@@ -1,3 +1,4 @@
+source .env
 
 PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd $PWD_DIR
@@ -99,7 +100,6 @@ add_game_type_via_transactor() {
         \$VM,\
         $IS_PERMISSIONED\
         )]\")
-
         echo 'AddGameType calldata: '\$ADDGAMETYPE_CALLDATA
         echo ''
 
