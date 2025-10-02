@@ -43,14 +43,12 @@ func SetApolloConfig(ethCfg ethconfig.Config, nodeCfg node.Config) {
 	globalApolloConfig.NodeCfg = nodeCfg
 }
 
-// IsApolloConfigSet checks if Apollo configuration has been set
 func IsApolloConfigSet() bool {
 	configMutex.RLock()
 	defer configMutex.RUnlock()
 	return globalApolloConfig != nil
 }
 
-// GethConfigHandler implements geth-specific configuration change logic
 type GethConfigHandler struct{}
 
 // HandleConfigChange implements geth-specific configuration change logic
@@ -62,6 +60,17 @@ func (g *GethConfigHandler) HandleConfigChange(prefix string, ctx *cli.Context, 
 		fireL2GasPricer(ctx, value)
 	default:
 		log.Info("Lucas Geth unknown config prefix", "prefix", prefix, "key", key, "value", value.NewValue)
+	}
+}
+
+// LoadConfig implements geth-specific configuration loading logic
+func (g *GethConfigHandler) LoadConfig(prefix string, ctx *cli.Context) {
+	log.Info("Geth LoadConfig called", "prefix", prefix)
+	switch prefix {
+	case apollo.L2GasPricer:
+		g.loadL2GasPricer(ctx)
+	default:
+		log.Info("Geth unknown config prefix for loading", "prefix", prefix)
 	}
 }
 

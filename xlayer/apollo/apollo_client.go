@@ -183,9 +183,14 @@ func (c *Client) LoadConfig() (loaded bool) {
 		if cache != nil {
 			cache.Range(func(key, value interface{}) bool {
 				loaded = true
-				switch prefix {
-				case L2GasPricer:
-					// c.loadL2GasPricer(value)
+				// Use handler to load config if available
+				if c.Listener != nil && c.Listener.Handler != nil {
+					ctx, _, err := c.GetConfigContext(value)
+					if err != nil {
+						log.Error(fmt.Sprintf("load config from apollo config failed, err: %v", err))
+						return true
+					}
+					c.Listener.Handler.LoadConfig(prefix, ctx)
 				}
 				return true
 			})
@@ -194,9 +199,9 @@ func (c *Client) LoadConfig() (loaded bool) {
 	return loaded
 }
 
-// CustomHandler is the custom change listener for op-geth
 type CustomHandler interface {
 	HandleConfigChange(prefix string, ctx *cli.Context, key string, value *storage.ConfigChange)
+	LoadConfig(prefix string, ctx *cli.Context) // Add config loading interface
 }
 
 type CustomChangeListener struct {
@@ -226,10 +231,6 @@ func (c *CustomChangeListener) OnChange(changeEvent *storage.ChangeEvent) {
 				log.Warn("Failed to get config context", "error", err, "namespace", changeEvent.Namespace)
 				continue
 			}
-
-			log.Info("apollo handle config change invoked", "prefix", prefix, "key", key, "value", value.NewValue)
-
-			log.Info("apollo handler", "handler", c.Handler)
 
 			// Handle configuration changes based on prefix
 			if c.Handler != nil {

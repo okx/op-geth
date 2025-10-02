@@ -13,16 +13,11 @@ import (
 )
 
 // loadL2GasPricer loads the apollo l2gaspricer config cache on startup
-// func (g *CustomChangeListenerImpl) loadL2GasPricer(value interface{}) {
-// 	ctx, _, err := g.Client.GetConfigContext(value)
-// 	if err != nil {
-// 		log.Error(fmt.Sprintf("load l2gaspricer from apollo config failed, err: %v", err))
-// 	}
-
-// 	// Load l2gaspricer config changes
-// 	loadL2GasPricerConfig(ctx)
-// 	log.Info(fmt.Sprintf("loaded l2gaspricer from apollo config: %+v", value.(string)))
-// }
+func (g *GethConfigHandler) loadL2GasPricer(ctx *cli.Context) {
+	// Load l2gaspricer config changes
+	loadL2GasPricerConfig(ctx)
+	log.Info(fmt.Sprintf("loaded l2gaspricer from apollo config"))
+}
 
 // fireL2GasPricer fires the apollo l2gaspricer config change
 func fireL2GasPricer(ctx *cli.Context, value *storage.ConfigChange) {

@@ -20,10 +20,8 @@ func addXLayerBackend(stack *node.Node, cfg *gethConfig) {
 	if cfg.Eth.XLayer.Apollo.Enable {
 		gethApollo.SetApolloConfig(cfg.Eth, cfg.Node)
 
-		// Create geth-specific config handler
 		handler := gethApollo.NewGethConfigHandler()
 
-		// Create flags for Apollo config context (exclude Apollo connection flags)
 		flags := append(utils.XLayerFlags, []cli.Flag{
 			utils.GpoMaxGasPriceFlag,
 		}...)

@@ -25,15 +25,6 @@ func (c *Client) GetConfigContext(value interface{}) (*cli.Context, map[string]i
 		return nil, nil, err
 	}
 
-	// sets global flags to value in apollo config
-	log.Info("apollo createMockContext invoked", "flags_count", len(c.flags))
-	for i, flag := range c.flags {
-		if flag != nil {
-			log.Info("apollo flag", "index", i, "name", flag.Names()[0])
-		} else {
-			log.Info("apollo flag", "index", i, "name", "nil")
-		}
-	}
 	ctx := createMockContext(c.flags)
 	for key, value := range config {
 		if !ctx.IsSet(key) {
