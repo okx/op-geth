@@ -12,30 +12,27 @@ set -x
 #   ./build_images.sh [OPTIONS]
 #
 # OPTIONS:
-#   --op-geth         Build op-geth image only
-#   --op-stack        Build op-stack image only (without contracts)
-#   --bridge          Build bridge service image only
-#   --aggkit          Build aggkit image only
-#   --with-op-contract Build OP Stack contracts (use with --op-stack or --all)
-#   --all             Build all images (default if no options specified)
-#   --force           Force rebuild even if images exist
-#   -h, --help        Show this help message
+#   --op-geth     Build op-geth image only
+#   --op-stack    Build op-stack images only (contracts + opstack)
+#   --bridge      Build bridge service image only
+#   --aggkit      Build aggkit image only
+#   --all         Build all images (default if no options specified)
+#   --force       Force rebuild even if images exist
+#   -h, --help    Show this help message
 #
 # EXAMPLES:
-#   ./build_images.sh                        # Build all images (default)
-#   ./build_images.sh --op-geth              # Build op-geth only
-#   ./build_images.sh --op-stack             # Build op-stack only (no contracts)
-#   ./build_images.sh --op-stack --with-op-contract  # Build op-stack with contracts
-#   ./build_images.sh --bridge               # Build bridge service only
-#   ./build_images.sh --aggkit               # Build aggkit only
-#   ./build_images.sh --all --force          # Force rebuild all images
-#   ./build_images.sh --op-geth --force      # Force rebuild op-geth only
-#   ./build_images.sh --help                 # Show help
+#   ./build_images.sh                    # Build all images (default)
+#   ./build_images.sh --op-geth          # Build op-geth only
+#   ./build_images.sh --op-stack         # Build op-stack only
+#   ./build_images.sh --bridge           # Build bridge service only
+#   ./build_images.sh --aggkit           # Build aggkit only
+#   ./build_images.sh --all --force      # Force rebuild all images
+#   ./build_images.sh --op-geth --force  # Force rebuild op-geth only
+#   ./build_images.sh --help             # Show help
 #
 # IMAGES BUILT:
 #   - OP-Geth: Ethereum client with OP Stack modifications
-#   - OP-Stack: Core OP Stack components (without contracts by default)
-#   - OP-Stack Contracts: OP Stack contracts (only with --with-op-contract)
+#   - OP-Stack: Core OP Stack components (contracts + opstack)
 #   - Bridge Service: Patched zkevm-bridge-service
 #   - AggKit: OKX aggregation toolkit
 # =============================================================================
@@ -45,7 +42,6 @@ source .env
 # Default values
 BUILD_OP_GETH=false
 BUILD_OP_STACK=false
-BUILD_OP_CONTRACT=false
 BUILD_BRIDGE=false
 BUILD_AGGKIT=false
 BUILD_ALL=false
@@ -60,10 +56,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --op-stack)
       BUILD_OP_STACK=true
-      shift
-      ;;
-    --with-op-contract)
-      BUILD_OP_CONTRACT=true
       shift
       ;;
     --bridge)
@@ -85,14 +77,13 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: $0 [OPTIONS]"
       echo "Options:"
-      echo "  --op-geth         Build op-geth image only"
-      echo "  --op-stack        Build op-stack image only (without contracts)"
-      echo "  --bridge          Build bridge service image only"
-      echo "  --aggkit          Build aggkit image only"
-      echo "  --with-op-contract Build OP Stack contracts (use with --op-stack or --all)"
-      echo "  --all             Build all images (default if no options specified)"
-      echo "  --force           Force rebuild even if images exist"
-      echo "  -h, --help        Show this help message"
+      echo "  --op-geth     Build op-geth image only"
+      echo "  --op-stack    Build op-stack images only (contracts + opstack)"
+      echo "  --bridge      Build bridge service image only"
+      echo "  --aggkit      Build aggkit image only"
+      echo "  --all         Build all images (default if no options specified)"
+      echo "  --force       Force rebuild even if images exist"
+      echo "  -h, --help    Show this help message"
       exit 0
       ;;
     *)
@@ -108,16 +99,12 @@ if [ "$BUILD_OP_GETH" = false ] && [ "$BUILD_OP_STACK" = false ] && [ "$BUILD_BR
   BUILD_ALL=true
 fi
 
-# If --all is specified, set all flags (but not contracts by default)
+# If --all is specified, set all flags
 if [ "$BUILD_ALL" = true ]; then
   BUILD_OP_GETH=true
   BUILD_OP_STACK=true
   BUILD_BRIDGE=true
   BUILD_AGGKIT=true
-  # Only build contracts if explicitly requested
-  if [ "$BUILD_OP_CONTRACT" = true ]; then
-    BUILD_OP_CONTRACT=true
-  fi
 fi
 
 build_patched_zkevm_bridge_service_image() {
@@ -243,10 +230,6 @@ build_if_needed() {
 # Build images based on selected options
 if [ "$BUILD_OP_STACK" = true ]; then
   build_if_needed "$OP_STACK_IMAGE_TAG" "build_op_stack_image" "OP Stack image"
-fi
-
-# Build contracts separately if requested
-if [ "$BUILD_OP_CONTRACT" = true ]; then
   build_if_needed "$OP_CONTRACTS_IMAGE_TAG" "build_op_stack_contract" "OP Stack contracts"
 fi
 

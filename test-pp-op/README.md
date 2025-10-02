@@ -17,8 +17,7 @@ update intent.toml
 
 3. make op-program
 ```
-./5-migrate-op.sh
+./5-3-build-op-program.sh -a x86
 docker commit my-op-temp my-op-stack:built
-
 ```
 

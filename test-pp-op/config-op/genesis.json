@@ -32,7 +32,8 @@
       "eip1559Elasticity": 6,
       "eip1559Denominator": 50,
       "eip1559DenominatorCanyon": 250
-    }
+    },
+    "legacyXLayerBlock": 21
   },
   "nonce": "0x0",
   "timestamp": "0x68dde798",
