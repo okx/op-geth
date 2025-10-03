@@ -6,6 +6,12 @@ source tools.sh
 
 PWD_DIR=$(pwd)
 
+if [ "$ENV" = "local" ]; then
+    CHAIN_ID=195
+else
+    CHAIN_ID=196
+fi
+
 # Function to show usage
 show_usage() {
     echo "Usage: $0 [OPTIONS]"
@@ -114,8 +120,8 @@ post_migrate() {
         docker run -it --privileged \
             --platform $DOCKER_PLATFORM \
             -v "$(pwd)/scripts:/scripts" \
-            -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/196-rollup.json" \
-            -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/196-genesis-l2.json" \
+            -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-rollup.json" \
+            -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-genesis-l2.json" \
             -v "$EXPORT_DIR:/app/op-program/bin" \
             --name my-op-temp \
             -w /app \
@@ -137,8 +143,8 @@ post_migrate() {
         docker run -it \
             --platform $DOCKER_PLATFORM \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/196-rollup.json" \
-            -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/196-genesis-l2.json" \
+            -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-rollup.json" \
+            -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-genesis-l2.json" \
             -v "$EXPORT_DIR:/app/op-program/bin" \
             --name my-op-temp \
             -w /app \
