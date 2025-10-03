@@ -198,7 +198,7 @@ func forTupleUnpack(t Type, output []byte) (interface{}, error) {
 			return nil, err
 		}
 		if elem.T == ArrayTy && !isDynamicType(*elem) {
-			// If we have a test-pp-op array, like [3]uint256, these are coded as
+			// If we have a static array, like [3]uint256, these are coded as
 			// just like uint256,uint256,uint256.
 			// This means that we need to add two 'virtual' arguments when
 			// we count the index from now on.
@@ -210,7 +210,7 @@ func forTupleUnpack(t Type, output []byte) (interface{}, error) {
 			// Decrement it by 1, as the normal index increment is still applied.
 			virtualArgs += getTypeSize(*elem)/32 - 1
 		} else if elem.T == TupleTy && !isDynamicType(*elem) {
-			// If we have a test-pp-op tuple, like (uint256, bool, uint256), these are
+			// If we have a static tuple, like (uint256, bool, uint256), these are
 			// coded as just like uint256,bool,uint256
 			virtualArgs += getTypeSize(*elem)/32 - 1
 		}

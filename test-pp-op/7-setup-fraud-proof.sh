@@ -286,12 +286,3 @@ export GAME_TYPE=0
 
 sleep $TEMP_GAME_WINDOW
 ${DOCKER_COMPOSE_CMD} up -d op-proposer op-challenger op-dispute-mon
-#
-## Run appropriate state check based on mode
-#if [ "$CHECK_REGENESIS_STRESS_TEST" = "true" ]; then
-#  echo "🔍 Running regenesis check (with stress test)..."
-#  ./scripts/check-regenesis-with-stress-test.sh
-#else
-#  echo "🔍 Running regenesis check..."
-#  ./scripts/check-regenesis.sh
-#fi

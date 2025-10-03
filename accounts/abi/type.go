@@ -378,10 +378,10 @@ func isDynamicType(t Type) bool {
 }
 
 // getTypeSize returns the size that this type needs to occupy.
-// We distinguish test-pp-op and dynamic types. Static types are encoded in-place
+// We distinguish static and dynamic types. Static types are encoded in-place
 // and dynamic types are encoded at a separately allocated location after the
 // current block.
-// So for a test-pp-op variable, the size returned represents the size that the
+// So for a static variable, the size returned represents the size that the
 // variable actually occupies.
 // For a dynamic variable, the returned size is fixed 32 bytes, which is used
 // to store the location reference for actual value storage.

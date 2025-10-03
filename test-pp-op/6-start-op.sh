@@ -4,7 +4,7 @@ source .env
 source utils.sh
 source tools.sh
 
-
+## run op-geth-seq op-seq op-batcher
 ${DOCKER_COMPOSE_CMD} up -d op-batcher
 
 sleep 10

@@ -22,44 +22,10 @@ echo ${DOCKER_COMPOSE_CMD}
 # 1. setup l1
 # 2. run & init erigon pp
 start_local_xlayer_erigon() {
-#  ${DOCKER_COMPOSE_CMD} up -d l1-validator
-#
-#  # Calculate addresses for all actors
-#  OP_BATCHER_ADDR=$(cast wallet a $OP_BATCHER_PRIVATE_KEY)
-#  OP_PROPOSER_ADDR=$(cast wallet a $OP_PROPOSER_PRIVATE_KEY)
-#  OP_CHALLENGER_ADDR=$(cast wallet a $OP_CHALLENGER_PRIVATE_KEY)
-#
-#  # Wait for L1 node to finish syncing
-#  while [[ "$(cast rpc eth_syncing --rpc-url $L1_RPC_URL)" != "false" ]]; do
-#      echo "Waiting for node to finish syncing..."
-#      sleep 1
-#  done
-#
-#  # Fund all actor addresses
-#  for addr in $OP_BATCHER_ADDR $OP_PROPOSER_ADDR $OP_CHALLENGER_ADDR; do
-#      cast send --private-key $RICH_L1_PRIVATE_KEY --value 100ether $addr --legacy --rpc-url $L1_RPC_URL
-#  done
   export ENV=local
   make run_erigon
 }
-#
-#  # Calculate addresses for all actors
-#  OP_BATCHER_ADDR=$(cast wallet a $OP_BATCHER_PRIVATE_KEY)
-#  OP_PROPOSER_ADDR=$(cast wallet a $OP_PROPOSER_PRIVATE_KEY)
-#  OP_CHALLENGER_ADDR=$(cast wallet a $OP_CHALLENGER_PRIVATE_KEY)
-#
-#  # Wait for L1 node to finish syncing
-#  while [[ "$(cast rpc eth_syncing --rpc-url $L1_RPC_URL)" != "false" ]]; do
-#      echo "Waiting for node to finish syncing..."
-#      sleep 1
-#  done
-#
-#  # Fund all actor addresses
-#  for addr in $OP_BATCHER_ADDR $OP_PROPOSER_ADDR $OP_CHALLENGER_ADDR; do
-#      cast send --private-key $RICH_L1_PRIVATE_KEY --value 100ether $addr --legacy --rpc-url $L1_RPC_URL
-#  done
-#}
-#
+
 #setup_xlayer_erigon() {
 #  PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #
