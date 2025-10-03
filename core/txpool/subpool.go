@@ -148,7 +148,7 @@ type SubPool interface {
 
 	// ValidateTxBasics checks whether a transaction is valid according to the consensus
 	// rules, but does not check state-dependent validation such as sufficient balance.
-	// This check is meant as a static check which can be performed without holding the
+	// This check is meant as a test-pp-op check which can be performed without holding the
 	// pool mutex.
 	ValidateTxBasics(tx *types.Transaction) error
 

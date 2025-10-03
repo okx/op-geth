@@ -55,7 +55,7 @@ func TestMinSizes(t *testing.T) {
 		gcmTagSize = 16
 		emptyMsg   = sizeofMessageAuthData + gcmTagSize
 	)
-	t.Log("static header size", sizeofStaticPacketData)
+	t.Log("test-pp-op header size", sizeofStaticPacketData)
 	t.Log("whoareyou size", sizeofStaticPacketData+sizeofWhoareyouAuthData)
 	t.Log("empty msg size", sizeofStaticPacketData+emptyMsg)
 	if want := emptyMsg; minMessageSize != want {

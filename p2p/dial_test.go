@@ -53,7 +53,7 @@ func TestDialSchedDynDial(t *testing.T) {
 				{flags: dynDialedConn, node: newNode(uintID(0x02), "")},
 			},
 			discovered: []*enode.Node{
-				newNode(uintID(0x00), "127.0.0.1:30303"), // not dialed because already connected as static peer
+				newNode(uintID(0x00), "127.0.0.1:30303"), // not dialed because already connected as test-pp-op peer
 				newNode(uintID(0x02), "127.0.0.1:30303"), // ...
 				newNode(uintID(0x03), "127.0.0.1:30303"),
 				newNode(uintID(0x04), "127.0.0.1:30303"),
@@ -153,7 +153,7 @@ func TestDialSchedNetRestrict(t *testing.T) {
 	})
 }
 
-// This test checks that static dials work and obey the limits.
+// This test checks that test-pp-op dials work and obey the limits.
 func TestDialSchedStaticDial(t *testing.T) {
 	t.Parallel()
 
@@ -227,7 +227,7 @@ func TestDialSchedStaticDial(t *testing.T) {
 	})
 }
 
-// This test checks that removing static nodes stops connecting to them.
+// This test checks that removing test-pp-op nodes stops connecting to them.
 func TestDialSchedRemoveStatic(t *testing.T) {
 	t.Parallel()
 
@@ -236,7 +236,7 @@ func TestDialSchedRemoveStatic(t *testing.T) {
 		maxDialPeers:   1,
 	}
 	runDialTest(t, config, []dialTestRound{
-		// Add static nodes.
+		// Add test-pp-op nodes.
 		{
 			update: func(d *dialScheduler) {
 				d.addStatic(newNode(uintID(0x01), "127.0.0.1:30303"))
@@ -259,7 +259,7 @@ func TestDialSchedRemoveStatic(t *testing.T) {
 				newNode(uintID(0x02), "127.0.0.2:30303"),
 			},
 		},
-		// All static nodes are removed. 0x01 is in history, 0x02 is being
+		// All test-pp-op nodes are removed. 0x01 is in history, 0x02 is being
 		// dialed, 0x03 is in staticPool.
 		{
 			update: func(d *dialScheduler) {
@@ -274,12 +274,12 @@ func TestDialSchedRemoveStatic(t *testing.T) {
 				uintID(0x02): nil,
 			},
 		},
-		// Since all static nodes are removed, they should not be dialed again.
+		// Since all test-pp-op nodes are removed, they should not be dialed again.
 		{}, {}, {},
 	})
 }
 
-// This test checks that static dials are selected at random.
+// This test checks that test-pp-op dials are selected at random.
 func TestDialSchedManyStaticNodes(t *testing.T) {
 	t.Parallel()
 
@@ -333,7 +333,7 @@ func TestDialSchedHistory(t *testing.T) {
 				newNode(uintID(0x03), "127.0.0.3:30303"),
 			},
 		},
-		// No new tasks are launched in this round because all static
+		// No new tasks are launched in this round because all test-pp-op
 		// nodes are either connected or still being dialed.
 		{
 			succeeded: []enode.ID{

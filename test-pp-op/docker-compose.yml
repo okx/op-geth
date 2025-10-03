@@ -592,7 +592,7 @@ services:
       - --p2p.priv.path=/config-op/opnode_p2p_priv.txt
       - --p2p.peerstore.path=/p2p-data/opnode_peerstore_db
       - --p2p.discovery.path=/p2p-data/opnode_discovery_db
-      - --p2p.static=/dns4/op-seq/tcp/9223/p2p/16Uiu2HAkzHdkbmS2VrCsccLibsu7MvGHpmFUMJnMTkKifrtS5m65
+      - --p2p.test-pp-op=/dns4/op-seq/tcp/9223/p2p/16Uiu2HAkzHdkbmS2VrCsccLibsu7MvGHpmFUMJnMTkKifrtS5m65
       - --p2p.no-discovery
       - --rpc.enable-admin=true
       - --l1=${L1_RPC_URL_IN_DOCKER}

@@ -138,7 +138,7 @@ So the total size is roughly a fixed overhead of `39`, and the size of the query
 name) and response. The query size is, for example,
 FVY6INQ6LZ33WLCHO3BPR3FH6Y.snap.mainnet.ethdisco.net (52)
 
-We also have some static data in the response, such as `enrtree-branch:`, and potentially
+We also have some test-pp-op data in the response, such as `enrtree-branch:`, and potentially
 splitting the response up with `" "`, leaving us with a size of roughly `400` that we need
 to stay below.
 

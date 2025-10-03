@@ -40,8 +40,10 @@ set -x
 source .env
 
 # Default values
+BUILD_CDK_ERIGON=false
 BUILD_OP_GETH=false
 BUILD_OP_STACK=false
+BUILD_OP_CONTRACT=false
 BUILD_BRIDGE=false
 BUILD_AGGKIT=false
 BUILD_ALL=false
@@ -50,12 +52,20 @@ FORCE=false
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
+    --cdk-erigon)
+      BUILD_CDK_ERIGON=true
+      shift
+      ;;
     --op-geth)
       BUILD_OP_GETH=true
       shift
       ;;
     --op-stack)
       BUILD_OP_STACK=true
+      shift
+      ;;
+    --op-contract)
+      BUILD_OP_CONTRACT=true
       shift
       ;;
     --bridge)
@@ -77,8 +87,10 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: $0 [OPTIONS]"
       echo "Options:"
+      echo "  --cdk-erigon     Build cdk-erigon image only"
       echo "  --op-geth     Build op-geth image only"
-      echo "  --op-stack    Build op-stack images only (contracts + opstack)"
+      echo "  --op-stack    Build op-stack images"
+      echo "  --op-contract    Build op contract image"
       echo "  --bridge      Build bridge service image only"
       echo "  --aggkit      Build aggkit image only"
       echo "  --all         Build all images (default if no options specified)"
@@ -95,14 +107,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 # If no specific options provided, build all
-if [ "$BUILD_OP_GETH" = false ] && [ "$BUILD_OP_STACK" = false ] && [ "$BUILD_BRIDGE" = false ] && [ "$BUILD_AGGKIT" = false ] && [ "$BUILD_ALL" = false ]; then
+if [ "$BUILD_OP_GETH" = false ] && [ "$BUILD_CDK_ERIGON" = false ] && [ "$BUILD_OP_STACK" = false ] && [ "$BUILD_OP_CONTRACT" = false ] && [ "$BUILD_BRIDGE" = false ] && [ "$BUILD_AGGKIT" = false ] && [ "$BUILD_ALL" = false ]; then
   BUILD_ALL=true
 fi
 
 # If --all is specified, set all flags
 if [ "$BUILD_ALL" = true ]; then
+  BUILD_CDK_ERIGON=true
   BUILD_OP_GETH=true
   BUILD_OP_STACK=true
+  BUILD_OP_CONTRACT=true
   BUILD_BRIDGE=true
   BUILD_AGGKIT=true
 fi
@@ -139,6 +153,21 @@ build_aggkit_image() {
   echo "Cleaning and resting contract repository..."
   git reset --hard; git checkout feature/0.1.0;git pull
   make build-docker
+  cd $PWD_DIR
+}
+
+build_cdk_erigon_image() {
+  echo "build cdk_erigon image"
+  PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  rm -rf $PWD_DIR/tmp/xlayer-erigon
+  mkdir -p $PWD_DIR/tmp
+  cd $PWD_DIR/tmp/
+
+  echo "Cloning cdk-erigon repository..."
+  git clone -b dev https://github.com/okx/xlayer-erigon.git
+  cd ./xlayer-erigon
+  git reset --hard; git checkout dev;git pull
+  docker build -t ${CDK_ERIGON_IMAGE_TAG} -f ./Dockerfile.local .
   cd $PWD_DIR
 }
 
@@ -230,11 +259,18 @@ build_if_needed() {
 # Build images based on selected options
 if [ "$BUILD_OP_STACK" = true ]; then
   build_if_needed "$OP_STACK_IMAGE_TAG" "build_op_stack_image" "OP Stack image"
+fi
+
+if [ "$BUILD_OP_CONTRACT" = true ]; then
   build_if_needed "$OP_CONTRACTS_IMAGE_TAG" "build_op_stack_contract" "OP Stack contracts"
 fi
 
 if [ "$BUILD_OP_GETH" = true ]; then
   build_if_needed "$OP_GETH_IMAGE_TAG" "build_op_geth_image" "OP-Geth image"
+fi
+
+if [ "$BUILD_CDK_ERIGON" = true ]; then
+  build_if_needed "$CDK_ERIGON_IMAGE_TAG" "build_cdk_erigon_image" "cdk-erigon image"
 fi
 
 if [ "$BUILD_BRIDGE" = true ]; then

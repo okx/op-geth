@@ -262,7 +262,7 @@ loop:
 			}
 			id := c.node.ID()
 			d.peers[id] = struct{}{}
-			// Remove from static pool because the node is now connected.
+			// Remove from test-pp-op pool because the node is now connected.
 			task := d.static[id]
 			if task != nil && task.staticPoolIndex >= 0 {
 				d.removeFromStaticPool(task.staticPoolIndex)
@@ -279,7 +279,7 @@ loop:
 		case node := <-d.addStaticCh:
 			id := node.ID()
 			_, exists := d.static[id]
-			d.log.Trace("Adding static node", "id", id, "endpoint", nodeEndpointForLog(node), "added", !exists)
+			d.log.Trace("Adding test-pp-op node", "id", id, "endpoint", nodeEndpointForLog(node), "added", !exists)
 			if exists {
 				continue loop
 			}
@@ -292,7 +292,7 @@ loop:
 		case node := <-d.remStaticCh:
 			id := node.ID()
 			task := d.static[id]
-			d.log.Trace("Removing static node", "id", id, "ok", task != nil)
+			d.log.Trace("Removing test-pp-op node", "id", id, "ok", task != nil)
 			if task != nil {
 				delete(d.static, id)
 				if task.staticPoolIndex >= 0 {
@@ -338,7 +338,7 @@ func (d *dialScheduler) logStats() {
 		return
 	}
 	if d.dialPeers < dialStatsPeerLimit && d.dialPeers < d.maxDialPeers {
-		d.log.Info("Looking for peers", "peercount", len(d.peers), "tried", d.doneSinceLastLog, "static", len(d.static))
+		d.log.Info("Looking for peers", "peercount", len(d.peers), "tried", d.doneSinceLastLog, "test-pp-op", len(d.static))
 	}
 	d.doneSinceLastLog = 0
 	d.lastStatsLog = now
@@ -380,7 +380,7 @@ func (d *dialScheduler) checkDial(n *enode.Node) error {
 	}
 	if n.IPAddr().IsValid() && n.TCP() == 0 {
 		// This check can trigger if a non-TCP node is found
-		// by discovery. If there is no IP, the node is a static
+		// by discovery. If there is no IP, the node is a test-pp-op
 		// node and the actual endpoint will be resolved later in dialTask.
 		return errNoPort
 	}
@@ -541,7 +541,7 @@ func (t *dialTask) run(d *dialScheduler) {
 		if n := t.dest(); n.Hostname() != "" {
 			resolved, err := d.dnsResolveHostname(n)
 			if err != nil {
-				d.log.Warn("DNS lookup of static node failed", "id", n.ID(), "name", n.Hostname(), "err", err)
+				d.log.Warn("DNS lookup of test-pp-op node failed", "id", n.ID(), "name", n.Hostname(), "err", err)
 			} else {
 				t.destPtr.Store(resolved)
 			}
@@ -556,7 +556,7 @@ func (t *dialTask) run(d *dialScheduler) {
 
 	err := t.dial(d, t.dest())
 	if err != nil {
-		// For static nodes, resolve one more time if dialing fails.
+		// For test-pp-op nodes, resolve one more time if dialing fails.
 		var dialErr *dialError
 		if errors.As(err, &dialErr) && t.isStatic() {
 			if t.resolve(d) {

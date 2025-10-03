@@ -19,9 +19,9 @@ AggregatorPrivateKeyPassword  = "testonly"
 SenderProofToL1Addr = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
 polygonBridgeAddr = "0xb2fAc1CE54bb9BF77A7FE106fA69F81453b72851"
 
-rollupCreationBlockNumber = "156"
-rollupManagerCreationBlockNumber = "162"
-genesisBlockNumber = "156"
+rollupCreationBlockNumber = "88"
+rollupManagerCreationBlockNumber = "97"
+genesisBlockNumber = "88"
 
 [Common]
 NetworkID = 1

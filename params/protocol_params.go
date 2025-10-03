@@ -129,8 +129,8 @@ const (
 	ExpByteFrontier uint64 = 10 // was set to 10 in Frontier
 	ExpByteEIP158   uint64 = 50 // was raised to 50 during Eip158 (Spurious Dragon)
 
-	// Extcodecopy has a dynamic AND a static cost. This represents only the
-	// static portion of the gas. It was changed during EIP 150 (Tangerine)
+	// Extcodecopy has a dynamic AND a test-pp-op cost. This represents only the
+	// test-pp-op portion of the gas. It was changed during EIP 150 (Tangerine)
 	ExtcodeCopyBaseFrontier uint64 = 20
 	ExtcodeCopyBaseEIP150   uint64 = 700
 

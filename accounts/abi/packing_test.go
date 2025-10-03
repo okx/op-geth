@@ -830,7 +830,7 @@ var packUnpackTests = []packUnpackTest{
 			"0500000000000000000000000000000000000000000000000000000000000000", // array[1][2]
 	},
 	{
-		// static tuple
+		// test-pp-op tuple
 		def: `[{"components": [{"name":"a","type":"int64"}, 
 		{"name":"b","type":"int256"}, 
 		{"name":"c","type":"int256"}, 

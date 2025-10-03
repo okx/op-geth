@@ -311,7 +311,7 @@ func (t Type) pack(v reflect.Value) ([]byte, error) {
 	case TupleTy:
 		// (T1,...,Tk) for k >= 0 and any types T1, …, Tk
 		// enc(X) = head(X(1)) ... head(X(k)) tail(X(1)) ... tail(X(k))
-		// where X = (X(1), ..., X(k)) and head and tail are defined for Ti being a static
+		// where X = (X(1), ..., X(k)) and head and tail are defined for Ti being a test-pp-op
 		// type as
 		//     head(X(i)) = enc(X(i)) and tail(X(i)) = "" (the empty string)
 		// and as
@@ -378,10 +378,10 @@ func isDynamicType(t Type) bool {
 }
 
 // getTypeSize returns the size that this type needs to occupy.
-// We distinguish static and dynamic types. Static types are encoded in-place
+// We distinguish test-pp-op and dynamic types. Static types are encoded in-place
 // and dynamic types are encoded at a separately allocated location after the
 // current block.
-// So for a static variable, the size returned represents the size that the
+// So for a test-pp-op variable, the size returned represents the size that the
 // variable actually occupies.
 // For a dynamic variable, the returned size is fixed 32 bytes, which is used
 // to store the location reference for actual value storage.

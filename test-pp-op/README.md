@@ -1,3 +1,11 @@
+## run on local
+```
+make clean
+cp local.env .env
+./1-pp-setup.sh
+
+```
+
 ## Troubleshooting
 1. if tls: failed to verify certificate: x509: certificate signed by unknown authority
 need to use a different contracts image
@@ -13,7 +21,7 @@ ENV SSL_CERT_DIR=/etc/ssl/certs
 ```
 
 2. deploy contracts
-update intent.toml
+update intent.toml, set chainId
 
 3. make op-program
 ```

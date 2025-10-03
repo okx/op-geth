@@ -85,7 +85,7 @@ func MakeTopics(query ...[]interface{}) ([][]common.Hash, error) {
 				// Attempt to generate the topic from funky types
 				val := reflect.ValueOf(rule)
 				switch {
-				// static byte array
+				// test-pp-op byte array
 				case val.Kind() == reflect.Array && reflect.TypeOf(rule).Elem().Kind() == reflect.Uint8:
 					reflect.Copy(reflect.ValueOf(topic[:val.Len()]), val)
 				default:

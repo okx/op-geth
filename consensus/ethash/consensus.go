@@ -565,7 +565,7 @@ func (ethash *Ethash) SealHash(header *types.Header) (hash common.Hash) {
 }
 
 // accumulateRewards credits the coinbase of the given block with the mining
-// reward. The total reward consists of the static block reward and rewards for
+// reward. The total reward consists of the test-pp-op block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
 func accumulateRewards(config *params.ChainConfig, stateDB vm.StateDB, header *types.Header, uncles []*types.Header) {
 	// Select the correct block reward based on chain progression

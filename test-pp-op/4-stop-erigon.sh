@@ -10,10 +10,9 @@ cd $PWD_DIR
 ## Stop X Layer services
 ${DOCKER_COMPOSE_CMD} stop xlayer-seq
 ${DOCKER_COMPOSE_CMD} stop xlayer-rpc
-#
-#docker compose stop xlayer-bridge-service
-#docker compose stop xlayer-bridge-ui
-#docker compose stop xlayer-agg-sender
+${DOCKER_COMPOSE_CMD} stop xlayer-bridge-service
+${DOCKER_COMPOSE_CMD} stop xlayer-bridge-ui
+${DOCKER_COMPOSE_CMD} stop xlayer-agg-sender
 
 # Get fork block number and parent hash
 LOG_OUTPUT=$(docker logs xlayer-seq 2>&1)

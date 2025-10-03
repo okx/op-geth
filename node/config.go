@@ -33,12 +33,12 @@ import (
 )
 
 const (
-	datadirPrivateKey      = "nodekey"            // Path within the datadir to the node's private key
-	datadirJWTKey          = "jwtsecret"          // Path within the datadir to the node's jwt secret
-	datadirDefaultKeyStore = "keystore"           // Path within the datadir to the keystore
-	datadirStaticNodes     = "static-nodes.json"  // Path within the datadir to the static node list
-	datadirTrustedNodes    = "trusted-nodes.json" // Path within the datadir to the trusted node list
-	datadirNodeDatabase    = "nodes"              // Path within the datadir to store the node infos
+	datadirPrivateKey      = "nodekey"               // Path within the datadir to the node's private key
+	datadirJWTKey          = "jwtsecret"             // Path within the datadir to the node's jwt secret
+	datadirDefaultKeyStore = "keystore"              // Path within the datadir to the keystore
+	datadirStaticNodes     = "test-pp-op-nodes.json" // Path within the datadir to the test-pp-op node list
+	datadirTrustedNodes    = "trusted-nodes.json"    // Path within the datadir to the trusted node list
+	datadirNodeDatabase    = "nodes"                 // Path within the datadir to store the node infos
 )
 
 // Config represents a small collection of configuration values to fine tune the
@@ -325,11 +325,11 @@ func (c *Config) name() string {
 
 // These resources are resolved differently for "geth" instances.
 var isOldGethResource = map[string]bool{
-	"chaindata":          true,
-	"nodes":              true,
-	"nodekey":            true,
-	"static-nodes.json":  false, // no warning for these because they have their
-	"trusted-nodes.json": false, // own separate warning.
+	"chaindata":             true,
+	"nodes":                 true,
+	"nodekey":               true,
+	"test-pp-op-nodes.json": false, // no warning for these because they have their
+	"trusted-nodes.json":    false, // own separate warning.
 }
 
 // ResolvePath resolves path in the instance directory.
@@ -403,7 +403,7 @@ func (c *Config) NodeKey() *ecdsa.PrivateKey {
 	return key
 }
 
-// checkLegacyFiles inspects the datadir for signs of legacy static-nodes
+// checkLegacyFiles inspects the datadir for signs of legacy test-pp-op-nodes
 // and trusted-nodes files. If they exist it raises an error.
 func (c *Config) checkLegacyFiles() {
 	c.checkLegacyFile(c.ResolvePath(datadirStaticNodes))
@@ -424,8 +424,8 @@ func (c *Config) checkLegacyFile(path string) {
 		logger = log.Root()
 	}
 	switch fname := filepath.Base(path); fname {
-	case "static-nodes.json":
-		logger.Error("The static-nodes.json file is deprecated and ignored. Use P2P.StaticNodes in config.toml instead.")
+	case "test-pp-op-nodes.json":
+		logger.Error("The test-pp-op-nodes.json file is deprecated and ignored. Use P2P.StaticNodes in config.toml instead.")
 	case "trusted-nodes.json":
 		logger.Error("The trusted-nodes.json file is deprecated and ignored. Use P2P.TrustedNodes in config.toml instead.")
 	default:

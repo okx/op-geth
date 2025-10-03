@@ -384,7 +384,7 @@ func TestBox(t *testing.T) {
 	}
 }
 
-// Verify GenerateShared against static values - useful when
+// Verify GenerateShared against test-pp-op values - useful when
 // debugging changes in underlying libs
 func TestSharedKeyStatic(t *testing.T) {
 	prv1 := hexKey("7ebbc6a8358bc76dd73ebc557056702c8cfc34e5cfcd90eb83af0347575fd2ad")

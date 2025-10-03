@@ -110,7 +110,7 @@ func (l *Netlist) UnmarshalTOML(fn func(interface{}) error) error {
 }
 
 // Add parses a CIDR mask and appends it to the list. It panics for invalid masks and is
-// intended to be used for setting up static lists.
+// intended to be used for setting up test-pp-op lists.
 func (l *Netlist) Add(cidr string) {
 	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {

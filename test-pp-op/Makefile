@@ -37,8 +37,25 @@ INIT_ACCOUNT_4 := cast send -f $(SEQUENCER_ADDRESS)  --private-key $(SEQUENCER_P
 
 INIT_BRIDGE_ACCOUNT := cast send -f $(DEPLOYER_ADDRESS)  --private-key $(DEPLOYER_PRIVATE_KEY) --value 0.01ether $(SEQUENCER_ADDRESS) --legacy --rpc-url $(L2_RPC_URL)
 
-.PHONY: run
-run: stop build-docker
+.PHONY: set-env
+set-env:
+	@if [ "$(ENV)" = "local" ]; then \
+		if [ -f local.env ]; then \
+			cp local.env .env; \
+			echo "Using local.env -> .env"; \
+		else \
+			echo "local.env not found"; \
+			exit 1; \
+		fi; \
+	fi
+
+.PHONY: show-env
+show-env:
+	@echo "Current ENV: $(ENV)"
+	@echo "Using compose file: $(COMPOSE_FILE)"
+
+.PHONY: run_erigon
+run_erigon: set-env show-env
 	@echo "🚀 Starting L1 PoS environment automatic dependency management..."
 	$(DOCKER_COMPOSE) up -d l1-validator
 	@echo "🎉 L1 PoS environment started!"
@@ -49,7 +66,7 @@ run: stop build-docker
 	$(INIT_ACCOUNT_3)
 	$(INIT_ACCOUNT_4)
 	sleep 5
-	./init.sh
+	./init-erigon.sh
 	sleep 5
 	$(DOCKER_COMPOSE) up -d xlayer-bridge-db
 	$(DOCKER_COMPOSE) up -d xlayer-pool-db
@@ -86,48 +103,13 @@ mainnet:
 	sleep 5
 	$(DOCKER_COMPOSE) up -d xlayer-rpc
 
-
-.PHONY: set-env
-set-env:
-	@if [ "$(ENV)" = "local" ]; then \
-		if [ -f local.env ]; then \
-			cp local.env .env; \
-			echo "Using local.env -> .env"; \
-		else \
-			echo "local.env not found"; \
-			exit 1; \
-		fi; \
-	fi
-
-.PHONY: show-env
-show-env:
-	@echo "Current ENV: $(ENV)"
-	@echo "Using compose file: $(COMPOSE_FILE)"
-
-.PHONY: run_erigon
-run_erigon: stop set-env show-env ## Runs a minimal node
-	echo $(DOCKER_RPC)
-	$(RUN_DOCKER_MOCK_L1_NETWORK)
-	sleep 3
-	$(DOCKER_COMPOSE) up -d xlayer-seq
-	$(RUN_DOCKER_PROMETHEUS)
-	$(RUN_DOCKER_GRAFANA)
-	sleep 5
-	$(DOCKER_COMPOSE) up -d xlayer-rpc
-
-
-.PHONY: pause
-pause: ## Stops all services
-	$(PAUSE)
-
-.PHONY: stop
-stop: pause
-	rm -rf data
-
-
 .PHONY: build-docker
-build-docker: ## Build cdk-erigoin for sequencer and rpc
+build-docker: ## build images for all
 	./build_images.sh --all
+
+.PHONY: build-force
+build-force: ## Force rebuild all images
+	./build_images.sh --all --force
 
 .PHONY: build-op-geth
 build-op-geth: ## Build op-geth image only
@@ -137,15 +119,33 @@ build-op-geth: ## Build op-geth image only
 build-op-stack: ## Build op-stack images only
 	./build_images.sh --op-stack
 
-.PHONY: build-force
-build-force: ## Force rebuild all images
-	./build_images.sh --all --force
+.PHONY: build-cdk-erigon
+build-cdk-erigon:
+	./build_images.sh --cdk-erigon
+
+.PHONY: pause
+pause: ## Stops all services
+	$(PAUSE)
+
+.PHONY: stop
+stop: pause
+	rm -rf data
 
 .PHONY: clean
 clean: stop
 	rm -rf data
-	rm -rf data_state*
-	rm -rf tmp
-	rm -f config-op/genesis*.json
-	rm -f config-op/state*.json
-	rm -f sa-tx-after.txt sa-tx-before.txt tx-fee-after.txt tx-fee-before.txt
+	rm -rf config-op/genesis.json
+	rm -rf config-op/genesis.json.gz
+	rm -rf config-op/implementations.json
+	rm -rf config-op/intent.toml
+	rm -rf config-op/rollup.json
+	rm -rf config-op/state.json
+	rm -rf config-op/superchain.json
+	rm -rf config-op/196-*
+	rm -rf l1-geth/consensus/beacondata/
+	rm -rf l1-geth/consensus/genesis.ssz
+	rm -rf l1-geth/consensus/validatordata/
+	rm -rf l1-geth/execution/genesis.json
+	rm -rf l1-geth/execution/geth/
+	rm -rf init.log
+	rm -rf .env

@@ -737,7 +737,7 @@ jobs:
         configuration:
           - job_name: 'x64 (MSVC): Windows (VS 2022, shared)'
             cmake_options: '-A x64 -DBUILD_SHARED_LIBS=ON'
-          - job_name: 'x64 (MSVC): Windows (VS 2022, static)'
+          - job_name: 'x64 (MSVC): Windows (VS 2022, test-pp-op)'
             cmake_options: '-A x64 -DBUILD_SHARED_LIBS=OFF'
           - job_name: 'x64 (MSVC): Windows (VS 2022, int128_struct)'
             cmake_options: '-A x64 -DSECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int128_struct'

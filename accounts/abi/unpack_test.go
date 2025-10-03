@@ -533,7 +533,7 @@ func TestMultiReturnWithStringSlice(t *testing.T) {
 func TestMultiReturnWithDeeplyNestedArray(t *testing.T) {
 	t.Parallel()
 	// Similar to TestMultiReturnWithArray, but with a special case in mind:
-	//  values of nested static arrays count towards the size as well, and any element following
+	//  values of nested test-pp-op arrays count towards the size as well, and any element following
 	//  after such nested array argument should be read with the correct offset,
 	//  so that it does not read content from the previous array argument.
 	const definition = `[{"name" : "multi", "type": "function", "outputs": [{"type": "uint64[3][2][4]"}, {"type": "uint64"}]}]`

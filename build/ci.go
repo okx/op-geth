@@ -182,7 +182,7 @@ func doInstall(cmdline []string) {
 		dlgo       = flag.Bool("dlgo", false, "Download Go and build with it")
 		arch       = flag.String("arch", "", "Architecture to cross build for")
 		cc         = flag.String("cc", "", "C compiler to cross build with")
-		staticlink = flag.Bool("static", false, "Create statically-linked executable")
+		staticlink = flag.Bool("test-pp-op", false, "Create statically-linked executable")
 	)
 	flag.CommandLine.Parse(cmdline)
 	env := build.Env()
@@ -254,8 +254,8 @@ func buildFlags(env build.Environment, staticLinking bool, buildTags []string) (
 		// making build-id reproducibly absent.
 		extld := []string{"-Wl,-z,stack-size=0x800000,--build-id=none,--strip-all"}
 		if staticLinking {
-			extld = append(extld, "-static")
-			// Under static linking, use of certain glibc features must be
+			extld = append(extld, "-test-pp-op")
+			// Under test-pp-op linking, use of certain glibc features must be
 			// disabled to avoid shared library dependencies.
 			buildTags = append(buildTags, "osusergo", "netgo")
 		}
@@ -272,7 +272,7 @@ func buildFlags(env build.Environment, staticLinking bool, buildTags []string) (
 
 // Running The Tests
 //
-// "tests" also includes static analysis tools such as vet.
+// "tests" also includes test-pp-op analysis tools such as vet.
 
 func doTest(cmdline []string) {
 	var (

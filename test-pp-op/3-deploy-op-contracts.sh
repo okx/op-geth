@@ -6,6 +6,15 @@ source .env
 source tools.sh
 source utils.sh
 
+## TODO: get chainId from intent.toml
+if [ "$ENV" = "local" ]; then
+    CHAIN_ID=195
+    DOCKER_NETWORK_ARG="$DOCKER_NETWORK"
+else
+    CHAIN_ID=196
+    DOCKER_NETWORK_ARG="host"
+fi
+
 cd $PWD_DIR
 
 deploy_transactor_contract() {
@@ -28,14 +37,7 @@ deploy_transactor_contract() {
   DOCKER_ARGS+=("-e" "GIT_SSL_NO_VERIFY=true")
   DOCKER_ARGS+=("-e" "NODE_TLS_REJECT_UNAUTHORIZED=0")
   DOCKER_ARGS+=("-e" "GODEBUG=x509ignoreCN=1")
-  
-  if [ "$ENV" = "local" ]; then
-    DOCKER_ARGS+=("--network" "$DOCKER_NETWORK")
-    echo "✅ Using Docker network: $DOCKER_NETWORK"
-  else
-    DOCKER_ARGS+=("--network" "host")
-    echo "✅ Skipping Docker network (ENV=$ENV)"
-  fi
+  DOCKER_ARGS+=("--network" "$DOCKER_NETWORK_ARG")
   
   DOCKER_ARGS+=("$OP_CONTRACTS_IMAGE_TAG")
   
@@ -101,16 +103,8 @@ deploy_op_stack_bootstrap_superchain() {
   DOCKER_ARGS+=("-e" "CURL_CA_BUNDLE=")
   DOCKER_ARGS+=("-e" "GIT_SSL_NO_VERIFY=true")
   DOCKER_ARGS+=("-e" "NODE_TLS_REJECT_UNAUTHORIZED=0")
-  DOCKER_ARGS+=("-e" "GOINSECURE=eth-sepolia.g.alchemy.com")
   DOCKER_ARGS+=("-e" "GODEBUG=x509ignoreCN=1,x509ignoreUnknownCA=1,x509ignoreSystemRoots=1")
-
-    if [ "$ENV" = "local" ]; then
-      DOCKER_ARGS+=("--network" "$DOCKER_NETWORK")
-      echo "✅ Using Docker network: $DOCKER_NETWORK"
-    else
-      DOCKER_ARGS+=("--network" "host")
-      echo "✅ Skipping Docker network (ENV=$ENV)"
-    fi
+  DOCKER_ARGS+=("--network" "$DOCKER_NETWORK_ARG")
 
   DOCKER_ARGS+=("$OP_CONTRACTS_IMAGE_TAG")
 
@@ -134,14 +128,7 @@ deploy_op_stack_bootstrap_implementations() {
   DOCKER_ARGS+=("-e" "CURL_CA_BUNDLE=")
   DOCKER_ARGS+=("-e" "GIT_SSL_NO_VERIFY=true")
   DOCKER_ARGS+=("-e" "NODE_TLS_REJECT_UNAUTHORIZED=0")
-
-  if [ "$ENV" = "local" ]; then
-    DOCKER_ARGS+=("--network" "$DOCKER_NETWORK")
-    echo "✅ Using Docker network: $DOCKER_NETWORK"
-  else
-    DOCKER_ARGS+=("--network" "host")
-    echo "✅ Skipping Docker network (ENV=$ENV)"
-  fi
+  DOCKER_ARGS+=("--network" "$DOCKER_NETWORK_ARG")
 
   DOCKER_ARGS+=("$OP_CONTRACTS_IMAGE_TAG")
 
@@ -174,18 +161,11 @@ deploy_op_stack_contracts() {
   DOCKER_ARGS+=("-e" "CURL_CA_BUNDLE=")
   DOCKER_ARGS+=("-e" "GIT_SSL_NO_VERIFY=true")
   DOCKER_ARGS+=("-e" "NODE_TLS_REJECT_UNAUTHORIZED=0")
-
-  if [ "$ENV" = "local" ]; then
-    DOCKER_ARGS+=("--network" "$DOCKER_NETWORK")
-    echo "✅ Using Docker network: $DOCKER_NETWORK"
-  else
-    DOCKER_ARGS+=("--network" "host")
-    echo "✅ Skipping Docker network (ENV=$ENV)"
-  fi
+  DOCKER_ARGS+=("--network" "$DOCKER_NETWORK_ARG")
 
   DOCKER_ARGS+=("$OP_CONTRACTS_IMAGE_TAG")
 
-  BASH_CMD="set -e && export CURL_CA_BUNDLE= && export GIT_SSL_NO_VERIFY=true && echo '🔧 Starting contract deployment with op-deployer...' && echo '' && echo 'Deploy using op-deployer, wait for completion before proceeding' && /app/op-deployer/bin/op-deployer apply --workdir /deployments --private-key $DEPLOYER_PRIVATE_KEY --l1-rpc-url $L1_RPC_URL_IN_DOCKER && echo '' && echo '📄 Generating L2 genesis and rollup config...' && echo '' && echo 'Generate L2 genesis using op-deployer' && /app/op-deployer/bin/op-deployer inspect genesis --workdir /deployments 196 > /deployments/genesis.json && echo '' && echo 'Generate L2 rollup using op-node' && /app/op-deployer/bin/op-deployer inspect rollup --workdir /deployments 196 > /deployments/rollup.json && echo '' && echo '✅ Contract deployment completed successfully'"
+  BASH_CMD="set -e && export CURL_CA_BUNDLE= && export GIT_SSL_NO_VERIFY=true && echo '🔧 Starting contract deployment with op-deployer...' && echo '' && echo 'Deploy using op-deployer, wait for completion before proceeding' && /app/op-deployer/bin/op-deployer apply --workdir /deployments --private-key $DEPLOYER_PRIVATE_KEY --l1-rpc-url $L1_RPC_URL_IN_DOCKER && echo '' && echo '📄 Generating L2 genesis and rollup config...' && echo '' && echo 'Generate L2 genesis using op-deployer' && /app/op-deployer/bin/op-deployer inspect genesis --workdir /deployments $CHAIN_ID > /deployments/genesis.json && echo '' && echo 'Generate L2 rollup using op-node' && /app/op-deployer/bin/op-deployer inspect rollup --workdir /deployments $CHAIN_ID > /deployments/rollup.json && echo '' && echo '✅ Contract deployment completed successfully'"
 
   docker run "${DOCKER_ARGS[@]}" bash -c "$BASH_CMD"
 
@@ -193,7 +173,11 @@ deploy_op_stack_contracts() {
   echo "🎉 OP Stack deployment preparation completed!"
 }
 
-# Main execution
+
+
+cp ./config-op/intent.${ENV}.toml.bak ./config-op/intent.toml
+cp ./config-op/state.json.bak ./config-op/state.json
+
 deploy_transactor_contract
 deploy_op_stack_bootstrap_superchain
 deploy_op_stack_bootstrap_implementations

@@ -3,35 +3,6 @@ networks:
     name: pp-op
 
 services:
-  xlayer-mock-l1-network:
-    container_name: xlayer-mock-l1-network
-    image: zjg555543/geth:pp-v5
-    ports:
-      - 8545:8545
-      - 8546:8546
-    command:
-      - "--http"
-      - "--http.api"
-      - "admin,eth,debug,miner,net,txpool,personal,web3"
-      - "--http.addr"
-      - "0.0.0.0"
-      - "--http.corsdomain"
-      - "*"
-      - "--http.vhosts"
-      - "*"
-      - "--ws"
-      - "--ws.origins"
-      - "*"
-      - "--ws.addr"
-      - "0.0.0.0"
-      - "--dev"
-      - "--dev.period"
-      - "1"
-      - "--datadir"
-      - "/geth_data"
-      - "--syncmode"
-      - "full"
-      - "--rpc.allow-unprotected-txs"
   l1-geth-remove-db:
     image: "alpine:3.19.0"
     container_name: l1-geth-remove-db
@@ -219,42 +190,7 @@ services:
       - 9092:9095
     volumes:
       - ./data/seq/:/home/erigon/data/
-      - ./config/local/local.erigon.seq.config.yaml:/usr/src/app/config.yaml
-      - ./config/first-batch-config.json:/usr/src/app/first-batch-config.json
-      - ./config/dynamic-mynetwork-allocs.json:/usr/src/app/dynamic-mynetwork-allocs.json
-      - ./config/dynamic-mynetwork-chainspec.json:/usr/src/app/dynamic-mynetwork-chainspec.json
-      - ./config/dynamic-mynetwork-conf.json:/usr/src/app/dynamic-mynetwork-conf.json
-    command: >
-      cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
-
-  xlayer-seqs:
-    container_name: xlayer-seqs
-    image: cdk
-    volumes:
-      - ./data/seqs:/tmp/cdk
-      - ./keystore/da.permit.keystore:/pk/da.permit.keystore
-      - ./keystore/sequencer.keystore:/pk/sequencer.keystore
-      - ./config/cdk.config.toml:/app/config.toml
-      - ./config/test.genesis.config.json:/app/genesis.json
-    command:
-      - "/bin/sh"
-      - "-c"
-      - "/usr/local/bin/cdk-node run --cfg /app/config.toml --custom-network-file /app/genesis.json --components sequence-sender"
-
-  xlayer-rpc:
-    container_name: xlayer-rpc
-    image: cdk-erigon
-    environment:
-      - CDK_ERIGON_SEQUENCER=0
-      - WRITE_MAP=true
-    ports:
-      - 6061:6060
-      - 8124:8545
-      - 6901:6900
-      - 9091:9095
-    volumes:
-      - ./data/rpc/:/home/erigon/data/
-      - ./config/local/local.erigon.rpc.config.yaml:/usr/src/app/config.yaml
+      - ./config/test.erigon.seq.config.yaml:/usr/src/app/config.yaml
       - ./config/first-batch-config.json:/usr/src/app/first-batch-config.json
       - ./config/dynamic-mynetwork-allocs.json:/usr/src/app/dynamic-mynetwork-allocs.json
       - ./config/dynamic-mynetwork-chainspec.json:/usr/src/app/dynamic-mynetwork-chainspec.json
@@ -263,7 +199,7 @@ services:
       cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
 
   xlayer-mainnet-seq:
-    container_name: xlayer-mainnet-seq
+    container_name: xlayer-seq
     image: cdk-erigon
     environment:
       - CDK_ERIGON_SEQUENCER=1
@@ -276,22 +212,6 @@ services:
     volumes:
       - ./mainnet/seq:/home/erigon/data/
       - ./config/xlayerconfig-mainnet.yaml:/usr/src/app/config.yaml
-    command: >
-      cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
-
-  xlayer-mainnet-rpc:
-    container_name: xlayer-mainnet-rpc
-    image: cdk-erigon
-    environment:
-      - CDK_ERIGON_SEQUENCER=0
-    ports:
-      - 6061:6060
-      - 8124:8545
-      - 6901:6900
-      - 9091:9095
-    volumes:
-      - ./mainnet/rpc:/home/erigon/data/
-      - ./config/xlayerconfig-mainnet-rpc.yaml:/usr/src/app/config.yaml
     command: >
       cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
 
@@ -459,6 +379,28 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+
+  xlayer-rpc:
+    container_name: xlayer-rpc
+    image: cdk-erigon
+    environment:
+      - CDK_ERIGON_SEQUENCER=0
+      - WRITE_MAP=true
+    ports:
+      - 6061:6060
+      - 8124:8545
+      - 6901:6900
+      - 9091:9095
+    volumes:
+      - ./data/rpc/:/home/erigon/data/
+      - ./config/test.erigon.rpc.config.yaml:/usr/src/app/config.yaml
+      - ./config/first-batch-config.json:/usr/src/app/first-batch-config.json
+      - ./config/dynamic-mynetwork-allocs.json:/usr/src/app/dynamic-mynetwork-allocs.json
+      - ./config/dynamic-mynetwork-chainspec.json:/usr/src/app/dynamic-mynetwork-chainspec.json
+      - ./config/dynamic-mynetwork-conf.json:/usr/src/app/dynamic-mynetwork-conf.json
+    command: >
+      cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
+
 
   op-geth-seq:
     image: "${OP_GETH_IMAGE_TAG}"
