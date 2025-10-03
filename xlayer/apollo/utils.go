@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/eth/ethconfig"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/urfave/cli/v2"
 )
 
@@ -17,7 +15,6 @@ const (
 
 // createMockContext creates a mock CLI context for testing
 func createMockContext(flags []cli.Flag) *cli.Context {
-	log.Info(fmt.Sprintf("apollo createMockContext invoked, flags: %v", flags))
 	set := flag.NewFlagSet("", flag.ContinueOnError)
 	for _, f := range flags {
 		if f != nil {
@@ -27,12 +24,6 @@ func createMockContext(flags []cli.Flag) *cli.Context {
 
 	context := cli.NewContext(nil, set, nil)
 	return context
-}
-
-// LoadOpGethConfig loads op-geth specific configurations from Apollo
-// This is a placeholder for op-geth specific configuration loading
-func LoadOpGethConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
-	// TO DO
 }
 
 func getNamespacePrefix(namespace string) (string, error) {
