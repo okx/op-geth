@@ -46,7 +46,7 @@ type Header struct {
 	src enode.ID // used by decoder
 }
 
-// StaticHeader contains the test-pp-op fields of a packet header.
+// StaticHeader contains the static fields of a packet header.
 type StaticHeader struct {
 	ProtocolID [6]byte
 	Version    uint16
@@ -96,7 +96,7 @@ const (
 
 	maxPacketSize = 1280
 
-	minMessageSize      = 48 // this refers to data after test-pp-op headers
+	minMessageSize      = 48 // this refers to data after static headers
 	randomPacketMsgSize = 20
 )
 
@@ -460,14 +460,14 @@ func (c *Codec) Decode(inputData []byte, addr string) (src enode.ID, n *enode.No
 	// Copy the packet to a tmp buffer to avoid modifying it.
 	c.decbuf = append(c.decbuf[:0], inputData...)
 	input := c.decbuf
-	// Unmask the test-pp-op header.
+	// Unmask the static header.
 	var head Header
 	copy(head.IV[:], input[:sizeofMaskingIV])
 	mask := head.mask(c.localnode.ID())
 	staticHeader := input[sizeofMaskingIV:sizeofStaticPacketData]
 	mask.XORKeyStream(staticHeader, staticHeader)
 
-	// Decode and verify the test-pp-op header.
+	// Decode and verify the static header.
 	c.reader.Reset(staticHeader)
 	binary.Read(&c.reader, binary.BigEndian, &head.StaticHeader)
 	remainingInput := len(input) - sizeofStaticPacketData
@@ -661,7 +661,7 @@ func (c *Codec) SessionNode(id enode.ID, addr string) *enode.Node {
 }
 
 // checkValid performs some basic validity checks on the header.
-// The packetLen here is the length remaining after the test-pp-op header.
+// The packetLen here is the length remaining after the static header.
 func (h *StaticHeader) checkValid(packetLen int, protocolID [6]byte) error {
 	if h.ProtocolID != protocolID {
 		return errInvalidHeader

@@ -71,7 +71,7 @@ type codecV5 interface {
 
 // UDPv5 is the implementation of protocol version 5.
 type UDPv5 struct {
-	// test-pp-op fields
+	// static fields
 	conn         UDPConn
 	tab          *Table
 	netrestrict  *netutil.Netlist
@@ -160,7 +160,7 @@ func newUDPv5(conn UDPConn, ln *enode.LocalNode, cfg Config) (*UDPv5, error) {
 	closeCtx, cancelCloseCtx := context.WithCancel(context.Background())
 	cfg = cfg.withDefaults()
 	t := &UDPv5{
-		// test-pp-op fields
+		// static fields
 		conn:         newMeteredConn(conn),
 		localNode:    ln,
 		db:           ln.Database(),

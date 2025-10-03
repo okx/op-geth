@@ -71,7 +71,7 @@ func TestVector_IDSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("test-pp-op-key = %#x", key.D)
+	t.Logf("static-key = %#x", key.D)
 	t.Logf("challenge-data = %#x", cdata)
 	t.Logf("ephemeral-pubkey = %#x", ephkey)
 	t.Logf("node-id-B = %#x", destID.Bytes())
