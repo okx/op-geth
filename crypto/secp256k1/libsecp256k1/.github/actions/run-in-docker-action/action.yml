@@ -2,7 +2,7 @@ name: 'Run in Docker with environment'
 description: 'Run a command in a Docker container, while passing explicitly set environment variables into the container.'
 inputs:
   dockerfile:
-    description: 'A Dockerfile-contract-certs that defines an image'
+    description: 'A Dockerfile that defines an image'
     required: true
   tag:
     description: 'A tag of an image'

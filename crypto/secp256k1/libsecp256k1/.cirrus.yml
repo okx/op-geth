@@ -55,7 +55,7 @@ linux_arm64_container_snippet: &LINUX_ARM64_CONTAINER
   env_script:
     - env | tee /tmp/env
   build_script:
-    - DOCKER_BUILDKIT=1 docker build --file "ci/linux-debian.Dockerfile-contract-certs" --tag="ci_secp256k1_arm"
+    - DOCKER_BUILDKIT=1 docker build --file "ci/linux-debian.Dockerfile" --tag="ci_secp256k1_arm"
     - docker image prune --force  # Cleanup stale layers
   test_script:
     - docker run --rm --mount "type=bind,src=./,dst=/ci_secp256k1" --env-file /tmp/env --replace --name "ci_secp256k1_arm" "ci_secp256k1_arm" bash -c "cd /ci_secp256k1/ && ./ci/ci.sh"
