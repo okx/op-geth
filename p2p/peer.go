@@ -233,13 +233,13 @@ func (p *Peer) Trusted() bool {
 }
 
 // DynDialed returns true if the peer was dialed successfully (passed handshake) and
-// it is not configured as test-pp-op.
+// it is not configured as static.
 func (p *Peer) DynDialed() bool {
 	return p.rw.is(dynDialedConn)
 }
 
 // StaticDialed returns true if the peer was dialed successfully (passed handshake) and
-// it is configured as test-pp-op.
+// it is configured as static.
 func (p *Peer) StaticDialed() bool {
 	return p.rw.is(staticDialedConn)
 }
@@ -553,7 +553,7 @@ type PeerInfo struct {
 		RemoteAddress string `json:"remoteAddress"` // Remote endpoint of the TCP data connection
 		Inbound       bool   `json:"inbound"`
 		Trusted       bool   `json:"trusted"`
-		Static        bool   `json:"test-pp-op"`
+		Static        bool   `json:"static"`
 	} `json:"network"`
 	Protocols map[string]interface{} `json:"protocols"` // Sub-protocol specific metadata fields
 }

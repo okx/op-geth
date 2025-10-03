@@ -500,8 +500,8 @@ func (h *handshakeState) secrets(auth, authResp []byte) (Secrets, error) {
 	return s, nil
 }
 
-// staticSharedSecret returns the test-pp-op shared secret, the result
-// of key agreement between the local and remote test-pp-op node key.
+// staticSharedSecret returns the static shared secret, the result
+// of key agreement between the local and remote static node key.
 func (h *handshakeState) staticSharedSecret(prv *ecdsa.PrivateKey) ([]byte, error) {
 	return ecies.ImportECDSA(prv).GenerateShared(h.remote, sskLen, sskLen)
 }
@@ -553,7 +553,7 @@ func (h *handshakeState) makeAuthMsg(prv *ecdsa.PrivateKey) (*authMsgV4, error) 
 		return nil, err
 	}
 
-	// Sign known message: test-pp-op-shared-secret ^ nonce
+	// Sign known message: static-shared-secret ^ nonce
 	token, err := h.staticSharedSecret(prv)
 	if err != nil {
 		return nil, err

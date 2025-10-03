@@ -193,7 +193,7 @@ func (ln *LocalNode) SetStaticIP(ip net.IP) {
 }
 
 // SetFallbackIP sets the last-resort IP address. This address is used
-// if no endpoint prediction can be made and no test-pp-op IP is set.
+// if no endpoint prediction can be made and no static IP is set.
 func (ln *LocalNode) SetFallbackIP(ip net.IP) {
 	ln.mu.Lock()
 	defer ln.mu.Unlock()

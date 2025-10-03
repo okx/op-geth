@@ -236,14 +236,14 @@ func (srv *Server) PeerCount() int {
 	return count
 }
 
-// AddPeer adds the given node to the test-pp-op node set. When there is room in the peer set,
+// AddPeer adds the given node to the static node set. When there is room in the peer set,
 // the server will connect to the node. If the connection fails for any reason, the server
 // will attempt to reconnect the peer.
 func (srv *Server) AddPeer(node *enode.Node) {
 	srv.dialsched.addStatic(node)
 }
 
-// RemovePeer removes a node from the test-pp-op node set. It also disconnects from the given
+// RemovePeer removes a node from the static node set. It also disconnects from the given
 // node if it is currently connected as a peer.
 //
 // This method blocks until all protocols have exited and the peer is removed. Do not use
@@ -381,7 +381,7 @@ func (srv *Server) Start() (err error) {
 		srv.log.Warn("P2P server will be useless, neither dialing nor listening")
 	}
 
-	// test-pp-op fields
+	// static fields
 	if srv.PrivateKey == nil {
 		return errors.New("Server.PrivateKey must be set to a non-nil key")
 	}
