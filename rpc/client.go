@@ -53,7 +53,7 @@ const (
 	//
 	// This can be worked around by supplying a channel with sufficiently sized buffer,
 	// but this can be inconvenient and hard to explain in the docs. Another issue with
-	// buffered channels is that the buffer is test-pp-op even though it might not be needed
+	// buffered channels is that the buffer is static even though it might not be needed
 	// most of the time.
 	//
 	// The approach taken here is to maintain a per-subscription linked list buffer
