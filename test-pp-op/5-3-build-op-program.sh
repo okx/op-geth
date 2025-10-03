@@ -123,7 +123,7 @@ post_migrate() {
             -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-rollup.json" \
             -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-genesis-l2.json" \
             -v "$EXPORT_DIR:/app/op-program/bin" \
-            --name my-op-temp \
+            --name op-program \
             -w /app \
             ${DOCKER_NETWORK_ARG} \
             "${OP_STACK_IMAGE_TAG}" \
@@ -146,7 +146,7 @@ post_migrate() {
             -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-rollup.json" \
             -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-genesis-l2.json" \
             -v "$EXPORT_DIR:/app/op-program/bin" \
-            --name my-op-temp \
+            --name op-program \
             -w /app \
             ${DOCKER_NETWORK_ARG} \
             -e DOCKER_HOST=unix:///var/run/docker.sock \
