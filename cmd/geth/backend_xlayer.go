@@ -18,7 +18,7 @@ func addXLayerBackend(stack *node.Node, cfg *gethConfig) {
 
 	// Initialize Apollo configuration if enabled
 	if cfg.Eth.XLayer.Apollo.Enable {
-		gethApollo.SetApolloConfig(cfg.Eth, cfg.Node)
+		gethApollo.SetApolloConfig(&cfg.Eth, &cfg.Node)
 
 		handler := gethApollo.NewGethConfigHandler()
 
@@ -33,7 +33,7 @@ func addXLayerBackend(stack *node.Node, cfg *gethConfig) {
 			NamespaceName: cfg.Eth.XLayer.Apollo.NamespaceName,
 		}, flags)
 
-		client.Listener.Handler = handler
+		client.AddHandler(handler)
 
 		if err != nil {
 			utils.Fatalf("Failed to initialize Apollo configuration: %v", err)

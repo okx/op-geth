@@ -32,18 +32,6 @@ var (
 // If an instance already exists, it returns the existing instance.
 // To reinitialize with new config, call ResetInstance() first.
 func GetInstance(cfg *config.AppConfig, flags []cli.Flag) (*Client, error) {
-	log.Info("GetInstance called", "total_flags_count", len(flags))
-	for i, flag := range flags {
-		if flag != nil {
-			log.Info("GetInstance received flag", "index", i, "name", flag.Names()[0])
-		} else {
-			log.Info("GetInstance received flag", "index", i, "name", "nil")
-		}
-		if i > 25 { // Prevent too much logging
-			log.Info("GetInstance stopping flag logging", "remaining", len(flags)-i-1)
-			break
-		}
-	}
 	mu.RLock()
 	if instance != nil {
 		mu.RUnlock()
@@ -197,6 +185,10 @@ func (c *Client) LoadConfig() (loaded bool) {
 		}
 	}
 	return loaded
+}
+
+func (c *Client) AddHandler(handler CustomHandler) {
+	c.Listener.Handler = handler
 }
 
 type CustomHandler interface {

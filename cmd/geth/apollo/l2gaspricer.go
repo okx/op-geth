@@ -36,8 +36,8 @@ func loadL2GasPricerConfig(ctx *cli.Context) {
 		log.Warn("Apollo config is nil, skipping L2GasPricer config load")
 		return
 	}
-	loadNodeL2GasPricerConfig(ctx, &UnsafeGetApolloConfig().NodeCfg)
-	loadEthL2GasPricerConfig(ctx, &UnsafeGetApolloConfig().EthCfg)
+	loadNodeL2GasPricerConfig(ctx, UnsafeGetApolloConfig().NodeCfg)
+	loadEthL2GasPricerConfig(ctx, UnsafeGetApolloConfig().EthCfg)
 }
 
 // loadNodeL2GasPricerConfig loads the dynamic gas pricer apollo node configurations

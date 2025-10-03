@@ -14,8 +14,8 @@ import (
 // ApolloConfig holds the global Apollo configuration state
 type ApolloConfigImpl struct {
 	sync.RWMutex
-	EthCfg  ethconfig.Config
-	NodeCfg node.Config
+	EthCfg  *ethconfig.Config
+	NodeCfg *node.Config
 }
 
 // Global Apollo configuration instance
@@ -31,7 +31,7 @@ func UnsafeGetApolloConfig() *ApolloConfigImpl {
 }
 
 // SetApolloConfig sets the global Apollo configuration
-func SetApolloConfig(ethCfg ethconfig.Config, nodeCfg node.Config) {
+func SetApolloConfig(ethCfg *ethconfig.Config, nodeCfg *node.Config) {
 	configMutex.Lock()
 	defer configMutex.Unlock()
 
@@ -53,13 +53,12 @@ type GethConfigHandler struct{}
 
 // HandleConfigChange implements geth-specific configuration change logic
 func (g *GethConfigHandler) HandleConfigChange(prefix string, ctx *cli.Context, key string, value *storage.ConfigChange) {
-	log.Info("Geth HandleConfigChange called", "prefix", prefix, "key", key, "value", value.NewValue)
 	switch prefix {
 	case apollo.L2GasPricer:
-		log.Info("Lucas Geth L2GasPricer config changed", "key", key, "value", value.NewValue)
+		log.Info("Geth L2GasPricer config changed", "key", key, "value", value.NewValue)
 		fireL2GasPricer(ctx, value)
 	default:
-		log.Info("Lucas Geth unknown config prefix", "prefix", prefix, "key", key, "value", value.NewValue)
+		log.Info("Geth unknown config prefix", "prefix", prefix, "key", key, "value", value.NewValue)
 	}
 }
 
