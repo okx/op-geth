@@ -272,7 +272,7 @@ func gasKeccak256(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memor
 }
 
 // pureMemoryGascost is used by several operations, which aside from their
-// test-pp-op cost have a dynamic cost which is solely based on the memory
+// static cost have a dynamic cost which is solely based on the memory
 // expansion
 func pureMemoryGascost(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	return memoryGasCost(mem, memorySize)

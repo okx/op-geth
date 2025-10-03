@@ -311,7 +311,7 @@ func (t Type) pack(v reflect.Value) ([]byte, error) {
 	case TupleTy:
 		// (T1,...,Tk) for k >= 0 and any types T1, …, Tk
 		// enc(X) = head(X(1)) ... head(X(k)) tail(X(1)) ... tail(X(k))
-		// where X = (X(1), ..., X(k)) and head and tail are defined for Ti being a test-pp-op
+		// where X = (X(1), ..., X(k)) and head and tail are defined for Ti being a static
 		// type as
 		//     head(X(i)) = enc(X(i)) and tail(X(i)) = "" (the empty string)
 		// and as
