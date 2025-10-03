@@ -16,7 +16,7 @@ import (
 type Client struct {
 	config       *config.AppConfig
 	client       agollo.Client
-	Listener     *CustomChangeListener
+	listener     *CustomChangeListener
 	namespaceMap map[string]string
 	flags        []cli.Flag
 }
@@ -82,7 +82,7 @@ func GetInstance(cfg *config.AppConfig, flags []cli.Flag) (*Client, error) {
 	instance = &Client{
 		config:       cfg,
 		client:       client,
-		Listener:     listener,
+		listener:     listener,
 		namespaceMap: nsMap,
 		flags:        flags,
 	}
@@ -172,13 +172,13 @@ func (c *Client) LoadConfig() (loaded bool) {
 			cache.Range(func(key, value interface{}) bool {
 				loaded = true
 				// Use handler to load config if available
-				if c.Listener != nil && c.Listener.Handler != nil {
+				if c.listener != nil && c.listener.handler != nil {
 					ctx, _, err := c.GetConfigContext(value)
 					if err != nil {
 						log.Error(fmt.Sprintf("load config from apollo config failed, err: %v", err))
 						return true
 					}
-					c.Listener.Handler.LoadConfig(prefix, ctx)
+					c.listener.handler.LoadConfig(prefix, ctx)
 				}
 				return true
 			})
@@ -188,7 +188,7 @@ func (c *Client) LoadConfig() (loaded bool) {
 }
 
 func (c *Client) AddHandler(handler CustomHandler) {
-	c.Listener.Handler = handler
+	c.listener.handler = handler
 }
 
 type CustomHandler interface {
@@ -198,7 +198,7 @@ type CustomHandler interface {
 
 type CustomChangeListener struct {
 	*Client
-	Handler CustomHandler
+	handler CustomHandler
 }
 
 // OnChange handles configuration changes from Apollo
@@ -225,8 +225,8 @@ func (c *CustomChangeListener) OnChange(changeEvent *storage.ChangeEvent) {
 			}
 
 			// Handle configuration changes based on prefix
-			if c.Handler != nil {
-				c.Handler.HandleConfigChange(prefix, ctx, key, value)
+			if c.handler != nil {
+				c.handler.HandleConfigChange(prefix, ctx, key, value)
 			}
 		}
 	}
