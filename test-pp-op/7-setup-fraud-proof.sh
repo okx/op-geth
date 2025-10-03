@@ -1,4 +1,8 @@
+set -e
+set -x
+
 source .env
+source tools.sh
 
 PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd $PWD_DIR
