@@ -1,16 +1,16 @@
 {
   "genesis": {
     "l1": {
-      "hash": "0xaf6760288cd888102001c4a869acc608af02dbbd188c7179937407d2de0f082e",
-      "number": 180
+      "hash": "0x0596ead8ff67da1d29ab8321a6b2043b4c15d37753ad38c30f1cef0118d0b319",
+      "number": 9332496
     },
     "l2": {
-      "hash": "0x9a64ca2e65f0930c2e025d855eaf5e0ae3c6d90133712498398a57afc2678a72",
-      "number": 55
+      "hash": "0xb23a2ea31ed9cbb1236e9c2f814b50aa4b3bc02a249d55d51fa2404a33d6b11d",
+      "number": 0
     },
-    "l2_time": 1759454286,
+    "l2_time": 1759476576,
     "system_config": {
-      "batcherAddr": "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
+      "batcherAddr": "0x87eadd549cadc215c1296abcefd5b440fc7d896d",
       "overhead": "0x0000000000000000000000000000000000000000000000000000000000000000",
       "scalar": "0x010000000000000000000000000000000000000000000000000c5fc500000558",
       "gasLimit": 200000000,
@@ -18,12 +18,12 @@
       "operatorFeeParams": "0x0000000000000000000000000000000000000000000000000000000000000000"
     }
   },
-  "block_time": 1,
+  "block_time": 2,
   "max_sequencer_drift": 600,
   "seq_window_size": 3600,
   "channel_timeout": 300,
-  "l1_chain_id": 1337,
-  "l2_chain_id": 195,
+  "l1_chain_id": 11155111,
+  "l2_chain_id": 196,
   "regolith_time": 0,
   "canyon_time": 0,
   "delta_time": 0,
@@ -32,13 +32,14 @@
   "granite_time": 0,
   "holocene_time": 0,
   "isthmus_time": 0,
-  "batch_inbox_address": "0x006d918f650e2b4a9f360977c4447e6376eb632e",
-  "deposit_contract_address": "0xd6a4279983016973e8e208b8b748dd7fada95eaf",
-  "l1_system_config_address": "0xde76170305a969f2309679f38eb163d3d513d279",
-  "protocol_versions_address": "0x8c15b9d397b5bf29e114aebff0663fdd34976756",
+  "batch_inbox_address": "0x002bde9b0c0857aee2cffdea6b8723eaf5989449",
+  "deposit_contract_address": "0x3f3090b5c2e39648807278914f112b0fbaebad51",
+  "l1_system_config_address": "0x7de18055e081102fd3f67b3e532e3ee78a25a4d6",
+  "protocol_versions_address": "0xf62ec15ceaa462f62082ad222493983b552607e5",
   "chain_op_config": {
     "eip1559Elasticity": 6,
     "eip1559Denominator": 50,
     "eip1559DenominatorCanyon": 250
   }
 }
+
