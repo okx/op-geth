@@ -92,15 +92,15 @@ fi
 
 post_migrate() {
     # Check if genesis.json exists, panic if it doesn't
-    if [ ! -f "config-op/genesis.json" ]; then
-        echo "ERROR: config-op/genesis.json does not exist!"
+    if [ ! -f "merged.genesis.json" ]; then
+        echo "ERROR: merged.json does not exist!"
         echo "Please ensure the genesis.json file is present before running this script."
         exit 1
     fi
 
-    $MD5SUM_CMD config-op/genesis.json
+    $MD5SUM_CMD merged.genesis.json
     # genesis.json is too large to embed in go, so we compress it now and decompress it in go code
-    gzip -c config-op/genesis.json > config-op/genesis.gz.json
+    gzip -c merged.genesis.json > config-op/merged.genesis.gz.json
 
     # Ensure prestate files exist and devnetL1.json is consistent before deploying contracts
     EXPORT_DIR="$PWD_DIR/data/cannon-data"
@@ -121,7 +121,7 @@ post_migrate() {
             --platform $DOCKER_PLATFORM \
             -v "$(pwd)/scripts:/scripts" \
             -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-rollup.json" \
-            -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-genesis-l2.json" \
+            -v "$(pwd)/config-op/merged.genesis.gz.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-genesis-l2.json" \
             -v "$EXPORT_DIR:/app/op-program/bin" \
             --name op-program \
             -w /app \
@@ -144,7 +144,7 @@ post_migrate() {
             --platform $DOCKER_PLATFORM \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-rollup.json" \
-            -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-genesis-l2.json" \
+            -v "$(pwd)/config-op/merged.genesis.gz.json:/app/op-program/chainconfig/configs/${CHAIN_ID}-genesis-l2.json" \
             -v "$EXPORT_DIR:/app/op-program/bin" \
             --name op-program \
             -w /app \

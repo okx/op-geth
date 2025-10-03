@@ -35,7 +35,7 @@ migrate() {
   fi
 
 
-  ${GETH_CMD} --datadir=${OP_DATA_DIR} --gcmode=archive migrate --state.scheme=hash --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=${ERIGON_CHAINDATA_DIR} --smt-db-path=${ERIGON_SMTDATA_DIR} ${OP_GENESIS_PATH} 2>&1 | tee migrate.log
+  ${GETH_CMD} --datadir=${OP_DATA_DIR} --gcmode=archive migrate --state.scheme=hash --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=${ERIGON_CHAINDATA_DIR} --smt-db-path=${ERIGON_SMTDATA_DIR} --output merged.genesis.json ${OP_GENESIS_PATH} 2>&1 | tee migrate.log
 
   sleep 5
   #NEW_BLOCK_HASH=$(grep 'Successfully wrote genesis state' migrate.log | tail -1 | sed -n 's/.*hash=\(0x[0-9a-fA-F]\{64\}\).*/\1/p')
