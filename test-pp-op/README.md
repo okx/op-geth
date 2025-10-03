@@ -12,6 +12,17 @@ cp local.env .env
 ./7-setup-fraud-proof.sh
 ```
 
+## run on testnet
+```
+./3-deploy-op-contracts.sh
+# pause erigon
+./5-1-migrate-prepare.sh
+./5-2-migrate-op.sh
+./5-3-build-op-program.sh
+./6-start-op.sh
+./7-setup-fraud-proof.sh
+```
+
 ## Troubleshooting
 1. if tls: failed to verify certificate: x509: certificate signed by unknown authority
 need to use a different contracts image
