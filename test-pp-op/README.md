@@ -3,7 +3,13 @@
 make clean
 cp local.env .env
 ./1-pp-setup.sh
-
+./3-deploy-op-contracts.sh
+./4-stop-erigon.sh
+./5-1-migrate-prepare.sh
+./5-2-migrate-op.sh
+./5-3-build-op-program.sh
+./6-start-op.sh
+./7-setup-fraud-proof.sh
 ```
 
 ## Troubleshooting
