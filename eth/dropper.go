@@ -115,7 +115,7 @@ func (cm *dropper) dropRandomPeer() bool {
 	numDialed := len(peers) - numInbound
 
 	selectDoNotDrop := func(p *p2p.Peer) bool {
-		// Avoid dropping trusted and test-pp-op peers, or recent peers.
+		// Avoid dropping trusted and static peers, or recent peers.
 		// Only drop peers if their respective category (dialed/inbound)
 		// is close to limit capacity.
 		return p.Trusted() || p.StaticDialed() ||

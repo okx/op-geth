@@ -1264,7 +1264,7 @@ SolidityParam.prototype.offsetAsBytes = function () {
 };
 
 /**
- * This method should be called to get test-pp-op part of param
+ * This method should be called to get static part of param
  *
  * @method staticPart
  * @returns {String} offset if it is a dynamic param, otherwise value
@@ -1409,11 +1409,11 @@ SolidityType.prototype.isType = function (name) {
 };
 
 /**
- * Should be used to determine what is the length of test-pp-op part in given type
+ * Should be used to determine what is the length of static part in given type
  *
  * @method staticPartLength
  * @param {String} name
- * @return {Number} length of test-pp-op part in bytes
+ * @return {Number} length of static part in bytes
  */
 SolidityType.prototype.staticPartLength = function (name) {
     // If name isn't an array then treat it like a single element array.
@@ -1444,14 +1444,14 @@ SolidityType.prototype.isDynamicArray = function (name) {
 };
 
 /**
- * Should be used to determine if type is test-pp-op array
+ * Should be used to determine if type is static array
  * eg:
  * "type[]" => false
  * "type[4]" => true
  *
  * @method isStaticArray
  * @param {String} name
- * @return {Bool} true if the type is test-pp-op array
+ * @return {Bool} true if the type is static array
  */
 SolidityType.prototype.isStaticArray = function (name) {
     var nestedTypes = this.nestedTypes(name);
@@ -1459,7 +1459,7 @@ SolidityType.prototype.isStaticArray = function (name) {
 };
 
 /**
- * Should return length of test-pp-op array
+ * Should return length of static array
  * eg.
  * "int[32]" => 32
  * "int256[14]" => 14
@@ -1470,7 +1470,7 @@ SolidityType.prototype.isStaticArray = function (name) {
  *
  * @method staticArrayLength
  * @param {String} name
- * @return {Number} test-pp-op array length
+ * @return {Number} static array length
  */
 SolidityType.prototype.staticArrayLength = function (name) {
     var nestedTypes = this.nestedTypes(name);
@@ -7080,7 +7080,7 @@ module.exports = transfer;
 	         *
 	         * @return {Cipher} A cipher instance.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7098,7 +7098,7 @@ module.exports = transfer;
 	         *
 	         * @return {Cipher} A cipher instance.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7207,7 +7207,7 @@ module.exports = transfer;
 	         *
 	         * @return {Object} An object with encrypt and decrypt shortcut functions.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7267,7 +7267,7 @@ module.exports = transfer;
 	         * @param {Cipher} cipher A block cipher instance.
 	         * @param {Array} iv The IV words.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7283,7 +7283,7 @@ module.exports = transfer;
 	         * @param {Cipher} cipher A block cipher instance.
 	         * @param {Array} iv The IV words.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7415,7 +7415,7 @@ module.exports = transfer;
 	         * @param {WordArray} data The data to pad.
 	         * @param {number} blockSize The multiple that the data should be padded to.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7447,7 +7447,7 @@ module.exports = transfer;
 	         *
 	         * @param {WordArray} data The data to unpad.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7602,7 +7602,7 @@ module.exports = transfer;
 	         *
 	         * @return {string} The OpenSSL-compatible string.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7630,7 +7630,7 @@ module.exports = transfer;
 	         *
 	         * @return {CipherParams} The cipher params object.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7680,7 +7680,7 @@ module.exports = transfer;
 	         *
 	         * @return {CipherParams} A cipher params object.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7722,7 +7722,7 @@ module.exports = transfer;
 	         *
 	         * @return {WordArray} The plaintext.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7751,7 +7751,7 @@ module.exports = transfer;
 	         *
 	         * @return {CipherParams} The unserialized ciphertext.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7785,7 +7785,7 @@ module.exports = transfer;
 	         *
 	         * @return {CipherParams} A cipher params object with the key, IV, and salt.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7834,7 +7834,7 @@ module.exports = transfer;
 	         *
 	         * @return {CipherParams} A cipher params object.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7870,7 +7870,7 @@ module.exports = transfer;
 	         *
 	         * @return {WordArray} The plaintext.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -7963,7 +7963,7 @@ module.exports = transfer;
 	             *
 	             * @return {Object} The new object.
 	             *
-	             * @test-pp-op
+	             * @static
 	             *
 	             * @example
 	             *
@@ -8005,7 +8005,7 @@ module.exports = transfer;
 	             *
 	             * @return {Object} The new object.
 	             *
-	             * @test-pp-op
+	             * @static
 	             *
 	             * @example
 	             *
@@ -8198,7 +8198,7 @@ module.exports = transfer;
 	         *
 	         * @return {WordArray} The random word array.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8249,7 +8249,7 @@ module.exports = transfer;
 	         *
 	         * @return {string} The hex string.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8278,7 +8278,7 @@ module.exports = transfer;
 	         *
 	         * @return {WordArray} The word array.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8309,7 +8309,7 @@ module.exports = transfer;
 	         *
 	         * @return {string} The Latin1 string.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8337,7 +8337,7 @@ module.exports = transfer;
 	         *
 	         * @return {WordArray} The word array.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8368,7 +8368,7 @@ module.exports = transfer;
 	         *
 	         * @return {string} The UTF-8 string.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8389,7 +8389,7 @@ module.exports = transfer;
 	         *
 	         * @return {WordArray} The word array.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8617,7 +8617,7 @@ module.exports = transfer;
 	         *
 	         * @return {Function} The shortcut function.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8636,7 +8636,7 @@ module.exports = transfer;
 	         *
 	         * @return {Function} The shortcut function.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8695,7 +8695,7 @@ module.exports = transfer;
 	         *
 	         * @return {string} The Base64 string.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8742,7 +8742,7 @@ module.exports = transfer;
 	         *
 	         * @return {WordArray} The word array.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8831,7 +8831,7 @@ module.exports = transfer;
 	         *
 	         * @return {string} The UTF-16 BE string.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8859,7 +8859,7 @@ module.exports = transfer;
 	         *
 	         * @return {WordArray} The word array.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8890,7 +8890,7 @@ module.exports = transfer;
 	         *
 	         * @return {string} The UTF-16 LE string.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -8918,7 +8918,7 @@ module.exports = transfer;
 	         *
 	         * @return {WordArray} The word array.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -9063,7 +9063,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The derived key.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -9113,7 +9113,7 @@ module.exports = transfer;
 	         *
 	         * @return {string} The hexadecimally encoded string.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -9130,7 +9130,7 @@ module.exports = transfer;
 	         *
 	         * @return {CipherParams} The cipher params object.
 	         *
-	         * @test-pp-op
+	         * @static
 	         *
 	         * @example
 	         *
@@ -9626,7 +9626,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The hash.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -9643,7 +9643,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The HMAC.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -10349,7 +10349,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The derived key.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -11128,7 +11128,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The hash.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -11145,7 +11145,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The HMAC.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -11279,7 +11279,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The hash.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -11296,7 +11296,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The HMAC.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -11360,7 +11360,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The hash.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -11377,7 +11377,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The HMAC.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -11560,7 +11560,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The hash.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -11577,7 +11577,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The HMAC.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -11884,7 +11884,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The hash.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -11901,7 +11901,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The HMAC.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -11968,7 +11968,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The hash.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -11985,7 +11985,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The HMAC.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -12292,7 +12292,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The hash.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
@@ -12309,7 +12309,7 @@ module.exports = transfer;
 	     *
 	     * @return {WordArray} The HMAC.
 	     *
-	     * @test-pp-op
+	     * @static
 	     *
 	     * @example
 	     *
