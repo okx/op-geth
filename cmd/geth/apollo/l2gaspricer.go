@@ -13,19 +13,14 @@ import (
 )
 
 // loadL2GasPricer loads the apollo l2gaspricer config cache on startup
-func (c *Client) loadL2GasPricer(value interface{}) {
-	ctx, _, err := c.getConfigContext(value)
-	if err != nil {
-		log.Error(fmt.Sprintf("load l2gaspricer from apollo config failed, err: %v", err))
-	}
-
+func (g *GethConfigHandler) loadL2GasPricer(ctx *cli.Context) {
 	// Load l2gaspricer config changes
 	loadL2GasPricerConfig(ctx)
-	log.Info(fmt.Sprintf("loaded l2gaspricer from apollo config: %+v", value.(string)))
+	log.Info(fmt.Sprintf("loaded l2gaspricer from apollo config"))
 }
 
 // fireL2GasPricer fires the apollo l2gaspricer config change
-func (c *Client) fireL2GasPricer(ctx *cli.Context, value *storage.ConfigChange) {
+func fireL2GasPricer(ctx *cli.Context, value *storage.ConfigChange) {
 	loadL2GasPricerConfig(ctx)
 	log.Info(fmt.Sprintf("apollo l2gaspricer old config : %+v", value.OldValue.(string)))
 	log.Info(fmt.Sprintf("apollo l2gaspricer config changed: %+v", value.NewValue.(string)))
@@ -41,8 +36,8 @@ func loadL2GasPricerConfig(ctx *cli.Context) {
 		log.Warn("Apollo config is nil, skipping L2GasPricer config load")
 		return
 	}
-	loadNodeL2GasPricerConfig(ctx, &UnsafeGetApolloConfig().NodeCfg)
-	loadEthL2GasPricerConfig(ctx, &UnsafeGetApolloConfig().EthCfg)
+	loadNodeL2GasPricerConfig(ctx, UnsafeGetApolloConfig().NodeCfg)
+	loadEthL2GasPricerConfig(ctx, UnsafeGetApolloConfig().EthCfg)
 }
 
 // loadNodeL2GasPricerConfig loads the dynamic gas pricer apollo node configurations

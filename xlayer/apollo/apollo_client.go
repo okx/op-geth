@@ -8,15 +8,13 @@ import (
 	"github.com/apolloconfig/agollo/v4"
 	"github.com/apolloconfig/agollo/v4/env/config"
 	"github.com/apolloconfig/agollo/v4/storage"
-	"github.com/ethereum/go-ethereum/cmd/utils"
-	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/urfave/cli/v2"
 )
 
 // Client is the apollo client
 type Client struct {
-	config       Config
+	config       *config.AppConfig
 	client       agollo.Client
 	listener     *CustomChangeListener
 	namespaceMap map[string]string
@@ -33,7 +31,7 @@ var (
 // If no instance exists, it creates one with the provided configuration.
 // If an instance already exists, it returns the existing instance.
 // To reinitialize with new config, call ResetInstance() first.
-func GetInstance(ethCfg *ethconfig.Config) (*Client, error) {
+func GetInstance(cfg *config.AppConfig, flags []cli.Flag) (*Client, error) {
 	mu.RLock()
 	if instance != nil {
 		mu.RUnlock()
@@ -48,34 +46,14 @@ func GetInstance(ethCfg *ethconfig.Config) (*Client, error) {
 		return instance, nil
 	}
 
-	// Check if Apollo is enabled and configured
-	if ethCfg == nil || !ethCfg.XLayer.Apollo.Enable {
-		return nil, fmt.Errorf("apollo is not enabled")
-	}
-
-	cfg := Config{
-		AppID:         ethCfg.XLayer.Apollo.AppID,
-		IP:            ethCfg.XLayer.Apollo.IP,
-		Cluster:       ethCfg.XLayer.Apollo.Cluster,
-		NamespaceName: ethCfg.XLayer.Apollo.NamespaceName,
-	}
-
 	// Validate configuration
 	if cfg.AppID == "" || cfg.IP == "" || cfg.Cluster == "" || cfg.NamespaceName == "" {
 		return nil, fmt.Errorf("apollo enabled but config is not valid, config: %+v", cfg)
 	}
 
-	// Create Apollo configuration
-	c := &config.AppConfig{
-		AppID:         cfg.AppID,
-		Cluster:       cfg.Cluster,
-		IP:            cfg.IP,
-		NamespaceName: cfg.NamespaceName,
-	}
-
 	// Start Apollo client
 	client, err := agollo.StartWithConfig(func() (*config.AppConfig, error) {
-		return c, nil
+		return cfg, nil
 	})
 	if err != nil {
 		return nil, err
@@ -100,17 +78,13 @@ func GetInstance(ethCfg *ethconfig.Config) (*Client, error) {
 	// Create and attach change listener
 	listener := &CustomChangeListener{}
 
-	GpoFlags := []cli.Flag{
-		utils.GpoBlocksFlag, utils.GpoPercentileFlag, utils.GpoMaxGasPriceFlag, utils.GpoIgnoreGasPriceFlag, utils.GpoMinSuggestedPriorityFeeFlag,
-	}
-
 	// Create singleton instance
 	instance = &Client{
 		config:       cfg,
 		client:       client,
 		listener:     listener,
 		namespaceMap: nsMap,
-		flags:        append(utils.XLayerFlags, GpoFlags...),
+		flags:        flags,
 	}
 
 	// Set up the listener reference
@@ -169,7 +143,7 @@ func (c *Client) Stop() error {
 }
 
 // GetConfig returns the current configuration of the client
-func (c *Client) GetConfig() Config {
+func (c *Client) GetConfig() *config.AppConfig {
 	return c.config
 }
 
@@ -197,9 +171,14 @@ func (c *Client) LoadConfig() (loaded bool) {
 		if cache != nil {
 			cache.Range(func(key, value interface{}) bool {
 				loaded = true
-				switch prefix {
-				case L2GasPricer:
-					c.loadL2GasPricer(value)
+				// Use handler to load config if available
+				if c.listener != nil && c.listener.handler != nil {
+					ctx, _, err := c.GetConfigContext(value)
+					if err != nil {
+						log.Error(fmt.Sprintf("load config from apollo config failed, err: %v", err))
+						return true
+					}
+					c.listener.handler.LoadConfig(prefix, ctx)
 				}
 				return true
 			})
@@ -208,9 +187,18 @@ func (c *Client) LoadConfig() (loaded bool) {
 	return loaded
 }
 
-// CustomChangeListener is the custom change listener for op-geth
+func (c *Client) AddHandler(handler CustomHandler) {
+	c.listener.handler = handler
+}
+
+type CustomHandler interface {
+	HandleConfigChange(prefix string, ctx *cli.Context, key string, value *storage.ConfigChange)
+	LoadConfig(prefix string, ctx *cli.Context) // Add config loading interface
+}
+
 type CustomChangeListener struct {
 	*Client
+	handler CustomHandler
 }
 
 // OnChange handles configuration changes from Apollo
@@ -230,26 +218,17 @@ func (c *CustomChangeListener) OnChange(changeEvent *storage.ChangeEvent) {
 				continue
 			}
 
-			ctx, _, err := c.getConfigContext(value.NewValue)
+			ctx, _, err := c.GetConfigContext(value.NewValue)
 			if err != nil {
 				log.Warn("Failed to get config context", "error", err, "namespace", changeEvent.Namespace)
 				continue
 			}
 
 			// Handle configuration changes based on prefix
-			c.handleConfigChange(prefix, ctx, key, value)
+			if c.handler != nil {
+				c.handler.HandleConfigChange(prefix, ctx, key, value)
+			}
 		}
-	}
-}
-
-// handleConfigChange processes configuration changes for op-geth
-func (c *CustomChangeListener) handleConfigChange(prefix string, ctx *cli.Context, key string, value *storage.ConfigChange) {
-	switch prefix {
-	case L2GasPricer:
-		log.Info("L2GasPricer config changed", "key", key, "value", value.NewValue)
-		c.fireL2GasPricer(ctx, value)
-	default:
-		log.Info("Unknown config prefix", "prefix", prefix, "key", key, "value", value.NewValue)
 	}
 }
 

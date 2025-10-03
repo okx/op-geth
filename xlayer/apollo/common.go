@@ -17,7 +17,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func (c *Client) getConfigContext(value interface{}) (*cli.Context, map[string]interface{}, error) {
+func (c *Client) GetConfigContext(value interface{}) (*cli.Context, map[string]interface{}, error) {
 	config := make(map[string]interface{})
 	err := yaml.Unmarshal([]byte(value.(string)), config)
 	if err != nil {
@@ -25,7 +25,6 @@ func (c *Client) getConfigContext(value interface{}) (*cli.Context, map[string]i
 		return nil, nil, err
 	}
 
-	// sets global flags to value in apollo config
 	ctx := createMockContext(c.flags)
 	for key, value := range config {
 		if !ctx.IsSet(key) {

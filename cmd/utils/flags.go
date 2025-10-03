@@ -1638,6 +1638,7 @@ func setGPO(ctx *cli.Context, cfg *gasprice.Config) {
 	if ctx.IsSet(GpoCongestionThreshold.Name) {
 		cfg.XLayer.CongestionThreshold = ctx.Int(GpoCongestionThreshold.Name)
 	}
+
 }
 
 func setTxPool(ctx *cli.Context, cfg *legacypool.Config) {

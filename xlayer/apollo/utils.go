@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/urfave/cli/v2"
 )
 
@@ -18,17 +17,13 @@ const (
 func createMockContext(flags []cli.Flag) *cli.Context {
 	set := flag.NewFlagSet("", flag.ContinueOnError)
 	for _, f := range flags {
-		f.Apply(set)
+		if f != nil {
+			f.Apply(set)
+		}
 	}
 
 	context := cli.NewContext(nil, set, nil)
 	return context
-}
-
-// LoadOpGethConfig loads op-geth specific configurations from Apollo
-// This is a placeholder for op-geth specific configuration loading
-func LoadOpGethConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
-	// TO DO
 }
 
 func getNamespacePrefix(namespace string) (string, error) {
