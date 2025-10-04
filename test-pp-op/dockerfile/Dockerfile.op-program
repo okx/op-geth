@@ -1,4 +1,4 @@
-FROM op-stack:v1.13.4 as builder
+FROM op-stack:v1.13.4 AS builder
 
 # Install dependencies (docker CLI, make, etc.)
 RUN apt-get update && \
@@ -11,10 +11,8 @@ RUN apt-get update && \
 # Set working directory
 WORKDIR /app
 
-
 COPY config-op/rollup.json /app/op-program/chainconfig/configs/196-rollup.json
 COPY config-op/genesis.gz.json /app/op-program/chainconfig/configs/196-genesis-l2.json
-
 
 RUN echo '🚀 Building reproducible-prestate...' && \
     make reproducible-prestate || echo "⚠️ Make failed during build, check setup"
@@ -22,12 +20,14 @@ RUN echo '🚀 Building reproducible-prestate...' && \
 # Second stage: clean runtime image
 FROM op-stack:v1.13.4
 
+# Cache go.mod deps into the image.
+COPY --from=builder /go/pkg/mod /go/pkg/mod
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends docker.io && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
 
 COPY --from=builder /app/op-program/bin /app/op-program/bin
 
