@@ -20,14 +20,14 @@ migrate() {
   fi
 
   if [[ "$OSTYPE" == "darwin"* ]]; then
-      export GETH_CMD=~/go/bin/geth
+      export GETH_CMD="../build/bin/geth"
 
-      if [ ! -f "$HOME/go/bin/geth" ]; then
+      if [ ! -f "../build/bin/geth" ]; then
           cd ../
           go install ./cmd/geth
           cd test-pp-op
       else
-          echo "✅ geth found at ~/go/bin/geth"
+          echo "✅ geth found at optimism/op-geth/build/bin"
       fi
   else
       export GETH_CMD=/data1/op-geth/build/bin/geth
