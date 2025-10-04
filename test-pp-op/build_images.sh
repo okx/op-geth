@@ -219,8 +219,8 @@ build_op_geth_image() {
   PROJECT_ROOT="$(git rev-parse --show-toplevel)"
   echo "PROJECT_ROOT $PROJECT_ROOT"
   cd $PROJECT_ROOT
-#  docker build -t $OP_GETH_IMAGE_TAG .
-#  cd $PWD_DIR
+  docker build -t $OP_GETH_IMAGE_TAG .
+  cd $PWD_DIR
 }
 
 # Helper function to check if image exists
