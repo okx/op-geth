@@ -15,7 +15,7 @@ cp local.env .env
 ## run on testnet
 ```
 ./3-deploy-op-contracts.sh
-# pause erigon
+# pause erigon, update .env fork_num
 ./5-1-migrate-prepare.sh
 ./5-2-migrate-op.sh
 ./5-3-build-op-program.sh

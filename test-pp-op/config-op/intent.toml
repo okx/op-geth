@@ -1,7 +1,7 @@
 configType = "standard-overrides"
 l1ChainID = 11155111
 fundDevAccounts = true
-opcmAddress = "0x6c75b524c37bf508d771eef308b2feef467f9db1"
+opcmAddress = "0x6c2ad15c89021c25a292757d7829f2a934c4973e"
 l1ContractsLocator = "file:///app/packages/contracts-bedrock/forge-artifacts"
 l2ContractsLocator = "file:///app/packages/contracts-bedrock/forge-artifacts"
 
@@ -20,7 +20,7 @@ l2ContractsLocator = "file:///app/packages/contracts-bedrock/forge-artifacts"
       l2GenesisBlockBaseFeePerGas = "0x3B9ACA00"
       l2BlockTime = 2
   [chains.roles]
-    l1ProxyAdminOwner = "0x6b464e5ae6c7c4e5d21697be34f372d204d9683c"
+    l1ProxyAdminOwner = "0xd1d3960d9cb1d637735899e7a12f7d22e67b73ec"
     l2ProxyAdminOwner = "0x33f34d8b20696780ba07b1ea89f209b4dc51723a"
     systemConfigOwner = "0x33f34d8b20696780ba07b1ea89f209b4dc51723a"
     unsafeBlockSigner = "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc"
