@@ -15,10 +15,8 @@ migrate() {
     ERIGON_CHAINDATA_DIR=${PWD_DIR}/data/rpc/chaindata/
     ERIGON_SMTDATA_DIR=${PWD_DIR}/data/rpc/smt/
   else
-     ERIGON_CHAINDATA_DIR=${PWD_DIR}/data/rpc/chaindata/
-     ERIGON_SMTDATA_DIR=${PWD_DIR}/data/rpc/smt/
-#    ERIGON_CHAINDATA_DIR=/data/erigon-data/chaindata/
-#    ERIGON_SMTDATA_DIR=/data/erigon-data/smt/
+    ERIGON_CHAINDATA_DIR=/data/erigon-data/chaindata/
+    ERIGON_SMTDATA_DIR=/data/erigon-data/smt/
   fi
 
   if [[ "$OSTYPE" == "darwin"* ]]; then
