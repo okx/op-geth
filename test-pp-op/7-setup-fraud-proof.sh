@@ -220,32 +220,32 @@ echo "Latest game address: $GAME_ADDRESS"
 #    --game-address=$GAME_ADDRESS \
 #    --claim=0
 
-echo "2. Resolving game using op-challenger..."
-docker run --rm \
-  --network "$DOCKER_NETWORK" \
-  -v "$(pwd)/data/cannon-data:/data" \
-  -v "$(pwd)/config-op/rollup.json:/rollup.json" \
-  -v "$(pwd)/config-op/genesis.json:/l2-genesis.json" \
-  "${OP_STACK_IMAGE_TAG}" \
-  /app/op-challenger/bin/op-challenger resolve \
-    --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER} \
-    --private-key=${OP_CHALLENGER_PRIVATE_KEY} \
-    --game-address=$GAME_ADDRESS
-
-#sleep $DISPUTE_GAME_FINALITY_DELAY_SECONDS
-#
-#echo "3. Claiming credit for proposer using cast command..."
+#echo "2. Resolving game using op-challenger..."
 #docker run --rm \
 #  --network "$DOCKER_NETWORK" \
+#  -v "$(pwd)/data/cannon-data:/data" \
+#  -v "$(pwd)/config-op/rollup.json:/rollup.json" \
+#  -v "$(pwd)/config-op/genesis.json:/l2-genesis.json" \
 #  "${OP_STACK_IMAGE_TAG}" \
-#  cast send \
-#    --rpc-url ${L1_RPC_URL_IN_DOCKER} \
-#    --private-key ${OP_CHALLENGER_PRIVATE_KEY} \
-#    $GAME_ADDRESS \
-#    "claimCredit(address)" \
-#    $PROPOSER_ADDRESS
-#
-#echo "✅ Dispute resolution sequence completed using op-challenger commands!"
+#  /app/op-challenger/bin/op-challenger resolve \
+#    --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER} \
+#    --private-key=${OP_CHALLENGER_PRIVATE_KEY} \
+#    --game-address=$GAME_ADDRESS
+
+#sleep $DISPUTE_GAME_FINALITY_DELAY_SECONDS
+
+echo "3. Claiming credit for proposer using cast command..."
+docker run --rm \
+  --network "$DOCKER_NETWORK" \
+  "${OP_STACK_IMAGE_TAG}" \
+  cast send \
+    --rpc-url ${L1_RPC_URL_IN_DOCKER} \
+    --private-key ${OP_CHALLENGER_PRIVATE_KEY} \
+    $GAME_ADDRESS \
+    "claimCredit(address)" \
+    $PROPOSER_ADDRESS
+
+echo "✅ Dispute resolution sequence completed using op-challenger commands!"
 ##
 ## Retrieve existing values from chain for reference
 ## Get permissioned game implementation
