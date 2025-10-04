@@ -193,8 +193,8 @@ export GAME_TYPE=1
 echo "🛑 Stopping op-proposer..."
 ${DOCKER_COMPOSE_CMD} stop op-proposer
 
-echo "⏰ Sleeping for ($TEMP_MAX_CLOCK_DURATION seconds)..."
-sleep $TEMP_MAX_CLOCK_DURATION
+#echo "⏰ Sleeping for ($TEMP_MAX_CLOCK_DURATION seconds)..."
+#sleep $TEMP_MAX_CLOCK_DURATION
 
 echo "🔧 Executing dispute resolution sequence using op-challenger..."
 GAME_COUNT=$(cast call --rpc-url $L1_RPC_URL $DISPUTE_GAME_FACTORY_ADDRESS "gameCount()(uint256)")
@@ -206,32 +206,32 @@ GAME_ADDRESS="0x${GAME_INFO: -40}"
 
 echo "Latest game address: $GAME_ADDRESS"
 
-# Execute the dispute resolution sequence using op-challenger commands
-echo "1. Resolving claim (0,0) using op-challenger..."
-docker run --rm \
-  --network "$DOCKER_NETWORK" \
-  -v "$(pwd)/data/cannon-data:/data" \
-  -v "$(pwd)/config-op/rollup.json:/rollup.json" \
-  -v "$(pwd)/config-op/genesis.json:/l2-genesis.json" \
-  "${OP_STACK_IMAGE_TAG}" \
-  /app/op-challenger/bin/op-challenger resolve-claim \
-    --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER} \
-    --private-key=${OP_CHALLENGER_PRIVATE_KEY} \
-    --game-address=$GAME_ADDRESS \
-    --claim=0
-
-#echo "2. Resolving game using op-challenger..."
+## Execute the dispute resolution sequence using op-challenger commands
+#echo "1. Resolving claim (0,0) using op-challenger..."
 #docker run --rm \
 #  --network "$DOCKER_NETWORK" \
 #  -v "$(pwd)/data/cannon-data:/data" \
 #  -v "$(pwd)/config-op/rollup.json:/rollup.json" \
 #  -v "$(pwd)/config-op/genesis.json:/l2-genesis.json" \
 #  "${OP_STACK_IMAGE_TAG}" \
-#  /app/op-challenger/bin/op-challenger resolve \
+#  /app/op-challenger/bin/op-challenger resolve-claim \
 #    --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER} \
 #    --private-key=${OP_CHALLENGER_PRIVATE_KEY} \
-#    --game-address=$GAME_ADDRESS
-#
+#    --game-address=$GAME_ADDRESS \
+#    --claim=0
+
+echo "2. Resolving game using op-challenger..."
+docker run --rm \
+  --network "$DOCKER_NETWORK" \
+  -v "$(pwd)/data/cannon-data:/data" \
+  -v "$(pwd)/config-op/rollup.json:/rollup.json" \
+  -v "$(pwd)/config-op/genesis.json:/l2-genesis.json" \
+  "${OP_STACK_IMAGE_TAG}" \
+  /app/op-challenger/bin/op-challenger resolve \
+    --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER} \
+    --private-key=${OP_CHALLENGER_PRIVATE_KEY} \
+    --game-address=$GAME_ADDRESS
+
 #sleep $DISPUTE_GAME_FINALITY_DELAY_SECONDS
 #
 #echo "3. Claiming credit for proposer using cast command..."
