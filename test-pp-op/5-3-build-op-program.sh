@@ -93,7 +93,7 @@ fi
 post_migrate() {
     # Check if genesis.json exists, panic if it doesn't
     if [ ! -f "merged.genesis.json" ]; then
-        echo "ERROR: merged.json does not exist!"
+        echo "ERROR: merged.genesis.json does not exist!"
         echo "Please ensure the genesis.json file is present before running this script."
         exit 1
     fi
