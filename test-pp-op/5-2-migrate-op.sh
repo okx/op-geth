@@ -30,10 +30,9 @@ migrate() {
           echo "✅ geth found at optimism/op-geth/build/bin"
       fi
   else
-      export GETH_CMD=/data1/op-geth/build/bin/geth
+      export GETH_CMD=/usr/local/bin/geth
       echo "✅ Using Linux geth path: $GETH_CMD"
   fi
-
 
   ${GETH_CMD} --datadir=${OP_DATA_DIR} --gcmode=archive migrate --state.scheme=hash --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=${ERIGON_CHAINDATA_DIR} --smt-db-path=${ERIGON_SMTDATA_DIR} --output merged.genesis.json ${OP_GENESIS_PATH} 2>&1 | tee migrate.log
 
