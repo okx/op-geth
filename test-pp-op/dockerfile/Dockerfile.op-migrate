@@ -1,0 +1,34 @@
+FROM op-stack:v1.13.4 AS builder
+
+WORKDIR /app
+
+# Must build op-stack with migrate feature (in specific branch)
+ARG migratebranch=feat/cliff/migrate-test
+RUN cd op-geth && git checkout ${migratebranch} 
+RUN cd op-geth && go build -ldflags '-extldflags "-static"' -o build/bin/geth ./cmd/geth
+# verify migrate cmd exists
+RUN op-geth/build/bin/geth migrate --help
+
+# Contains /bin/bash, this will help prevent existing scripts from changing shell.
+FROM ubuntu:latest 
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        jq \
+        sed
+
+COPY --from=builder /app/op-geth/build/bin/geth /usr/local/bin/geth
+RUN ls /usr/local/bin/geth
+RUN /usr/local/bin/geth migrate --help
+
+WORKDIR /app
+COPY config-op config-op
+COPY contracts contracts
+COPY template template
+COPY ./5-1-migrate-prepare.sh .
+COPY ./5-2-migrate-op.sh .
+COPY ./5-3-build-op-program.sh .
+RUN ls
+RUN ls config-op
+RUN ls contracts
+RUN ls template
