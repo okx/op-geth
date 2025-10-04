@@ -2,6 +2,7 @@
 ```
 make clean
 cp local.env .env
+./build_images.sh --all # build aggkit, cdk-erigon etc.
 ./1-pp-setup.sh
 ./3-deploy-op-contracts.sh
 ./4-stop-erigon.sh
