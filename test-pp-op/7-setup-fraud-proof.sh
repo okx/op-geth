@@ -162,7 +162,7 @@ ANCHOR_STATE_REGISTRY=$(cast call --rpc-url $L1_RPC_URL $PERMISSIONED_GAME "anch
 L2_CHAIN_ID=$(cast call --rpc-url $L1_RPC_URL $PERMISSIONED_GAME "l2ChainId()")
 
 # Call the function to add game type 1 (permissioned) via Transactor
-add_game_type_via_transactor 1 true $TEMP_CLOCK_EXTENSION $TEMP_MAX_CLOCK_DURATION $ABSOLUTE_PRESTATE
+#add_game_type_via_transactor 1 true $TEMP_CLOCK_EXTENSION $TEMP_MAX_CLOCK_DURATION $ABSOLUTE_PRESTATE
 
 export GAME_TYPE=1
 #${DOCKER_COMPOSE_CMD} up -d op-proposer
@@ -197,7 +197,7 @@ echo "⏰ Sleeping for ($TEMP_MAX_CLOCK_DURATION seconds)..."
 sleep $TEMP_MAX_CLOCK_DURATION
 
 echo "🔧 Executing dispute resolution sequence using op-challenger..."
-
+GAME_COUNT=$(cast call --rpc-url $L1_RPC_URL $DISPUTE_GAME_FACTORY_ADDRESS "gameCount()(uint256)")
 # Get the latest game address
 LATEST_GAME_INDEX=$((GAME_COUNT - 1))
 GAME_INFO=$(cast call --rpc-url $L1_RPC_URL $DISPUTE_GAME_FACTORY_ADDRESS "gameAtIndex(uint256)(uint256,uint256,address)" $LATEST_GAME_INDEX)
