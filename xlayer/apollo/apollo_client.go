@@ -247,7 +247,7 @@ func (c *CustomChangeListener) OnChange(changeEvent *storage.ChangeEvent) {
 
 			// Handle configuration changes based on prefix
 			if c.handler != nil {
-				c.Handler.HandleConfigChange(prefix, ctx, key, value)
+				c.handler.HandleConfigChange(prefix, changeEvent.Namespace, ctx, key, value)
 			}
 		}
 	}
