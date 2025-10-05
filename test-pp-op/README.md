@@ -7,6 +7,9 @@ cp local.env .env
 ./3-deploy-op-contracts.sh
 ./4-stop-erigon.sh
 
+# Build image.
+docker build -t op-migrate:latest --progress=plain -f dockerfile/Dockerfile.op-program .
+
 # Run container 1 time and run steps 5-1, 5-2 and 5-3 (make reproducible-prestate) inside container.
 # Exposing the Docker socket allows us to expose docker images to the container for `make reproducible-prestate`.
 docker run \
