@@ -1626,19 +1626,6 @@ func setGPO(ctx *cli.Context, cfg *gasprice.Config) {
 	if ctx.IsSet(GpoMinSuggestedPriorityFeeFlag.Name) {
 		cfg.MinSuggestedPriorityFee = big.NewInt(ctx.Int64(GpoMinSuggestedPriorityFeeFlag.Name))
 	}
-
-	// For X Layer
-	if ctx.IsSet(GpoDefault.Name) {
-		cfg.XLayer.Default = big.NewInt(ctx.Int64(GpoDefault.Name))
-	}
-
-	if ctx.IsSet(GpoFactor.Name) {
-		cfg.XLayer.Factor = ctx.Float64(GpoFactor.Name)
-	}
-	if ctx.IsSet(GpoCongestionThreshold.Name) {
-		cfg.XLayer.CongestionThreshold = ctx.Int(GpoCongestionThreshold.Name)
-	}
-
 }
 
 func setTxPool(ctx *cli.Context, cfg *legacypool.Config) {

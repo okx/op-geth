@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/eth"
@@ -318,6 +319,7 @@ func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setMigrationXLayer(ctx, cfg)
 	setMonitor(ctx, &cfg.Monitor)
 	setApolloXLayer(ctx, cfg)
+	setGPOXLayer(ctx, cfg)
 }
 
 // RegisterXlayerHybridFilterAPI adds the eth log filtering RPC API to the node.
@@ -347,6 +349,18 @@ func setMonitor(ctx *cli.Context, cfg *ethconfig.MonitorConfig) {
 		cfg.TraceLogPath = ctx.String(TraceLogPath.Name)
 	}
 
+}
+
+func setGPOXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(GpoDefault.Name) {
+		cfg.GPO.XLayer.Default = big.NewInt(ctx.Int64(GpoDefault.Name))
+	}
+	if ctx.IsSet(GpoFactor.Name) {
+		cfg.GPO.XLayer.Factor = ctx.Float64(GpoFactor.Name)
+	}
+	if ctx.IsSet(GpoCongestionThreshold.Name) {
+		cfg.GPO.XLayer.CongestionThreshold = ctx.Int(GpoCongestionThreshold.Name)
+	}
 }
 
 // SetApolloGPOXLayer is a public wrapper function to internally call setGPO
