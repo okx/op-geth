@@ -70,7 +70,8 @@ func GetInstance(cfg *config.AppConfig, flags []cli.Flag) (*Client, error) {
 
 		_, found := nsMap[prefix]
 		if found {
-			return nil, fmt.Errorf("duplicate apollo namespace prefix: %s", prefix)
+			//return nil, fmt.Errorf("duplicate apollo namespace prefix: %s", prefix)
+			return nil, fmt.Errorf("duplicate apollo namespace: %s", prefix)
 		}
 		nsMap[prefix] = namespace
 	}
@@ -178,7 +179,7 @@ func (c *Client) LoadConfig() (loaded bool) {
 						log.Error(fmt.Sprintf("load config from apollo config failed, err: %v", err))
 						return true
 					}
-					c.listener.handler.LoadConfig(prefix, ctx)
+					c.listener.handler.LoadConfig(prefix, namespace, ctx)
 				}
 				return true
 			})
@@ -192,8 +193,16 @@ func (c *Client) AddHandler(handler CustomHandler) {
 }
 
 type CustomHandler interface {
-	HandleConfigChange(prefix string, ctx *cli.Context, key string, value *storage.ConfigChange)
-	LoadConfig(prefix string, ctx *cli.Context) // Add config loading interface
+	// HandleConfigChange(prefix string, ctx *cli.Context, key string, value *storage.ConfigChange)
+	// LoadConfig(prefix string, ctx *cli.Context) // Add config loading interface
+	// HandleConfigChange handles configuration changes from Apollo
+	// prefix: component prefix (e.g., "opgeth", "opnode")
+	// namespace: full namespace string (e.g., "opgeth-l2gaspricer", "opnode-sequencer")
+	HandleConfigChange(prefix string, namespace string, ctx *cli.Context, key string, value *storage.ConfigChange)
+	// LoadConfig loads configuration from Apollo
+	// prefix: component prefix (e.g., "opgeth", "opnode")
+	// namespace: full namespace string (e.g., "opgeth-l2gaspricer", "opnode-sequencer")
+	LoadConfig(prefix string, namespace string, ctx *cli.Context)
 }
 
 type CustomChangeListener struct {
@@ -212,6 +221,18 @@ func (c *CustomChangeListener) OnChange(changeEvent *storage.ChangeEvent) {
 					"key", key,
 					"value", value.NewValue)
 			}
+
+			suffix, err := getNamespaceSuffix(changeEvent.Namespace)
+			if err != nil {
+				log.Warn(fmt.Sprintf("not processing change event: %v", err))
+				continue
+			}
+			switch suffix {
+			case Halt:
+				c.fireHalt(key, value)
+				continue
+			}
+
 			prefix, err := getNamespacePrefix(changeEvent.Namespace)
 			if err != nil {
 				log.Warn("Failed to get namespace prefix", "error", err, "namespace", changeEvent.Namespace)
@@ -226,7 +247,7 @@ func (c *CustomChangeListener) OnChange(changeEvent *storage.ChangeEvent) {
 
 			// Handle configuration changes based on prefix
 			if c.handler != nil {
-				c.handler.HandleConfigChange(prefix, ctx, key, value)
+				c.Handler.HandleConfigChange(prefix, ctx, key, value)
 			}
 		}
 	}
