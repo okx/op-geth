@@ -75,23 +75,23 @@ func (g *GethConfigHandler) HandleConfigChange(prefix string, ctx *cli.Context, 
 }
 
 // LoadConfig implements op-geth-specific configuration loading logic
-func (g *GethConfigHandler) LoadConfig(prefix string, namespace string, ctx *cli.Context) {
+func (g *GethConfigHandler) LoadConfig(prefix string, ctx *cli.Context) {
 	// prefix is the full namespace (e.g. "opgeth_l2gaspricer"), extract component
-	component := getComponentFromNamespace(namespace)
+	component := getComponentFromNamespace(prefix)
 
 	// Validate that this is for op-geth component
 	if component != apollo.OpGethComponent {
-		log.Warn("OpGeth received config load request for non-opgeth namespace, ignoring", "component", component, "namespace", namespace)
+		log.Warn("OpGeth received config load request for non-opgeth namespace, ignoring", "component", component, "prefix", prefix)
 		return
 	}
 
-	log.Info("OpGeth loading config", "component", component, "namespace", namespace)
+	log.Info("OpGeth loading config", "component", component, "prefix", prefix)
 
-	switch namespace {
+	switch prefix {
 	case apollo.L2GasPricer:
 		g.loadL2GasPricer(ctx)
 	default:
-		log.Info("OpGeth unknown namespace for loading", "namespace", namespace)
+		log.Info("OpGeth unknown namespace for loading", "prefix", prefix)
 	}
 }
 
