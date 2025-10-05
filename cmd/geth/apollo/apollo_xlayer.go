@@ -53,24 +53,24 @@ func IsApolloConfigSet() bool {
 type GethConfigHandler struct{}
 
 // HandleConfigChange implements op-geth-specific configuration change logic
-func (g *GethConfigHandler) HandleConfigChange(prefix string, namespace string, ctx *cli.Context, key string, value *storage.ConfigChange) {
+func (g *GethConfigHandler) HandleConfigChange(prefix string, ctx *cli.Context, key string, value *storage.ConfigChange) {
 	// prefix is the full namespace (e.g. "opgeth_l2gaspricer"), extract component
-	component := getComponentFromNamespace(namespace)
+	component := getComponentFromNamespace(prefix)
 
 	// Validate that this is for op-geth component
 	if component != apollo.OpGethComponent {
-		log.Warn("OpGeth received config change for non-opgeth namespace, ignoring", "component", component, "namespace", namespace)
+		log.Warn("OpGeth received config change for non-opgeth namespace, ignoring", "component", component, "prefix", prefix)
 		return
 	}
 
-	log.Info("OpGeth handling config change", "component", component, "namespace", namespace, "key", key)
+	log.Info("OpGeth handling config change", "component", component, "prefix", prefix, "key", key)
 
-	switch namespace {
+	switch prefix {
 	case apollo.L2GasPricer:
 		log.Info("opgeth l2gaspricer config changed", "key", key, "value", value.NewValue)
 		fireL2GasPricer(ctx, value)
 	default:
-		log.Info("OpGeth unknown namespace", "namespace", namespace, "key", key, "value", value.NewValue)
+		log.Info("Geth unknown config prefix", "prefix", prefix, "key", key, "value", value.NewValue)
 	}
 }
 
