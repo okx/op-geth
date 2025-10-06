@@ -55,7 +55,6 @@ func (api *RealtimeAPIImpl) GetInternalTransactions(ctx context.Context, hash co
 		backend := ethapi.NewTransactionAPI(api.b, nil)
 		return backend.GetInternalTransactions(ctx, hash)
 	}
-
 	return innerTxs, nil
 }
 
@@ -93,28 +92,17 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 	}
 
 	signer := types.MakeSigner(api.b.ChainConfig(), header.Number, header.Time)
-	txDataList := newTxDataList(len(txHashes))
+	transactions := make(types.Transactions, 0, len(txHashes))
+	receipts := make(types.Receipts, 0, len(txHashes))
 	for _, txHash := range txHashes {
 		txn, receipt, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash)
 		if !exists {
 			backend := ethapi.NewBlockChainAPI(api.b)
 			return backend.GetBlockReceipts(ctx, number)
 		}
-		txDataList.Add(txData{
-			tx:      txn,
-			receipt: receipt,
-			index:   receipt.TransactionIndex,
-		})
-		txDataList.Sort()
+		transactions = append(transactions, txn)
+		receipts = append(receipts, receipt)
 	}
-
-	transactions := make(types.Transactions, 0, len(txHashes))
-	receipts := make(types.Receipts, 0, len(txHashes))
-	for _, txData := range txDataList.Items() {
-		transactions = append(transactions, txData.tx)
-		receipts = append(receipts, txData.receipt)
-	}
-
 	var blobGasPrice *big.Int
 	if header.ExcessBlobGas != nil {
 		blobGasPrice = eip4844.CalcBlobFee(api.b.ChainConfig(), header)
@@ -127,6 +115,5 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 	for idx, receipt := range receipts {
 		result = append(result, ethapi.MarshalReceipt(receipt, header.Number.Uint64(), signer, transactions[idx], api.b.ChainConfig()))
 	}
-
 	return result, nil
 }

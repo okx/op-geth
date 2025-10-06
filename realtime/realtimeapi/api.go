@@ -178,6 +178,7 @@ func (api *RealtimeAPIImpl) tryGetBlockResponseFromNumber(
 			if !ok {
 				return nil, fmt.Errorf("header not found for block %d", blockNum)
 			}
+			isPending = false
 		} else {
 			return nil, fmt.Errorf("header not found for block %d", blockNum)
 		}
@@ -185,25 +186,15 @@ func (api *RealtimeAPIImpl) tryGetBlockResponseFromNumber(
 
 	txHashes, ok := api.cacheDB.Stateless.GetBlockTxs(blockNum)
 	if !ok {
-		return nil, fmt.Errorf("header not found for block %d", blockNum)
+		return nil, fmt.Errorf("block txs not found for block %d", blockNum)
 	}
-	txDataList := newTxDataList(len(txHashes))
+	transactions := make(types.Transactions, 0, len(txHashes))
 	for _, txHash := range txHashes {
-		txn, receipt, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash)
+		txn, _, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash)
 		if !exists {
 			return nil, fmt.Errorf("transaction %s not found for block %d", txHash.Hex(), blockNum)
 		}
-		txDataList.Add(txData{
-			tx:      txn,
-			receipt: receipt,
-			index:   receipt.TransactionIndex,
-		})
-		txDataList.Sort()
-	}
-
-	transactions := make(types.Transactions, 0, len(txHashes))
-	for _, txData := range txDataList.Items() {
-		transactions = append(transactions, txData.tx)
+		transactions = append(transactions, txn)
 	}
 	var bw types.Withdrawals
 	if withdrawals != nil {
@@ -217,6 +208,20 @@ func (api *RealtimeAPIImpl) tryGetBlockResponseFromNumber(
 	response, err := ethapi.RPCMarshalBlock(ctx, block, true, fullTx, api.b.ChainConfig(), api.cacheDB)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal block: %w", err)
+	}
+	if isPending {
+		for _, field := range []string{"hash"} {
+			response[field] = nil
+		}
+		if fullTx {
+			if txs, ok := response["transactions"].([]interface{}); ok {
+				for _, tx := range txs {
+					if rpcTx, ok := tx.(*ethapi.RPCTransaction); ok {
+						rpcTx.BlockHash = nil
+					}
+				}
+			}
+		}
 	}
 	return response, nil
 }

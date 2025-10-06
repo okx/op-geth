@@ -80,7 +80,6 @@ func (api *RealtimeAPIImpl) GetBlockTransactionCountByHash(ctx context.Context, 
 		backend := ethapi.NewTransactionAPI(api.b, nil)
 		return backend.GetBlockTransactionCountByHash(ctx, blockHash)
 	}
-
 	numOfTx := hexutil.Uint(len(txHashes))
 	return &numOfTx, nil
 }
@@ -101,21 +100,6 @@ func (api *RealtimeAPIImpl) GetBlockByNumber(ctx context.Context, blockNr rpc.Bl
 		backend := ethapi.NewBlockChainAPI(api.b)
 		return backend.GetBlockByNumber(ctx, blockNr, fullTx)
 	}
-
-	if isPending {
-		for _, field := range []string{"hash", "nonce", "miner"} {
-			response[field] = nil
-		}
-		if fullTx {
-			if txs, ok := response["transactions"].([]interface{}); ok {
-				for _, tx := range txs {
-					if rpcTx, ok := tx.(*ethapi.RPCTransaction); ok {
-						rpcTx.BlockHash = nil
-					}
-				}
-			}
-		}
-	}
 	return response, nil
 }
 
@@ -135,7 +119,6 @@ func (api *RealtimeAPIImpl) GetBlockByHash(ctx context.Context, hash common.Hash
 		backend := ethapi.NewBlockChainAPI(api.b)
 		return backend.GetBlockByHash(ctx, hash, fullTx)
 	}
-
 	return response, nil
 }
 
@@ -182,6 +165,5 @@ func (api *RealtimeAPIImpl) GetBlockInternalTransactions(ctx context.Context, bl
 		}
 		result[txHash] = innerTxs
 	}
-
 	return result, nil
 }
