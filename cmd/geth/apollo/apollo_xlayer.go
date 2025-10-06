@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/apolloconfig/agollo/v4/storage"
@@ -51,26 +52,57 @@ func IsApolloConfigSet() bool {
 
 type GethConfigHandler struct{}
 
-// HandleConfigChange implements geth-specific configuration change logic
+// HandleConfigChange implements op-geth-specific configuration change logic
 func (g *GethConfigHandler) HandleConfigChange(prefix string, ctx *cli.Context, key string, value *storage.ConfigChange) {
+	// prefix is the full namespace (e.g. "opgeth_l2gaspricer"), extract component
+	component := getComponentFromNamespace(prefix)
+
+	// Validate that this is for op-geth component
+	if component != apollo.OpGethComponent {
+		log.Warn("OpGeth received config change for non-opgeth namespace, ignoring", "component", component, "prefix", prefix)
+		return
+	}
+
+	log.Info("OpGeth handling config change", "component", component, "prefix", prefix, "key", key)
+
 	switch prefix {
 	case apollo.L2GasPricer:
-		log.Info("Geth L2GasPricer config changed", "key", key, "value", value.NewValue)
+		log.Info("opgeth l2gaspricer config changed", "key", key, "value", value.NewValue)
 		fireL2GasPricer(ctx, value)
 	default:
 		log.Info("Geth unknown config prefix", "prefix", prefix, "key", key, "value", value.NewValue)
 	}
 }
 
-// LoadConfig implements geth-specific configuration loading logic
+// LoadConfig implements op-geth-specific configuration loading logic
 func (g *GethConfigHandler) LoadConfig(prefix string, ctx *cli.Context) {
-	log.Info("Geth LoadConfig called", "prefix", prefix)
+	// prefix is the full namespace (e.g. "opgeth_l2gaspricer"), extract component
+	component := getComponentFromNamespace(prefix)
+
+	// Validate that this is for op-geth component
+	if component != apollo.OpGethComponent {
+		log.Warn("OpGeth received config load request for non-opgeth namespace, ignoring", "component", component, "prefix", prefix)
+		return
+	}
+
+	log.Info("OpGeth loading config", "component", component, "prefix", prefix)
+
 	switch prefix {
 	case apollo.L2GasPricer:
 		g.loadL2GasPricer(ctx)
 	default:
-		log.Info("Geth unknown config prefix for loading", "prefix", prefix)
+		log.Info("OpGeth unknown namespace for loading", "prefix", prefix)
 	}
+}
+
+// getComponentFromNamespace extracts the component prefix from namespace
+// e.g. "opgeth_l2gaspricer" -> "opgeth"
+func getComponentFromNamespace(namespace string) string {
+	parts := strings.Split(namespace, "_")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return ""
 }
 
 // NewGethConfigHandler creates a new geth-specific config handler

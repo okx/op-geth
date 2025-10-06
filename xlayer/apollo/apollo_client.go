@@ -70,7 +70,8 @@ func GetInstance(cfg *config.AppConfig, flags []cli.Flag) (*Client, error) {
 
 		_, found := nsMap[prefix]
 		if found {
-			return nil, fmt.Errorf("duplicate apollo namespace prefix: %s", prefix)
+			//return nil, fmt.Errorf("duplicate apollo namespace prefix: %s", prefix)
+			return nil, fmt.Errorf("duplicate apollo namespace: %s", prefix)
 		}
 		nsMap[prefix] = namespace
 	}
@@ -212,6 +213,18 @@ func (c *CustomChangeListener) OnChange(changeEvent *storage.ChangeEvent) {
 					"key", key,
 					"value", value.NewValue)
 			}
+
+			suffix, err := getNamespaceSuffix(changeEvent.Namespace)
+			if err != nil {
+				log.Warn(fmt.Sprintf("not processing change event: %v", err))
+				continue
+			}
+			switch suffix {
+			case Halt:
+				c.fireHalt(key, value)
+				continue
+			}
+
 			prefix, err := getNamespacePrefix(changeEvent.Namespace)
 			if err != nil {
 				log.Warn("Failed to get namespace prefix", "error", err, "namespace", changeEvent.Namespace)
