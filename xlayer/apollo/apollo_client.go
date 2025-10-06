@@ -193,16 +193,8 @@ func (c *Client) AddHandler(handler CustomHandler) {
 }
 
 type CustomHandler interface {
-	// HandleConfigChange(prefix string, ctx *cli.Context, key string, value *storage.ConfigChange)
-	// LoadConfig(prefix string, ctx *cli.Context) // Add config loading interface
-	// HandleConfigChange handles configuration changes from Apollo
-	// prefix: component prefix (e.g., "opgeth", "opnode")
-	// namespace: full namespace string (e.g., "opgeth-l2gaspricer", "opnode-sequencer")
 	HandleConfigChange(prefix string, ctx *cli.Context, key string, value *storage.ConfigChange)
-	// LoadConfig loads configuration from Apollo
-	// prefix: component prefix (e.g., "opgeth", "opnode")
-	// namespace: full namespace string (e.g., "opgeth-l2gaspricer", "opnode-sequencer")
-	LoadConfig(prefix string, ctx *cli.Context)
+	LoadConfig(prefix string, ctx *cli.Context) // Add config loading interface
 }
 
 type CustomChangeListener struct {
