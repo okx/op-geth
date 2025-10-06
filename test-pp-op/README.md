@@ -40,6 +40,7 @@ make reproducible-prestate
 # docker.io/library/golang:1.24.2-alpine3.21
 # docker.io/library/golang:1.23.8-alpine3.21
 
+cp testnet.env .env
 ./3-deploy-op-contracts.sh
 # pause erigon, update .env fork_num
 # To be updated...
