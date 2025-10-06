@@ -318,7 +318,7 @@ resolve_game
 sleep $DISPUTE_GAME_FINALITY_DELAY_SECONDS
 claim_credit
 
-#set_game_type_permissionless
+set_game_type_permissionless
 
 sleep $TEMP_GAME_WINDOW
 ${DOCKER_COMPOSE_CMD} up -d op-proposer op-challenger op-dispute-mon
