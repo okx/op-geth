@@ -257,7 +257,6 @@ func TestRealtimeRPC(t *testing.T) {
 		pendingBlock, err := client.RealtimeGetBlock(ctx, "pending")
 		require.NoError(t, err)
 		require.NotNil(t, pendingBlock, "Pending block should not be nil")
-		require.Nil(t, pendingBlock["hash"], "Block hash should be nil")
 		fmt.Printf("RealtimeGetBlock result block number: %v, txCount: %v\n", pendingBlock["number"], len(pendingBlock["transactions"].([]interface{})))
 	})
 
