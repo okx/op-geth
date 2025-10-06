@@ -28,6 +28,7 @@ cd /app/op-geth/test-pp-op
 gzip -c merged.genesis.json > config-op/merged.genesis.gz.json
 cp config-op/rollup.json /app/op-program/chainconfig/configs/195-rollup.json
 cp config-op/merged.genesis.gz.json /app/op-program/chainconfig/configs/195-genesis-l2.json
+cd /app
 make reproducible-prestate
 
 ./6-start-op.sh
@@ -40,7 +41,6 @@ make reproducible-prestate
 # docker.io/library/golang:1.24.2-alpine3.21
 # docker.io/library/golang:1.23.8-alpine3.21
 
-cp testnet.env .env
 ./3-deploy-op-contracts.sh
 # pause erigon, update .env fork_num
 # To be updated...
