@@ -14,8 +14,8 @@ docker build -t op-migrate:latest --progress=plain -f dockerfile/Dockerfile.op-p
 # Exposing the Docker socket allows us to expose docker images to the container for `make reproducible-prestate`.
 docker run \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$(pwd):/app/op-geth/test-pp-op" \
   -v "$(pwd)/data/cannon-data:/app/op-program/bin" \
-  -v "$(pwd)/data/:/app/op-geth/test-pp-op/data" \
   -e DOCKER_HOST=unix:///var/run/docker.sock \
   -d op-migrate:latest sleep infinity
 # ssh into container.

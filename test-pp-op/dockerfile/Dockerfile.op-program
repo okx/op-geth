@@ -7,7 +7,7 @@ WORKDIR /app/op-geth
 RUN git stash
 RUN git checkout feat/cliff/migrate-test
 RUN git pull origin feat/cliff/migrate-test
-RUN go build -ldflags '-extldflags "-static"' -o build/bin/geth ./cmd/geth
+RUN make geth
 
 # 2nd stage
 FROM op-stack:v1.13.4 AS builder
@@ -27,7 +27,7 @@ RUN apt-get update && \
 WORKDIR /app
 COPY .env .
 COPY config-op/rollup.json /app/op-program/chainconfig/configs/${CHAIN_ID}-rollup.json
-COPY config-op/genesis.gz.json /app/op-program/chainconfig/configs/${CHAIN_ID}-genesis-l2.json
+COPY config-op/genesis.json /app/op-program/chainconfig/configs/${CHAIN_ID}-genesis-l2.json
 # Download deps for building this binary. We will cache this inside image.
 RUN echo '🚀 Building reproducible-prestate...' && \
     make reproducible-prestate || echo "⚠️ Make failed during build, check setup"
