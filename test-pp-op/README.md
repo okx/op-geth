@@ -8,7 +8,10 @@ cp local.env .env
 ./4-stop-erigon.sh
 
 # Build image.
-docker build -t op-migrate:latest --progress=plain -f dockerfile/Dockerfile.op-program .
+docker build \
+  --build-arg CHAIN_ID=195 \
+  --progress=plain \
+  -t op-migrate:latest -f dockerfile/Dockerfile.op-program .
 
 # Run container 1 time and run steps 5-1, 5-2 and 5-3 (make reproducible-prestate) inside container.
 # Exposing the Docker socket allows us to expose docker images to the container for `make reproducible-prestate`.
@@ -37,16 +40,56 @@ make reproducible-prestate
 
 ## run on testnet
 ```
-# Upload these images to ECS machine to ensure it is not downloaded from internet.
-# docker.io/library/golang:1.24.2-alpine3.21
-# docker.io/library/golang:1.23.8-alpine3.21
-
-./3-deploy-op-contracts.sh
 # pause erigon, update .env fork_num
-# To be updated...
+./3-deploy-op-contracts.sh
+
+# LOCAL ENVIRONMENT
+# Pull images locally first the correct arch.
+# Upload these images to ECS machine to ensure it is not downloaded from internet.
+
+# 1) docker.io/library/golang:1.24.2-alpine3.21
+docker pull golang@sha256:3077e12cda6debf8a9eba8eba0b6b4efe6f9c17295a18e3883cc5797d1688acb
+docker tag 3077e12cd golang:1.24.2-alpine3.21
+# 2) docker.io/library/golang:1.23.8-alpine3.21
+docker pull golang@sha256:ec5612bbd9e96d5b80a8b968cea06a4a9b985fe200ff6da784bf607063273c59
+docker tag 3077e12cd golang:1.23.8-alpine3.21
+
+docker save golang:1.24.2-alpine3.21 | gzip > golang-1.24.2-alpine3.21.tar.gz
+docker save golang:1.23.8-alpine3.21 | gzip > golang-1.23.8-alpine3.21.tar.gz
+
+# Build the image locally in advance.
+# Upload this image to ECS as well.
+docker build \
+  --platform linux/amd64 \
+  --build-arg CHAIN_ID=196 \
+  --build-arg OP_STACK_IMAGE=op-stack:amd64 \
+  --progress=plain \
+  -t op-migrate:amd64 -f dockerfile/Dockerfile.op-program .
+
+# Use osstool to upload images to ECS. 
+# Combine all zipped docker images and relevant config files into a single compressed zip folder.
+./osstool -f ${compressed-file} -a upload -ticket ${ticket-id}
+
+# INSIDE ECS MACHINE
+docker run \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "/data/test-pp-op:/app/op-geth/test-pp-op" \
+  -v "/data:/data/cannon-data:/app/op-program/bin" \
+  -e DOCKER_HOST=unix:///var/run/docker.sock \
+  -d op-migrate:amd64 sleep infinity
+# ssh into container.
+docker exec -it ${CONTAINER_ID} /bin/bash
+
+# Inside container, execute these steps.
+cd /app/op-geth/test-pp-op
 ./5-1-migrate-prepare.sh
 ./5-2-migrate-op.sh
-./5-3-build-op-program.sh
+gzip -c merged.genesis.json > config-op/merged.genesis.gz.json
+cp config-op/rollup.json /app/op-program/chainconfig/configs/196-rollup.json
+cp config-op/merged.genesis.gz.json /app/op-program/chainconfig/configs/196-genesis-l2.json
+cd /app
+make reproducible-prestate
+
 ./6-start-op.sh
 ./7-setup-fraud-proof.sh
 ```

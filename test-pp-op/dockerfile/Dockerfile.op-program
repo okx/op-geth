@@ -1,4 +1,7 @@
-FROM op-stack:v1.13.4 AS geth-builder
+ARG OP_STACK_IMAGE=op-stack:v1.13.4
+FROM ${OP_STACK_IMAGE} AS geth-builder
+
+RUN echo $TARGETARCH
 
 RUN apt-get update && apt-get install -y --no-install-recommends git
 
@@ -10,7 +13,8 @@ RUN git pull origin feat/cliff/migrate-test
 RUN make geth
 
 # 2nd stage
-FROM op-stack:v1.13.4 AS builder
+ARG OP_STACK_IMAGE=op-stack:v1.13.4
+FROM ${OP_STACK_IMAGE} AS builder
 
 ARG CHAIN_ID
 RUN test -n "${CHAIN_ID}" || (echo "ERROR: CHAIN_ID is not set" && exit 1)
@@ -26,14 +30,17 @@ RUN apt-get update && \
 
 WORKDIR /app
 COPY .env .
-COPY config-op/rollup.json /app/op-program/chainconfig/configs/${CHAIN_ID}-rollup.json
-COPY config-op/genesis.json /app/op-program/chainconfig/configs/${CHAIN_ID}-genesis-l2.json
+
+# Dummy JSON files used for `make reproducible-prestate`
+COPY template/rollup.json /app/op-program/chainconfig/configs/${CHAIN_ID}-rollup.json
+COPY template/genesis.json /app/op-program/chainconfig/configs/${CHAIN_ID}-genesis-l2.json
 # Download deps for building this binary. We will cache this inside image.
 RUN echo '🚀 Building reproducible-prestate...' && \
     make reproducible-prestate || echo "⚠️ Make failed during build, check setup"
 
 # Second stage: clean runtime image
-FROM op-stack:v1.13.4
+ARG OP_STACK_IMAGE=op-stack:v1.13.4
+FROM ${OP_STACK_IMAGE}
 
 # Cache go.mod deps into the image.
 COPY --from=builder /go/pkg/mod /go/pkg/mod
@@ -47,4 +54,8 @@ WORKDIR /app
 
 COPY --from=geth-builder /app/op-geth/test-pp-op /app/op-geth/test-pp-op
 COPY --from=geth-builder /app/op-geth/build/bin/geth /usr/local/bin/geth
+
+# If local, this will be copied over into image.
+# Otherwise, copy testnet.env as .env
+RUN if [ "$TARGETARCH" = "arm64" ]; then cp /app/op-geth/test-pp-op/testnet.env /app/.env; fi
 COPY --from=builder /app/.env /app/op-geth/test-pp-op/.env
