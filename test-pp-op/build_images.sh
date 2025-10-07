@@ -217,8 +217,18 @@ build_op_geth_image() {
   echo "build op-geth image"
   PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   PROJECT_ROOT="$(git rev-parse --show-toplevel)"
-  echo "PROJECT_ROOT $PROJECT_ROOT"
-  cd $PROJECT_ROOT
+
+  # If tmp/optimism doesn't exist, clone it
+  if [ ! -d "$PWD_DIR/tmp/optimism" ]; then
+    rm -rf $PWD_DIR/tmp/optimism
+    mkdir -p $PWD_DIR/tmp
+    cd $PWD_DIR/tmp/
+    echo "Cloning Optimism repository..."
+    git clone --recurse-submodules -b dev https://github.com/okx/optimism.git
+    cd $PWD_DIR
+  fi
+
+  cd "$PWD_DIR/tmp/optimism"
   docker build -t $OP_GETH_IMAGE_TAG .
   cd $PWD_DIR
 }
