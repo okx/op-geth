@@ -43,10 +43,10 @@ make reproducible-prestate
 # pause erigon, update .env fork_num
 cp testnet.env .env
 ./3-deploy-op-contracts.sh
+# AFTER DEPLOYING OP CONTRACTS, CHECK TRANSACTOR ADDRESS ON SEPOLIA.
 
 # LOCAL ENVIRONMENT
 # ----------------------------------------------------------------------------
-
 # Build the image locally after deploying contracts (rollup.json and genesis.json).
 docker build \
   --platform linux/amd64 \
@@ -71,12 +71,11 @@ docker save op-geth:7706694 | gzip > op-geth.tar.gz # starting new OP sequencer
 # Make a new folder in current directory.
 mkdir upload-to-ecs
 mv golang-1.24.2-alpine3.21.tar.gz golang-1.23.8-alpine3.21.tar.gz op-migrate-amd64.tar.gz op-geth.tar.gz upload-to-ecs
-tar -czf upload-to-ecs.tar.gz upload-to-ecs
+tar -czvf upload-to-ecs.tar.gz upload-to-ecs
 # Manually copy upload-to-ecs.tar.gz to DACs env.
 
 # INSIDE DACs TERMINAL
 # ----------------------------------------------------------------------------
-
 # Calculate md5 hash to create OSS ticket.
 md5sum upload-to-ecs.tar.gz
 # Use osstool to upload images to ECS. 
