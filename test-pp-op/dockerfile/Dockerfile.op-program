@@ -1,8 +1,6 @@
 ARG OP_STACK_IMAGE=op-stack:v1.13.4
 FROM ${OP_STACK_IMAGE} AS geth-builder
 
-RUN echo $TARGETARCH
-
 RUN apt-get update && apt-get install -y --no-install-recommends git
 
 WORKDIR /app/op-geth
@@ -38,11 +36,11 @@ COPY template/genesis.json /app/op-program/chainconfig/configs/${CHAIN_ID}-genes
 RUN echo '🚀 Building reproducible-prestate...' && \
     make reproducible-prestate || echo "⚠️ Make failed during build, check setup"
 
-# Second stage: clean runtime image
+# Third stage: clean runtime image
 ARG OP_STACK_IMAGE=op-stack:v1.13.4
 FROM ${OP_STACK_IMAGE}
+ARG ENV=local
 
-# Cache go.mod deps into the image.
 COPY --from=builder /go/pkg/mod /go/pkg/mod
 
 RUN apt-get update && \
@@ -57,5 +55,5 @@ COPY --from=geth-builder /app/op-geth/build/bin/geth /usr/local/bin/geth
 
 # If local, this will be copied over into image.
 # Otherwise, copy testnet.env as .env
-RUN if [ "$TARGETARCH" = "arm64" ]; then cp /app/op-geth/test-pp-op/testnet.env /app/.env; fi
+RUN if [ "$ENV" = "testnet" ]; then cp /app/op-geth/test-pp-op/testnet.env /app/.env; fi
 COPY --from=builder /app/.env /app/op-geth/test-pp-op/.env
