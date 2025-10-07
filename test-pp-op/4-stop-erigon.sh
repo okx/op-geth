@@ -22,7 +22,7 @@ FORK_BLOCK=$(echo "$LOG_OUTPUT" | grep "Finish block" | tail -1 | sed -n 's/.*Fi
 echo "FORK_BLOCK=$FORK_BLOCK"
 
 
-sed_inplace "s/FORK_BLOCK=.*/FORK_BLOCK=$FORK_BLOCK/" .env
+sed_inplace "s/FORK_BLOCK=.*/FORK_BLOCK=$((FORK_BLOCK+1))/" .env
 PARENT_HASH=$(echo "$LOG_OUTPUT" | grep "RPC Daemon notified of new headers" | tail -1 | sed -n 's/.*hash=\([0-9a-fx]*\) .*/\1/p')
 echo "PARENT_HASH=$PARENT_HASH"
 sed_inplace "s/PARENT_HASH=.*/PARENT_HASH=$PARENT_HASH/" .env
