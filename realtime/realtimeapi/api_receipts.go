@@ -3,13 +3,10 @@ package realtimeapi
 import (
 	"context"
 	"fmt"
-	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -26,36 +23,13 @@ func (api *RealtimeAPIImpl) GetTransactionReceipt(ctx context.Context, hash comm
 		backend := ethapi.NewTransactionAPI(api.b, nil)
 		return backend.GetTransactionReceipt(ctx, hash)
 	}
-	header, _, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(receipt.BlockNumber.Uint64())
+	header, _, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(receipt.BlockNumber.Uint64())
 	if !ok {
 		backend := ethapi.NewTransactionAPI(api.b, nil)
 		return backend.GetTransactionReceipt(ctx, hash)
 	}
-	if blockhash != EmptyBlockHash {
-		receipt.BlockHash = blockhash
-		for _, log := range receipt.Logs {
-			log.BlockHash = blockhash
-		}
-	}
-
 	signer := types.MakeSigner(api.b.ChainConfig(), header.Number, header.Time)
 	return ethapi.MarshalReceipt(receipt, header.Number.Uint64(), signer, txn, api.b.ChainConfig()), nil
-}
-
-// GetInternalTransactions implements the realtime eth_getInternalTransactions.
-// Returns the internal transactions of a transaction given the transaction's hash.
-func (api *RealtimeAPIImpl) GetInternalTransactions(ctx context.Context, hash common.Hash) ([]*types.InnerTx, error) {
-	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
-		backend := ethapi.NewTransactionAPI(api.b, nil)
-		return backend.GetInternalTransactions(ctx, hash)
-	}
-
-	_, _, _, innerTxs, ok := api.cacheDB.Stateless.GetTxInfo(hash)
-	if !ok {
-		backend := ethapi.NewTransactionAPI(api.b, nil)
-		return backend.GetInternalTransactions(ctx, hash)
-	}
-	return innerTxs, nil
 }
 
 func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.BlockNumberOrHash) ([]map[string]interface{}, error) {
@@ -70,12 +44,12 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 		return backend.GetBlockReceipts(ctx, number)
 	}
 
-	header, _, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
+	header, _, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		if isPending {
 			// Pending block not open yet. Default to latest block
 			blockNum = api.cacheDB.GetHighestConfirmHeight()
-			header, _, _, blockhash, ok = api.cacheDB.Stateless.GetBlockInfo(blockNum)
+			header, _, _, _, ok = api.cacheDB.Stateless.GetBlockInfo(blockNum)
 			if !ok {
 				return nil, fmt.Errorf("header not found for block %d", blockNum)
 			}
@@ -90,30 +64,15 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 		backend := ethapi.NewBlockChainAPI(api.b)
 		return backend.GetBlockReceipts(ctx, number)
 	}
-
 	signer := types.MakeSigner(api.b.ChainConfig(), header.Number, header.Time)
-	transactions := make(types.Transactions, 0, len(txHashes))
-	receipts := make(types.Receipts, 0, len(txHashes))
+	result := make([]map[string]interface{}, 0, len(txHashes))
 	for _, txHash := range txHashes {
 		txn, receipt, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash)
 		if !exists {
 			backend := ethapi.NewBlockChainAPI(api.b)
 			return backend.GetBlockReceipts(ctx, number)
 		}
-		transactions = append(transactions, txn)
-		receipts = append(receipts, receipt)
-	}
-	var blobGasPrice *big.Int
-	if header.ExcessBlobGas != nil {
-		blobGasPrice = eip4844.CalcBlobFee(api.b.ChainConfig(), header)
-	}
-	if err := receipts.DeriveFields(api.b.ChainConfig(), blockhash, header.Number.Uint64(), header.Time, header.BaseFee, blobGasPrice, transactions); err != nil {
-		log.Error(fmt.Sprintf("eth_getBlockReceipts failed to derive receipt fields for block %d. Error: %v", blockNum, err))
-	}
-
-	result := make([]map[string]interface{}, 0, len(txHashes))
-	for idx, receipt := range receipts {
-		result = append(result, ethapi.MarshalReceipt(receipt, header.Number.Uint64(), signer, transactions[idx], api.b.ChainConfig()))
+		result = append(result, ethapi.MarshalReceipt(receipt, header.Number.Uint64(), signer, txn, api.b.ChainConfig()))
 	}
 	return result, nil
 }

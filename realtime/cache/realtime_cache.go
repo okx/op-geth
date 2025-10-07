@@ -109,7 +109,7 @@ func NewRealtimeCache(ctx context.Context, blockchain *core.BlockChain, subServi
 		ctx:                    ctx,
 		blockchain:             blockchain,
 		State:                  NewStateCache(DefaultStateBlockCacheSize),
-		Stateless:              NewStatelessCache(DefaultStatelessBlockCacheSize, DefaultStatelessTxCacheSize),
+		Stateless:              NewStatelessCache(blockchain.Config(), DefaultStatelessBlockCacheSize, DefaultStatelessTxCacheSize),
 		ReadyFlag:              atomic.Bool{},
 		CacheDumpPath:          cacheDumpPath,
 		HeightThreshold:        heightThreshold,
@@ -410,6 +410,9 @@ func (cache *RealtimeCache) tryCloseBlock(pendingBlockContext *PendingBlockConte
 	}
 	pendingBlockContext.blockStateCache = nil
 
+	if err := cache.Stateless.UpdateConfirmedBlock(cache.ctx, pendingBlockContext.blockNum); err != nil {
+		return err
+	}
 	cache.PutHighestConfirmHeight(pendingBlockContext.blockNum)
 	log.Info(fmt.Sprintf("[Realtime] Closed block %d, pending blocks queue size: %d", pendingBlockContext.blockNum, cache.pendingBlocks.Size()))
 

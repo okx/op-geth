@@ -3,8 +3,10 @@ package cache
 import (
 	"context"
 	"fmt"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
@@ -16,8 +18,9 @@ type StatelessCache struct {
 	txInfoMap    *realtimeTypes.TxInfoMap
 }
 
-func NewStatelessCache(blockCacheSize int, txCacheSize int) *StatelessCache {
+func NewStatelessCache(config *params.ChainConfig, blockCacheSize int, txCacheSize int) *StatelessCache {
 	return &StatelessCache{
+		config:       config,
 		blockInfoMap: realtimeTypes.NewBlockInfoMap(blockCacheSize),
 		txInfoMap:    realtimeTypes.NewTxInfoMap(blockCacheSize, txCacheSize),
 	}
@@ -72,6 +75,38 @@ func (cache *StatelessCache) PutTxInfo(blockNum uint64, txHash common.Hash, tx *
 func (cache *StatelessCache) DeleteBlock(blockNum uint64) {
 	cache.blockInfoMap.Delete(blockNum)
 	cache.txInfoMap.Delete(blockNum)
+}
+
+// UpdateConfirmedBlock updates the stateless cache with the confirmed block info.
+// Note that this function should be called only after all tx and block data of
+// that height has been updated.
+func (cache *StatelessCache) UpdateConfirmedBlock(ctx context.Context, blockNum uint64) error {
+	header, _, _, blockhash, ok := cache.blockInfoMap.Get(blockNum)
+	if !ok {
+		return fmt.Errorf("block header %s not found in cache", blockhash.Hex())
+	}
+	txHashes, ok := cache.GetBlockTxs(blockNum)
+	if !ok {
+		return fmt.Errorf("block tx %s not found in cache", blockhash.Hex())
+	}
+	txs := make(types.Transactions, 0, len(txHashes))
+	receipts := make(types.Receipts, 0, len(txHashes))
+	for _, txHash := range txHashes {
+		tx, receipt, _, _, ok := cache.GetTxInfo(txHash)
+		if !ok {
+			return fmt.Errorf("receipt %s not found in cache", txHash.Hex())
+		}
+		txs = append(txs, tx)
+		receipts = append(receipts, receipt)
+	}
+	var blobGasPrice *big.Int
+	if header.ExcessBlobGas != nil {
+		blobGasPrice = eip4844.CalcBlobFee(cache.config, header)
+	}
+	if err := receipts.DeriveFields(cache.config, blockhash, header.Number.Uint64(), header.Time, header.BaseFee, blobGasPrice, txs); err != nil {
+		return fmt.Errorf("failed to derive receipt fields for block %d. Error: %v", blockNum, err)
+	}
+	return nil
 }
 
 // -------------- ReceiptGetter implementation --------------

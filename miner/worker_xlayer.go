@@ -52,7 +52,6 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 	if payload.baseEnv == nil {
 		return nil, false // No base to build on
 	}
-
 	parent := miner.chain.GetBlockByHash(params.parentHash)
 	if parent == nil || parent.Hash() != payload.baseParent {
 		log.Debug("Incremental update skipped: cannot find parent block", "id", payload.id)
@@ -100,8 +99,6 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 	}
 
 	isIsthmus := miner.chainConfig.IsIsthmus(work.header.Time)
-
-	// Collect consensus-layer requests if Prague is enabled.
 	var requests [][]byte
 	if miner.chainConfig.IsPrague(work.header.Number, work.header.Time) && !isIsthmus {
 		requests = [][]byte{}

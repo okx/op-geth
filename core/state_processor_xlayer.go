@@ -26,9 +26,9 @@ import (
 	"github.com/ethereum/go-ethereum/internal/monitor"
 )
 
-// ApplyTransaction_XLayer attempts to apply a transaction to the given state
-// database and uses the input parameters for its environment. It returns the
-// receipt for the transaction, gas used and an error if the transaction failed,
+// ApplyTransaction_XLayer is called on the miner that attempts to apply a transaction to
+// the given state database and uses the input parameters for its environment. It returns
+// the receipt for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
 func ApplyTransaction_XLayer(evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, shouldFinalize bool) (*types.Receipt, []*types.InnerTx, *state.Entries, error) {
 	msg, err := TransactionToMessage(tx, types.MakeSigner(evm.ChainConfig(), header.Number, header.Time), header.BaseFee)
