@@ -25,6 +25,8 @@ func initApollo(stack *node.Node, cfg *gethConfig) {
 
 		flags := slices.Concat(utils.XLayerFlags, nodeFlags, rpcFlags, metricsFlags)
 
+		flags = apollo.SanitizeFlags(flags)
+
 		client, err := apollo.GetInstance(&config.AppConfig{
 			AppID:         cfg.Eth.XLayer.Apollo.AppID,
 			IP:            cfg.Eth.XLayer.Apollo.IP,

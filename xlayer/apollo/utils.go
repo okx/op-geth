@@ -50,3 +50,25 @@ func containsAddressOldImpl(addresses []string, addr common.Address) bool {
 	}
 	return false
 }
+
+func SanitizeFlags(flags []cli.Flag) []cli.Flag {
+	seen := make(map[string]bool)
+	var result []cli.Flag
+
+	for _, flag := range flags {
+		if flag == nil {
+			continue // skip nil flags
+		}
+
+		// Use flag name as key to detect duplicates
+		flagName := flag.Names()[0]
+		if seen[flagName] {
+			continue // skip duplicate flags
+		}
+
+		seen[flagName] = true
+		result = append(result, flag)
+	}
+
+	return result
+}
