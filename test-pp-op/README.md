@@ -61,6 +61,7 @@ docker save golang:1.23.8-alpine3.21 | gzip > golang-1.23.8-alpine3.21.tar.gz
 # Upload this image to ECS as well.
 docker build \
   --platform linux/amd64 \
+  --build-arg ENV=testnet \
   --build-arg CHAIN_ID=196 \
   --build-arg OP_STACK_IMAGE=op-stack:amd64 \
   --progress=plain \
