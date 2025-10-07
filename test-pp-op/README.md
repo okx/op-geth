@@ -41,6 +41,7 @@ make reproducible-prestate
 ## run on testnet
 ```bash
 # pause erigon, update .env fork_num
+cp testnet.env .env
 ./3-deploy-op-contracts.sh
 
 # LOCAL ENVIRONMENT
@@ -51,11 +52,13 @@ make reproducible-prestate
 docker pull golang@sha256:3077e12cda6debf8a9eba8eba0b6b4efe6f9c17295a18e3883cc5797d1688acb
 docker tag 3077e12cd golang:1.24.2-alpine3.21
 # 2) docker.io/library/golang:1.23.8-alpine3.21
-docker pull golang@sha256:ec5612bbd9e96d5b80a8b968cea06a4a9b985fe200ff6da784bf607063273c59
-docker tag 3077e12cd golang:1.23.8-alpine3.21
+docker pull golang@sha256:cc94cc0110a0ca83ec24991c0e981ca57f88a0bc959c7e7532701d6b1956668d
+docker tag cc94cc01 golang:1.23.8-alpine3.21
 
 docker save golang:1.24.2-alpine3.21 | gzip > golang-1.24.2-alpine3.21.tar.gz
 docker save golang:1.23.8-alpine3.21 | gzip > golang-1.23.8-alpine3.21.tar.gz
+docker save op-migrate:amd64 | gzip > op-migrate-amd64.tar.gz
+docker save op-geth:7706694 | gzip > op-geth.tar.gz # starting new OP sequencer
 
 # Build the image locally in advance.
 # Upload this image to ECS as well.
@@ -67,9 +70,18 @@ docker build \
   --progress=plain \
   -t op-migrate:amd64 -f dockerfile/Dockerfile.op-program .
 
+# Make a new folder in current directory.
+mkdir upload-to-ecs
+mv golang-1.24.2-alpine3.21.tar.gz golang-1.23.8-alpine3.21.tar.gz op-migrate-amd64.tar.gz op-geth.tar.gz upload-to-ecs
+tar -czf upload-to-ecs.tar.gz upload-to-ecs
+# Calculate md5 hash to create OSS ticket.
+md5sum upload-to-ecs.tar.gz
+# Copy upload-to-ecs.tar.gz to DACs env.
+
+# INSIDE DACs TERMINAL
 # Use osstool to upload images to ECS. 
 # Combine all zipped docker images and relevant config files into a single compressed zip folder.
-./osstool -f ${compressed-file} -a upload -ticket ${ticket-id}
+./osstool -f upload-to-ecs.tar.gz -a upload -ticket ${ticket-id}
 
 # INSIDE ECS MACHINE
 docker run \
