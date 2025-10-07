@@ -113,14 +113,6 @@ func ResetInstance() error {
 	return nil
 }
 
-// GetCurrentInstance returns the current singleton instance without creating one.
-// Returns nil if no instance has been created yet.
-func GetCurrentInstance() *Client {
-	mu.RLock()
-	defer mu.RUnlock()
-	return instance
-}
-
 // IsInitialized returns true if the singleton instance has been created.
 func IsInitialized() bool {
 	mu.RLock()

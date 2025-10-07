@@ -28,16 +28,16 @@ func fireL2GasPricer(ctx *cli.Context, value *storage.ConfigChange) {
 
 // loadL2GasPricerConfig loads the dynamic gas pricer apollo configurations
 func loadL2GasPricerConfig(ctx *cli.Context) {
-	UnsafeGetApolloConfig().Lock()
-	defer UnsafeGetApolloConfig().Unlock()
+	TryUnsafeGetApolloConfig().Lock()
+	defer TryUnsafeGetApolloConfig().Unlock()
 
-	config := UnsafeGetApolloConfig()
+	config := TryUnsafeGetApolloConfig()
 	if config == nil {
 		log.Warn("Apollo config is nil, skipping L2GasPricer config load")
 		return
 	}
-	loadNodeL2GasPricerConfig(ctx, UnsafeGetApolloConfig().NodeCfg)
-	loadEthL2GasPricerConfig(ctx, UnsafeGetApolloConfig().EthCfg)
+	loadNodeL2GasPricerConfig(ctx, TryUnsafeGetApolloConfig().NodeCfg)
+	loadEthL2GasPricerConfig(ctx, TryUnsafeGetApolloConfig().EthCfg)
 }
 
 // loadNodeL2GasPricerConfig loads the dynamic gas pricer apollo node configurations
@@ -52,7 +52,7 @@ func loadEthL2GasPricerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 }
 
 func GetApolloGasPricerConfig() gasprice.Config {
-	UnsafeGetApolloConfig().Lock()
-	defer UnsafeGetApolloConfig().Unlock()
-	return UnsafeGetApolloConfig().EthCfg.GPO
+	TryUnsafeGetApolloConfig().Lock()
+	defer TryUnsafeGetApolloConfig().Unlock()
+	return TryUnsafeGetApolloConfig().EthCfg.GPO
 }

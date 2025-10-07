@@ -21,21 +21,15 @@ type ApolloConfigImpl struct {
 
 // Global Apollo configuration instance
 var globalApolloConfig *ApolloConfigImpl
-var configMutex sync.RWMutex
 
 // UnsafeGetApolloConfig returns the global Apollo configuration
 // This is unsafe and should be used carefully
 func UnsafeGetApolloConfig() *ApolloConfigImpl {
-	configMutex.RLock()
-	defer configMutex.RUnlock()
 	return globalApolloConfig
 }
 
 // SetApolloConfig sets the global Apollo configuration
 func SetApolloConfig(ethCfg *ethconfig.Config, nodeCfg *node.Config) {
-	configMutex.Lock()
-	defer configMutex.Unlock()
-
 	if globalApolloConfig == nil {
 		globalApolloConfig = &ApolloConfigImpl{}
 	}
@@ -45,8 +39,6 @@ func SetApolloConfig(ethCfg *ethconfig.Config, nodeCfg *node.Config) {
 }
 
 func IsApolloConfigSet() bool {
-	configMutex.RLock()
-	defer configMutex.RUnlock()
 	return globalApolloConfig != nil
 }
 

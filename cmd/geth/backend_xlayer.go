@@ -1,17 +1,18 @@
 package main
 
 import (
+	"slices"
+
 	"github.com/apolloconfig/agollo/v4/env/config"
 	gethApollo "github.com/ethereum/go-ethereum/cmd/geth/apollo"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/xlayer/apollo"
-	"github.com/urfave/cli/v2"
 )
 
-// addXLayerBackend adds the X Layer backend to the node
-func addXLayerBackend(stack *node.Node, cfg *gethConfig) {
+// initApollo adds the X Layer backend to the node
+func initApollo(stack *node.Node, cfg *gethConfig) {
 	if stack == nil || cfg == nil {
 		utils.Fatalf("Stack or config is nil")
 	}
@@ -22,9 +23,7 @@ func addXLayerBackend(stack *node.Node, cfg *gethConfig) {
 
 		handler := gethApollo.NewGethConfigHandler()
 
-		flags := append(utils.XLayerFlags, []cli.Flag{
-			utils.GpoMaxGasPriceFlag,
-		}...)
+		flags := slices.Concat(utils.XLayerFlags, nodeFlags, rpcFlags, metricsFlags)
 
 		client, err := apollo.GetInstance(&config.AppConfig{
 			AppID:         cfg.Eth.XLayer.Apollo.AppID,
