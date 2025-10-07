@@ -46,7 +46,7 @@ const (
 func TestClaimTx(t *testing.T) {
 	ctx := context.Background()
 	client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
-	operations.TransToken(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2AdminAddress)
+	TransToken(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2AdminAddress)
 
 	from := common.HexToAddress(operations.DefaultL2AdminAddress)
 	to := common.HexToAddress(operations.DefaultL2AdminAddress)
@@ -216,7 +216,7 @@ func TestEthereumBasicRPC(t *testing.T) {
 		t.Skip()
 	}
 
-	_, _ = operations.SetupTestEnvironment(t)
+	_, _ = SetupTestEnvironment(t)
 
 	// Default test address for tests that require an address
 	testAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
@@ -287,7 +287,7 @@ func TestEthereumBlockRPC(t *testing.T) {
 		t.Skip()
 	}
 
-	blockHash, blockNumber := operations.SetupTestEnvironment(t)
+	blockHash, blockNumber := SetupTestEnvironment(t)
 
 	// Test eth_getBlockByHash
 	t.Run("EthGetBlockByHash", func(t *testing.T) {
@@ -370,7 +370,7 @@ func TestEthereumLogsRPC(t *testing.T) {
 		t.Skip()
 	}
 
-	_, blockNumber := operations.SetupTestEnvironment(t)
+	_, blockNumber := SetupTestEnvironment(t)
 
 	// Test eth_getLogs
 	t.Run("EthGetLogs", func(t *testing.T) {
@@ -391,7 +391,7 @@ func TestTxPoolRPC(t *testing.T) {
 		t.Skip()
 	}
 
-	_, _ = operations.SetupTestEnvironment(t)
+	_, _ = SetupTestEnvironment(t)
 
 	// Test txpool_content - This might return a large object, so only log type
 	t.Run("TxPoolContent", func(t *testing.T) {
@@ -419,9 +419,9 @@ func TestInnerTx(t *testing.T) {
 	require.NoError(t, err)
 	defer client.Close()
 
-	operations.EnsureContractsDeployed(t)
+	EnsureContractsDeployed(t)
 
-	preexecPrivateKey, err := crypto.HexToECDSA(operations.TmpSenderPrivateKey)
+	preexecPrivateKey, err := crypto.HexToECDSA(TmpSenderPrivateKey)
 	require.NoError(t, err)
 	preexecFrom := crypto.PubkeyToAddress(preexecPrivateKey.PublicKey)
 
@@ -429,7 +429,7 @@ func TestInnerTx(t *testing.T) {
 	// triggerCall() function selector: 0xf18c388a
 	triggerCallData := common.Hex2Bytes("f18c388a")
 
-	signedContractATxHash, err := operations.MakeContractCall(t, ctx, client, preexecPrivateKey, operations.ContractAAddr, triggerCallData, 200000, nil)
+	signedContractATxHash, err := MakeContractCall(t, ctx, client, preexecPrivateKey, ContractAAddr, triggerCallData, 200000, nil)
 	require.NoError(t, err)
 
 	contractAReceipt, err := client.TransactionReceipt(ctx, signedContractATxHash)
@@ -437,13 +437,13 @@ func TestInnerTx(t *testing.T) {
 
 	// Call ContractC's setValue function
 	contractCSetValueData := common.Hex2Bytes("552410770000000000000000000000000000000000000000000000000000000000000123")
-	signedContractCSetValueTxHash, err := operations.MakeContractCall(t, ctx, client, preexecPrivateKey, operations.ContractCAddr, contractCSetValueData, 200000, nil)
+	signedContractCSetValueTxHash, err := MakeContractCall(t, ctx, client, preexecPrivateKey, ContractCAddr, contractCSetValueData, 200000, nil)
 	require.NoError(t, err)
 	fmt.Printf("signedContractCSetValueTxHash: %s\n", signedContractCSetValueTxHash.Hex())
 
 	// Call ContractC's getValue function
 	contractCGetValueData := common.Hex2Bytes("20965255")
-	signedContractCGetValueTxHash, err := operations.MakeContractCall(t, ctx, client, preexecPrivateKey, operations.ContractCAddr, contractCGetValueData, 200000, nil)
+	signedContractCGetValueTxHash, err := MakeContractCall(t, ctx, client, preexecPrivateKey, ContractCAddr, contractCGetValueData, 200000, nil)
 	require.NoError(t, err)
 	contractCGetValueReceipt, err := client.TransactionReceipt(ctx, signedContractCGetValueTxHash)
 	require.NoError(t, err)
@@ -465,7 +465,7 @@ func TestInnerTx(t *testing.T) {
 			TraceAddress:  "",
 			CodeAddress:   "",
 			From:          preexecFrom.Hex(),
-			To:            operations.ContractCAddr.Hex(),
+			To:            ContractCAddr.Hex(),
 			Input:         "",
 			Output:        "0x0000000000000000000000000000000000000000000000000000000000000123",
 			IsError:       false,
@@ -475,7 +475,7 @@ func TestInnerTx(t *testing.T) {
 			CallValueWei:  "0x0",
 		}
 
-		operations.ValidateInnerTransactionMatch(t, innerTx, expectedInnerTx, "ContractC getValue inner transaction")
+		ValidateInnerTransactionMatch(t, innerTx, expectedInnerTx, "ContractC getValue inner transaction")
 		require.Equal(t, contractCGetValueReceipt.GasUsed, innerTx.GasUsed, "GasUsed should be the same as the gasUsed in transaction receipt for getValue call")
 		require.Equal(t, uint64(200000), innerTx.Gas, "Gas should be the same as the gas in transaction receipt for getValue call")
 	})
@@ -495,7 +495,7 @@ func TestInnerTx(t *testing.T) {
 			TraceAddress:  "",
 			CodeAddress:   "",
 			From:          preexecFrom.Hex(),
-			To:            operations.ContractAAddr.Hex(),
+			To:            ContractAAddr.Hex(),
 			Input:         "",
 			Output:        "",
 			IsError:       false,
@@ -504,7 +504,7 @@ func TestInnerTx(t *testing.T) {
 			ValueWei:      "0",
 			CallValueWei:  "0x0",
 		}
-		operations.ValidateInnerTransactionMatch(t, innerTxs[0], expectedInnertx1, "First inner transaction (EOA -> ContractA)")
+		ValidateInnerTransactionMatch(t, innerTxs[0], expectedInnertx1, "First inner transaction (EOA -> ContractA)")
 
 		// gasUsed of first inner transaction should be the same as the gasUsed in transaction receipt
 		require.Equal(t, contractAReceipt.GasUsed, innerTxs[0].GasUsed, "First inner transaction GasUsed should be the same as contractAReceipt.GasUsed")
@@ -518,8 +518,8 @@ func TestInnerTx(t *testing.T) {
 			Name:          "call_0",
 			TraceAddress:  "",
 			CodeAddress:   "",
-			From:          operations.ContractAAddr.Hex(),
-			To:            operations.ContractBAddr.Hex(),
+			From:          ContractAAddr.Hex(),
+			To:            ContractBAddr.Hex(),
 			Input:         "0x32e43a11",
 			Output:        "",
 			IsError:       false,
@@ -528,7 +528,7 @@ func TestInnerTx(t *testing.T) {
 			ValueWei:      "0",
 			CallValueWei:  "0x0",
 		}
-		operations.ValidateInnerTransactionMatch(t, innerTxs[1], expectedInnertx2, "Second inner transaction (ContractA -> ContractB)")
+		ValidateInnerTransactionMatch(t, innerTxs[1], expectedInnertx2, "Second inner transaction (ContractA -> ContractB)")
 
 		// gasUsed of second inner transaction should be less than the gasUsed in transaction receipt
 		require.Less(t, innerTxs[1].GasUsed, contractAReceipt.GasUsed, "Second inner transaction GasUsed should be the less than contractAReceipt.GasUsed")
@@ -551,7 +551,7 @@ func TestInnerTx(t *testing.T) {
 			TraceAddress:  "",
 			CodeAddress:   "",
 			From:          preexecFrom.Hex(),
-			To:            operations.ContractCAddr.Hex(),
+			To:            ContractCAddr.Hex(),
 			Input:         "",
 			Output:        "0x0000000000000000000000000000000000000000000000000000000000000123",
 			IsError:       false,
@@ -561,12 +561,12 @@ func TestInnerTx(t *testing.T) {
 			CallValueWei:  "0x0",
 		}
 
-		operations.ValidateInnerTransactionMatch(t, innerTx, expectedInnerTx, "ContractC getValue inner transaction with output")
+		ValidateInnerTransactionMatch(t, innerTx, expectedInnerTx, "ContractC getValue inner transaction with output")
 		require.Equal(t, contractCGetValueReceipt.GasUsed, innerTx.GasUsed, "GasUsed should be the same as the gasUsed in transaction receipt")
 	})
 	t.Run("GetInternalTransactions_Batch", func(t *testing.T) {
 		// Send multiple transactions in a batch
-		txHashes := operations.TransTokenBatch(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2NewAcc1Address, 10, operations.DefaultL2AdminPrivateKey)
+		txHashes := TransTokenBatch(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2NewAcc1Address, 10, operations.DefaultL2AdminPrivateKey)
 		require.Len(t, txHashes, 10, "Should have created 10 transactions")
 
 		// Verify each transaction has exactly 1 inner transaction
@@ -601,7 +601,7 @@ func TestInnerTx(t *testing.T) {
 				CallValueWei:  hexutil.EncodeUint64(params.GWei),
 			}
 
-			operations.ValidateInnerTransactionMatch(t, innerTx, expectedInnerTx, fmt.Sprintf("Batch transaction %d", i))
+			ValidateInnerTransactionMatch(t, innerTx, expectedInnerTx, fmt.Sprintf("Batch transaction %d", i))
 			require.Equal(t, txReceipt.GasUsed, innerTx.GasUsed, "GasUsed should be the same as the gasUsed in transaction receipt for batch transaction %d", i)
 			numInnerTxs++
 		}
@@ -610,7 +610,7 @@ func TestInnerTx(t *testing.T) {
 
 	t.Run("GetBlockInternalTransactions_Batch", func(t *testing.T) {
 		// Send multiple transactions in a batch
-		txHashes := operations.TransTokenBatch(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2NewAcc1Address, 5, operations.DefaultL2AdminPrivateKey)
+		txHashes := TransTokenBatch(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2NewAcc1Address, 5, operations.DefaultL2AdminPrivateKey)
 		require.Len(t, txHashes, 5, "Should have created 5 transactions")
 
 		blockNumbers := make(map[uint64][]int)
@@ -649,7 +649,7 @@ func TestInnerTx(t *testing.T) {
 				require.NoError(t, err, "Failed to get individual inner transactions for tx %d", txIdx)
 				require.Len(t, individualInnerTxs, 1, "Individual inner transactions should have 1 entry for tx %d", txIdx)
 
-				operations.ValidateInnerTransactionMatch(t, individualInnerTxs[0], innerTx, fmt.Sprintf("batch tx %d comparison", txIdx))
+				ValidateInnerTransactionMatch(t, individualInnerTxs[0], innerTx, fmt.Sprintf("batch tx %d comparison", txIdx))
 			}
 
 			totalValidatedTxs += batchTxsInBlock
@@ -661,9 +661,9 @@ func TestInnerTx(t *testing.T) {
 
 	t.Run("GetInnerTransactions_FailedTransactions", func(t *testing.T) {
 		amount := uint256.NewInt(params.GWei)
-		toAddress := operations.ContractAAddr.String()
+		toAddress := ContractAAddr.String()
 
-		txHash := operations.TransTokenFail(t, ctx, client, operations.TmpSenderPrivateKey, amount, toAddress)
+		txHash := TransTokenFail(t, ctx, client, TmpSenderPrivateKey, amount, toAddress)
 
 		innerTxs, err := operations.EthGetInternalTransactions(txHash)
 		require.NoError(t, err, "Should be able to get inner transactions")
@@ -675,7 +675,7 @@ func TestInnerTx(t *testing.T) {
 		innerTx := innerTxs[0]
 		require.NotNil(t, innerTx, "innerTx should not be nil")
 
-		senderPrivateKey, err := crypto.HexToECDSA(operations.TmpSenderPrivateKey)
+		senderPrivateKey, err := crypto.HexToECDSA(TmpSenderPrivateKey)
 		require.NoError(t, err)
 		senderAddress := crypto.PubkeyToAddress(senderPrivateKey.PublicKey)
 
@@ -697,7 +697,7 @@ func TestInnerTx(t *testing.T) {
 			CallValueWei:  hexutil.EncodeUint64(amount.Uint64()),
 		}
 
-		operations.ValidateInnerTransactionMatch(t, innerTx, expectedInnerTx, "Failed transaction inner transaction")
+		ValidateInnerTransactionMatch(t, innerTx, expectedInnerTx, "Failed transaction inner transaction")
 		require.Equal(t, txReceipt.GasUsed, innerTx.GasUsed, "GasUsed should be the same as the gasUsed in transaction receipt for failed transaction")
 	})
 
@@ -721,7 +721,7 @@ func TestTransactionPreExec(t *testing.T) {
 		t.Skip()
 	}
 
-	operations.EnsureContractsDeployed(t)
+	EnsureContractsDeployed(t)
 
 	contractAABI, err := abi.JSON(strings.NewReader(constants.ContractAABIJson))
 	require.NoError(t, err)
@@ -737,13 +737,13 @@ func TestTransactionPreExec(t *testing.T) {
 	// Fund the test address for gas validation tests
 	ctx := context.Background()
 	fundingAmount := uint256.NewInt(5000000000000000000)
-	fundingTxHash := operations.TransToken(t, ctx, ethClient, fundingAmount, fromAddr.String())
+	fundingTxHash := TransToken(t, ctx, ethClient, fundingAmount, fromAddr.String())
 	t.Logf("Funded test address %s with 5 ETH, tx: %s", fromAddr.Hex(), fundingTxHash)
 
 	t.Run("InnerTransactionTracking", func(t *testing.T) {
 		// Test contract call with inner transactions
 		txRequest := map[string]interface{}{
-			"from": fromAddr.Hex(), "to": operations.ContractAAddr.Hex(), "gas": "0x30000",
+			"from": fromAddr.Hex(), "to": ContractAAddr.Hex(), "gas": "0x30000",
 			"gasPrice": "0x4a817c800", "value": "0x0", "nonce": "0x1",
 			"data": fmt.Sprintf("0x%x", calldata),
 		}
@@ -771,14 +771,14 @@ func TestTransactionPreExec(t *testing.T) {
 
 		firstInnerTx := innerTxList[0].(map[string]interface{})
 		require.Equal(t, "call", firstInnerTx["call_type"])
-		require.Equal(t, strings.ToLower(operations.ContractAAddr.Hex()), strings.ToLower(common.HexToAddress(firstInnerTx["to"].(string)).Hex()))
+		require.Equal(t, strings.ToLower(ContractAAddr.Hex()), strings.ToLower(common.HexToAddress(firstInnerTx["to"].(string)).Hex()))
 		require.Equal(t, "0xf18c388a", firstInnerTx["input"].(string))
 		require.False(t, firstInnerTx["is_error"].(bool), "Expected is_error to be false for the first inner transaction")
 
 		secondInnerTx := innerTxList[1].(map[string]interface{})
 		require.Equal(t, "call", secondInnerTx["call_type"])
-		require.Equal(t, strings.ToLower(operations.ContractAAddr.Hex()), strings.ToLower(common.HexToAddress(secondInnerTx["from"].(string)).Hex()))
-		require.Equal(t, strings.ToLower(operations.ContractBAddr.Hex()), strings.ToLower(common.HexToAddress(secondInnerTx["to"].(string)).Hex()))
+		require.Equal(t, strings.ToLower(ContractAAddr.Hex()), strings.ToLower(common.HexToAddress(secondInnerTx["from"].(string)).Hex()))
+		require.Equal(t, strings.ToLower(ContractBAddr.Hex()), strings.ToLower(common.HexToAddress(secondInnerTx["to"].(string)).Hex()))
 		require.Equal(t, "0x32e43a11", secondInnerTx["input"].(string))
 
 		name := secondInnerTx["name"].(string)
@@ -794,7 +794,7 @@ func TestTransactionPreExec(t *testing.T) {
 
 		t.Run("ContractCall", func(t *testing.T) {
 			txRequest := map[string]interface{}{
-				"from": fromAddr.Hex(), "to": operations.ContractAAddr.Hex(), "gas": "0x100000",
+				"from": fromAddr.Hex(), "to": ContractAAddr.Hex(), "gas": "0x100000",
 				"gasPrice": "0x4a817c800", "value": "0x0", "nonce": "0x1",
 				"data": fmt.Sprintf("0x%x", calldata),
 			}
@@ -803,12 +803,12 @@ func TestTransactionPreExec(t *testing.T) {
 			result, err := operations.EthTransactionPreExec(txRequest, "latest", nil)
 			require.NoError(t, err)
 			resultSlice := result.([]interface{})
-			validationResult := operations.ValidateResult(t, resultSlice[0], "gas_comparison_contract_call")
+			validationResult := ValidateResult(t, resultSlice[0], "gas_comparison_contract_call")
 			preExecGasUsed := validationResult.GasUsed
 
 			// Get gas estimate from eth_estimateGas
 			estimateGasRequest := map[string]interface{}{
-				"from": fromAddr.Hex(), "to": operations.ContractAAddr.Hex(),
+				"from": fromAddr.Hex(), "to": ContractAAddr.Hex(),
 				"data": fmt.Sprintf("0x%x", calldata),
 			}
 
@@ -848,7 +848,7 @@ func TestTransactionPreExec(t *testing.T) {
 			result, err := operations.EthTransactionPreExec(transferTx, "latest", nil)
 			require.NoError(t, err)
 			resultSlice := result.([]interface{})
-			validationResult := operations.ValidateResult(t, resultSlice[0], "gas_comparison_transfer")
+			validationResult := ValidateResult(t, resultSlice[0], "gas_comparison_transfer")
 			transferPreExecGas := validationResult.GasUsed
 
 			// Estimate gas usage
@@ -874,7 +874,7 @@ func TestTransactionPreExec(t *testing.T) {
 			require.NoError(t, err)
 
 			createTx := map[string]interface{}{
-				"from": fromAddr.Hex(), "to": operations.FactoryAddr.Hex(), "gas": "0x200000",
+				"from": fromAddr.Hex(), "to": FactoryAddr.Hex(), "gas": "0x200000",
 				"gasPrice": "0x4a817c800", "value": "0x0", "nonce": "0x3",
 				"data": fmt.Sprintf("0x%x", createCalldata),
 			}
@@ -883,12 +883,12 @@ func TestTransactionPreExec(t *testing.T) {
 			result, err := operations.EthTransactionPreExec(createTx, "latest", nil)
 			require.NoError(t, err)
 			resultSlice := result.([]interface{})
-			validationResult := operations.ValidateResult(t, resultSlice[0], "gas_comparison_create")
+			validationResult := ValidateResult(t, resultSlice[0], "gas_comparison_create")
 			createPreExecGas := validationResult.GasUsed
 
 			// Estimate gas for CREATE
 			createEstimate := map[string]interface{}{
-				"from": fromAddr.Hex(), "to": operations.FactoryAddr.Hex(),
+				"from": fromAddr.Hex(), "to": FactoryAddr.Hex(),
 				"data": fmt.Sprintf("0x%x", createCalldata),
 			}
 			var estimateResult string
@@ -911,20 +911,20 @@ func TestTransactionPreExec(t *testing.T) {
 	})
 
 	t.Run("SimpleEthTransfer", func(t *testing.T) {
-		transactionArgs := operations.CreateBasicTransaction(
+		transactionArgs := CreateBasicTransaction(
 			"0x0165878a594ca255338adfa4d48449f69242eb8f",
 			"0x1111111111111111111111111111111111111111",
 			"0x0", "0x5208", "0x4a817c800", "0x0", "")
 
-		stateOverrides := operations.CreateDefaultStateOverrides()
+		stateOverrides := CreateDefaultStateOverrides()
 		stateOverrides["0x0165878a594ca255338adfa4d48449f69242eb8f"].(map[string]interface{})["code"] = "0x608060405234801561001057600080fd5b50600436106100b45760003560e01c80638da5cb5b116100715780638da5cb5b1461013b57"
 
 		result, err := operations.EthTransactionPreExec(transactionArgs, "latest", stateOverrides)
 		require.NoError(t, err)
 		resultSlice := result.([]interface{})
-		validationResult := operations.ValidateResult(t, resultSlice[0], "simple_eth_transfer")
+		validationResult := ValidateResult(t, resultSlice[0], "simple_eth_transfer")
 
-		operations.CheckSuccessfulResult(t, validationResult, "0x0165878a594ca255338adfa4d48449f69242eb8f", "simple ETH transfer")
+		CheckSuccessfulResult(t, validationResult, "0x0165878a594ca255338adfa4d48449f69242eb8f", "simple ETH transfer")
 		require.Empty(t, validationResult.InnerTxs, "Simple ETH transfer should not have inner transactions")
 		require.Equal(t, validationResult.GasUsed, uint64(21000), "Simple ETH transfer should use exactly 21000 gas")
 	})
@@ -941,12 +941,12 @@ func TestTransactionPreExec(t *testing.T) {
 			}},
 		}
 
-		stateOverrides := operations.CreateDefaultStateOverrides()
+		stateOverrides := CreateDefaultStateOverrides()
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				// Create base transaction with EIP-1559 fields
-				transactionArgs := operations.CreateBasicTransaction(
+				transactionArgs := CreateBasicTransaction(
 					"0x0165878a594ca255338adfa4d48449f69242eb8f",
 					"0x1111111111111111111111111111111111111111",
 					"0x0", "0x5208", "0x4a817c800", "0x0", "")
@@ -961,8 +961,8 @@ func TestTransactionPreExec(t *testing.T) {
 				result, err := operations.EthTransactionPreExec(transactionArgs, "latest", stateOverrides)
 				require.NoError(t, err)
 				resultSlice := result.([]interface{})
-				validationResult := operations.ValidateResult(t, resultSlice[0], tc.name)
-				operations.CheckSuccessfulResult(t, validationResult, "0x0165878a594ca255338adfa4d48449f69242eb8f", "Support EIP-1559 transactions")
+				validationResult := ValidateResult(t, resultSlice[0], tc.name)
+				CheckSuccessfulResult(t, validationResult, "0x0165878a594ca255338adfa4d48449f69242eb8f", "Support EIP-1559 transactions")
 				require.GreaterOrEqual(t, validationResult.GasUsed, uint64(21000), "Transaction should use more than 21000 gas")
 				require.Greater(t, validationResult.BlockNumber.Uint64(), uint64(1), "Block Number should be greater than 1")
 				require.Empty(t, validationResult.InnerTxs, "Inner Transactions should be empty")
@@ -980,22 +980,22 @@ func TestTransactionPreExec(t *testing.T) {
 			{"authorizationList_multiple", []string{"0x1111111111111111111111111111111111111111", "0x2222222222222222222222222222222222222222"}},
 		}
 
-		stateOverrides := operations.CreateDefaultStateOverrides()
+		stateOverrides := CreateDefaultStateOverrides()
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				// Create base transaction with authorization list
-				transactionArgs := operations.CreateBasicTransaction(
+				transactionArgs := CreateBasicTransaction(
 					"0x0165878a594ca255338adfa4d48449f69242eb8f",
 					"0x1111111111111111111111111111111111111111",
 					"0x0", "0x15f90", "0x4a817c800", "0x0", "")
-				transactionArgs["authorizationList"] = operations.CreateAuthorizationList(tc.addresses)
+				transactionArgs["authorizationList"] = CreateAuthorizationList(tc.addresses)
 
 				result, err := operations.EthTransactionPreExec(transactionArgs, "latest", stateOverrides)
 				require.NoError(t, err)
 				resultSlice := result.([]interface{})
-				validationResult := operations.ValidateResult(t, resultSlice[0], tc.name)
-				operations.CheckSuccessfulResult(t, validationResult, "0x0165878a594ca255338adfa4d48449f69242eb8f", "Support EIP-7702 transactions")
+				validationResult := ValidateResult(t, resultSlice[0], tc.name)
+				CheckSuccessfulResult(t, validationResult, "0x0165878a594ca255338adfa4d48449f69242eb8f", "Support EIP-7702 transactions")
 				require.GreaterOrEqual(t, validationResult.GasUsed, uint64(21000), "Transaction should use more than 21000 gas")
 				require.Greater(t, validationResult.BlockNumber.Uint64(), uint64(1), "Block Number should be greater than 1")
 				require.Empty(t, validationResult.InnerTxs, "Inner Transactions should be empty")
@@ -1008,7 +1008,7 @@ func TestTransactionPreExec(t *testing.T) {
 		contractBAddr := "0x2222222222222222222222222222222222222222"
 		contractCAddr := "0x3333333333333333333333333333333333333333"
 
-		stateOverrides := operations.CreateDefaultStateOverrides()
+		stateOverrides := CreateDefaultStateOverrides()
 
 		// Set up ContractB with ContractC's address in storage slot 1
 		stateOverrides[contractBAddr] = map[string]interface{}{
@@ -1026,7 +1026,7 @@ func TestTransactionPreExec(t *testing.T) {
 			},
 		}
 
-		transactionArgs := operations.CreateBasicTransaction(
+		transactionArgs := CreateBasicTransaction(
 			"0x0165878a594ca255338adfa4d48449f69242eb8f",
 			contractBAddr, "0x0", "0x200000", "0x4a817c800",
 			"0x0", "0x32e43a11") // dummy() function selector
@@ -1034,13 +1034,13 @@ func TestTransactionPreExec(t *testing.T) {
 		result, err := operations.EthTransactionPreExec(transactionArgs, "latest", stateOverrides)
 		require.NoError(t, err)
 		resultSlice := result.([]interface{})
-		validationResult := operations.ValidateResult(t, resultSlice[0], "dummy_call")
+		validationResult := ValidateResult(t, resultSlice[0], "dummy_call")
 
 		for _, txResult := range resultSlice {
 			testName := "ContractCallWithStateOverrides"
-			validationResult := operations.ValidateResult(t, txResult, testName)
+			validationResult := ValidateResult(t, txResult, testName)
 
-			operations.CheckSuccessfulResult(t, validationResult, "0x0165878a594ca255338adfa4d48449f69242eb8f", testName)
+			CheckSuccessfulResult(t, validationResult, "0x0165878a594ca255338adfa4d48449f69242eb8f", testName)
 		}
 
 		require.Greater(t, validationResult.GasUsed, uint64(21000), "Contract call should use more than 21000 gas")
@@ -1050,11 +1050,11 @@ func TestTransactionPreExec(t *testing.T) {
 	t.Run("NonceTooLow", func(t *testing.T) {
 		// Test transactions with nonces lower than the account's current nonce
 		transactions := []map[string]interface{}{
-			operations.CreateBasicTransaction(
+			CreateBasicTransaction(
 				"0x0165878a594ca255338adfa4d48449f69242eb8f",
 				"0x5fbdb2315678afecb367f032d93f642f64180aa3",
 				"0x0", "0x30000", "0x4a817c800", "0x1", ""), // nonce = 1
-			operations.CreateBasicTransaction(
+			CreateBasicTransaction(
 				"0x0165878a594ca255338adfa4d48449f69242eb8f",
 				"0x5fbdb2315678afecb367f032d93f642f64180aa3",
 				"0x0", "0x30000", "0x4a817c800", "0x2", ""), // nonce = 2
@@ -1079,9 +1079,9 @@ func TestTransactionPreExec(t *testing.T) {
 
 		for i, txResult := range result {
 			testName := fmt.Sprintf("transaction_%d_nonce_too_low", i+1)
-			validationResult := operations.ValidateResult(t, txResult, testName)
+			validationResult := ValidateResult(t, txResult, testName)
 
-			operations.CheckErrorResult(t, validationResult, "nonce too low", testName)
+			CheckErrorResult(t, validationResult, "nonce too low", testName)
 
 			require.Equal(t, uint64(0), validationResult.GasUsed, "%s should use 0 gas when rejected", testName)
 			require.Len(t, validationResult.InnerTxs, 0, "%s should have no inner transactions when rejected", testName)

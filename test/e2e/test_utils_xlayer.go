@@ -1,4 +1,4 @@
-package operations
+package e2e
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/test/operations"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/test/constants"
@@ -82,7 +83,7 @@ func GetNonce(client *ethclient.Client, ctx context.Context, fromPrivateKey stri
 	if err != nil {
 		fmt.Printf("Get nonce err for get chainID failed: %v", err)
 	}
-	auth, err := GetAuth(fromPrivateKey, chainID.Uint64())
+	auth, err := operations.GetAuth(fromPrivateKey, chainID.Uint64())
 	if err != nil {
 		fmt.Printf("Get nonce err for get auth failed: %v", err)
 	}
@@ -97,7 +98,7 @@ func GetNonce(client *ethclient.Client, ctx context.Context, fromPrivateKey stri
 func TransTokenWithFrom(t *testing.T, ctx context.Context, client *ethclient.Client, fromPrivateKey string, amount *uint256.Int, toAddress string) string {
 	chainID, err := client.ChainID(ctx)
 	require.NoError(t, err)
-	auth, err := GetAuth(fromPrivateKey, chainID.Uint64())
+	auth, err := operations.GetAuth(fromPrivateKey, chainID.Uint64())
 	require.NoError(t, err)
 	nonce, err := client.PendingNonceAt(ctx, auth.From)
 	require.NoError(t, err)
@@ -113,14 +114,14 @@ func TransTokenWithFrom(t *testing.T, ctx context.Context, client *ethclient.Cli
 	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(fromPrivateKey, "0x"))
 	require.NoError(t, err)
 
-	signer := types.MakeSigner(GetTestChainConfig(DefaultL2ChainID), big.NewInt(1), 0)
+	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
 	signedTx, err := types.SignTx(tx, signer, privateKey)
 	require.NoError(t, err)
 
 	err = client.SendTransaction(ctx, signedTx)
 	require.NoError(t, err)
 
-	err = WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
+	err = operations.WaitTxToBeMined(ctx, client, signedTx, operations.DefaultTimeoutTxToBeMined)
 	require.NoError(t, err)
 
 	return signedTx.Hash().String()
@@ -128,12 +129,12 @@ func TransTokenWithFrom(t *testing.T, ctx context.Context, client *ethclient.Cli
 
 // TransToken transfers tokens using the default admin private key
 func TransToken(t *testing.T, ctx context.Context, client *ethclient.Client, amount *uint256.Int, toAddress string) string {
-	return TransTokenWithFrom(t, ctx, client, DefaultL2AdminPrivateKey, amount, toAddress)
+	return TransTokenWithFrom(t, ctx, client, operations.DefaultL2AdminPrivateKey, amount, toAddress)
 }
 
 // Creates multiple transactions in a batch and waits for them all to be mined
 func TransTokenBatch(t *testing.T, ctx context.Context, client *ethclient.Client, amount *uint256.Int, toAddress string, batchSize int, fromPrivateKey ...string) []string {
-	privateKey := DefaultL2AdminPrivateKey
+	privateKey := operations.DefaultL2AdminPrivateKey
 	if len(fromPrivateKey) > 0 && fromPrivateKey[0] != "" {
 		privateKey = fromPrivateKey[0]
 	}
@@ -142,7 +143,7 @@ func TransTokenBatch(t *testing.T, ctx context.Context, client *ethclient.Client
 
 	chainID, err := client.ChainID(ctx)
 	require.NoError(t, err)
-	auth, err := GetAuth(privateKey, chainID.Uint64())
+	auth, err := operations.GetAuth(privateKey, chainID.Uint64())
 	require.NoError(t, err)
 	nonce, err := client.PendingNonceAt(ctx, auth.From)
 	require.NoError(t, err)
@@ -159,7 +160,7 @@ func TransTokenBatch(t *testing.T, ctx context.Context, client *ethclient.Client
 		privKey, err := crypto.HexToECDSA(strings.TrimPrefix(privateKey, "0x"))
 		require.NoError(t, err)
 
-		signer := types.MakeSigner(GetTestChainConfig(DefaultL2ChainID), big.NewInt(1), 0)
+		signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
 		signedTx, err := types.SignTx(tx, signer, privKey)
 		require.NoError(t, err)
 
@@ -171,7 +172,7 @@ func TransTokenBatch(t *testing.T, ctx context.Context, client *ethclient.Client
 	}
 
 	for _, tx := range transactions {
-		err := WaitTxToBeMined(ctx, client, tx, DefaultTimeoutTxToBeMined)
+		err := operations.WaitTxToBeMined(ctx, client, tx, operations.DefaultTimeoutTxToBeMined)
 		require.NoError(t, err)
 	}
 
@@ -194,7 +195,7 @@ func TransTokenFail(t *testing.T, ctx context.Context, client *ethclient.Client,
 	gasLimit := uint64(50000)
 	tx := types.NewTransaction(nonce, to, amount.ToBig(), gasLimit, gasPrice, nil)
 
-	signer := types.MakeSigner(GetTestChainConfig(DefaultL2ChainID), big.NewInt(1), 0)
+	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
 	signedTx, err := types.SignTx(tx, signer, privateKey)
 	require.NoError(t, err)
 
@@ -202,7 +203,7 @@ func TransTokenFail(t *testing.T, ctx context.Context, client *ethclient.Client,
 	require.NoError(t, err, "Transaction should be sent successfully")
 
 	txHash := signedTx.Hash()
-	err = WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
+	err = operations.WaitTxToBeMined(ctx, client, signedTx, operations.DefaultTimeoutTxToBeMined)
 	require.Error(t, err, "Transaction should fail during execution")
 
 	// Verify transaction failed
@@ -218,7 +219,7 @@ func TransTokenWithFromImpl(t *testing.T, ctx context.Context, client *ethclient
 	err := client.SendTransaction(ctx, signedTx)
 	require.NoError(t, err)
 
-	err = WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
+	err = operations.WaitTxToBeMined(ctx, client, signedTx, operations.DefaultTimeoutTxToBeMined)
 	require.NoError(t, err)
 
 	return signedTx.Hash().String()
@@ -227,7 +228,7 @@ func TransTokenWithFromImpl(t *testing.T, ctx context.Context, client *ethclient
 func generateSignedTokenTransferTx(t *testing.T, ctx context.Context, client *ethclient.Client, fromPrivateKey string, amount *uint256.Int, toAddress string, nonce uint64) *types.Transaction {
 	chainID, err := client.ChainID(ctx)
 	require.NoError(t, err)
-	auth, err := GetAuth(fromPrivateKey, chainID.Uint64())
+	auth, err := operations.GetAuth(fromPrivateKey, chainID.Uint64())
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	require.NoError(t, err)
 
@@ -244,7 +245,7 @@ func generateSignedTokenTransferTx(t *testing.T, ctx context.Context, client *et
 	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(fromPrivateKey, "0x"))
 	require.NoError(t, err)
 
-	signer := types.MakeSigner(GetTestChainConfig(DefaultL2ChainID), big.NewInt(1), 0)
+	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
 	signedTx, err := types.SignTx(tx, signer, privateKey)
 	require.NoError(t, err)
 	fmt.Printf("gas: %d, gasPrice: %d, nonce: %d, hash: %v\n", gas, gasPrice, nonce, signedTx.Hash().Hex())
@@ -271,7 +272,7 @@ func MakeContractCall(t *testing.T, ctx context.Context, client *ethclient.Clien
 
 	tx := types.NewTransaction(nonce, contractAddr, value, gasLimit, gasPrice, calldata)
 
-	signer := types.MakeSigner(GetTestChainConfig(DefaultL2ChainID), big.NewInt(1), 0)
+	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
 	signedTx, err := types.SignTx(tx, signer, privateKey)
 	if err != nil {
 		return common.Hash{}, fmt.Errorf("failed to sign transaction: %w", err)
@@ -282,7 +283,7 @@ func MakeContractCall(t *testing.T, ctx context.Context, client *ethclient.Clien
 		return common.Hash{}, fmt.Errorf("failed to send transaction: %w", err)
 	}
 
-	err = WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
+	err = operations.WaitTxToBeMined(ctx, client, signedTx, operations.DefaultTimeoutTxToBeMined)
 	if err != nil {
 		return common.Hash{}, fmt.Errorf("failed to wait for transaction to be mined: %w", err)
 	}
@@ -296,7 +297,7 @@ func SetupTestEnvironment(t *testing.T) (common.Hash, uint64) {
 	var blockNumber uint64
 	var err error
 	for i := 0; i < 30; i++ {
-		blockNumber, err = GetBlockNumber()
+		blockNumber, err = operations.GetBlockNumber()
 		require.NoError(t, err)
 		fmt.Printf("Block number: %d, attempt: %v", blockNumber, i)
 		if blockNumber > 0 {
@@ -307,12 +308,12 @@ func SetupTestEnvironment(t *testing.T) (common.Hash, uint64) {
 	require.Greater(t, blockNumber, uint64(0), "Block number should be greater than 0")
 
 	// Get a block hash to use for tests
-	blockNum, err := GetBlockNumber()
+	blockNum, err := operations.GetBlockNumber()
 	require.NoError(t, err)
 
 	// Try using the refactored RPC method instead of the broken GetBlockByNumber
 	blockNumberHex := fmt.Sprintf("0x%x", blockNum)
-	blockData, err := EthGetBlockByNumber(blockNumberHex, true)
+	blockData, err := operations.EthGetBlockByNumber(blockNumberHex, true)
 	require.NoError(t, err)
 	require.NotNil(t, blockData, "Block data should not be nil")
 
@@ -372,7 +373,7 @@ func DeployContract(t *testing.T, ctx context.Context, client *ethclient.Client,
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	require.NoError(t, err)
 
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, GetTestChainConfig(DefaultL2ChainID).ChainID)
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, operations.GetTestChainConfig(operations.DefaultL2ChainID).ChainID)
 	require.NoError(t, err)
 	auth.Nonce = big.NewInt(int64(nonce))
 	auth.Value = big.NewInt(0)
@@ -398,7 +399,7 @@ func EnsureContractsDeployed(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	client, err := ethclient.Dial(DefaultL2NetworkURL)
+	client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
 	require.NoError(t, err)
 
 	privateKey, err := crypto.HexToECDSA(TmpSenderPrivateKey)
@@ -406,10 +407,10 @@ func EnsureContractsDeployed(t *testing.T) {
 	DeploymentAddress = crypto.PubkeyToAddress(privateKey.PublicKey)
 
 	fundingAmount := uint256.NewInt(5000000000000000000) // 5 ETH
-	TransTokenWithFrom(t, ctx, client, DefaultRichPrivateKey, fundingAmount, DeploymentAddress.String())
+	TransTokenWithFrom(t, ctx, client, operations.DefaultRichPrivateKey, fundingAmount, DeploymentAddress.String())
 
-	adminAddr := common.HexToAddress(DefaultL2AdminAddress)
-	TransTokenWithFrom(t, ctx, client, DefaultRichPrivateKey, fundingAmount, adminAddr.String())
+	adminAddr := common.HexToAddress(operations.DefaultL2AdminAddress)
+	TransTokenWithFrom(t, ctx, client, operations.DefaultRichPrivateKey, fundingAmount, adminAddr.String())
 
 	// Deploy contracts
 	ContractBAddr = DeployContract(t, ctx, client, privateKey, "ContractB", constants.ContractBABIJson, constants.ContractBBytecodeStr)
