@@ -52,7 +52,7 @@ func containsAddressOldImpl(addresses []string, addr common.Address) bool {
 }
 
 func SanitizeFlags(flags []cli.Flag) []cli.Flag {
-	var seen map[string]struct{}
+	seen := make(map[string]struct{})
 	var result []cli.Flag
 
 	for _, flag := range flags {
