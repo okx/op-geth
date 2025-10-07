@@ -45,8 +45,16 @@ cp testnet.env .env
 ./3-deploy-op-contracts.sh
 
 # LOCAL ENVIRONMENT
-# Pull images locally first the correct arch.
-# Upload these images to ECS machine to ensure it is not downloaded from internet.
+# ----------------------------------------------------------------------------
+
+# Build the image locally after deploying contracts (rollup.json and genesis.json).
+docker build \
+  --platform linux/amd64 \
+  --build-arg ENV=testnet \
+  --build-arg CHAIN_ID=196 \
+  --build-arg OP_STACK_IMAGE=op-stack:amd64 \
+  --progress=plain \
+  -t op-migrate:amd64 -f dockerfile/Dockerfile.op-program .
 
 # 1) docker.io/library/golang:1.24.2-alpine3.21
 docker pull golang@sha256:3077e12cda6debf8a9eba8eba0b6b4efe6f9c17295a18e3883cc5797d1688acb
@@ -60,30 +68,23 @@ docker save golang:1.23.8-alpine3.21 | gzip > golang-1.23.8-alpine3.21.tar.gz
 docker save op-migrate:amd64 | gzip > op-migrate-amd64.tar.gz
 docker save op-geth:7706694 | gzip > op-geth.tar.gz # starting new OP sequencer
 
-# Build the image locally in advance.
-# Upload this image to ECS as well.
-docker build \
-  --platform linux/amd64 \
-  --build-arg ENV=testnet \
-  --build-arg CHAIN_ID=196 \
-  --build-arg OP_STACK_IMAGE=op-stack:amd64 \
-  --progress=plain \
-  -t op-migrate:amd64 -f dockerfile/Dockerfile.op-program .
-
 # Make a new folder in current directory.
 mkdir upload-to-ecs
 mv golang-1.24.2-alpine3.21.tar.gz golang-1.23.8-alpine3.21.tar.gz op-migrate-amd64.tar.gz op-geth.tar.gz upload-to-ecs
 tar -czf upload-to-ecs.tar.gz upload-to-ecs
-# Calculate md5 hash to create OSS ticket.
-md5sum upload-to-ecs.tar.gz
-# Copy upload-to-ecs.tar.gz to DACs env.
+# Manually copy upload-to-ecs.tar.gz to DACs env.
 
 # INSIDE DACs TERMINAL
+# ----------------------------------------------------------------------------
+
+# Calculate md5 hash to create OSS ticket.
+md5sum upload-to-ecs.tar.gz
 # Use osstool to upload images to ECS. 
-# Combine all zipped docker images and relevant config files into a single compressed zip folder.
 ./osstool -f upload-to-ecs.tar.gz -a upload -ticket ${ticket-id}
 
+
 # INSIDE ECS MACHINE
+# ----------------------------------------------------------------------------
 docker run \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "/data/test-pp-op:/app/op-geth/test-pp-op" \
@@ -93,7 +94,8 @@ docker run \
 # ssh into container.
 docker exec -it ${CONTAINER_ID} /bin/bash
 
-# Inside container, execute these steps.
+# INSIDE CONTAINER 
+# ----------------------------------------------------------------------------
 cd /app/op-geth/test-pp-op
 ./5-1-migrate-prepare.sh
 ./5-2-migrate-op.sh
@@ -103,6 +105,11 @@ cp config-op/merged.genesis.gz.json /app/op-program/chainconfig/configs/196-gene
 cd /app
 make reproducible-prestate
 
+# Leave the container
+exit
+
+# OUTSIDE CONTAINER 
+# ----------------------------------------------------------------------------
 ./6-start-op.sh
 ./7-setup-fraud-proof.sh
 ```
