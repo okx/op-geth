@@ -23,7 +23,6 @@ import (
 	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
-	libcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -201,7 +200,7 @@ func (j *journal) balanceChange(addr common.Address, previous *uint256.Int, post
 	})
 }
 
-func (j *journal) setCode(address common.Address, prevCode, postCode []byte, prevHash, postHash libcommon.Hash) {
+func (j *journal) setCode(address common.Address, prevCode, postCode []byte, prevHash, postHash common.Hash) {
 	j.append(codeChange{
 		account:  address,
 		prevCode: prevCode,
@@ -282,8 +281,8 @@ type (
 		prevCode []byte
 		// For X Layer, realtime
 		postCode []byte
-		prevHash libcommon.Hash
-		postHash libcommon.Hash
+		prevHash common.Hash
+		postHash common.Hash
 	}
 
 	// Changes to other state values.
@@ -333,7 +332,7 @@ func (ch createObjectChange) collectChangeset(cs *realtimeTypes.Changeset) {
 	cs.BalanceChanges[ch.account] = uint256.NewInt(0)
 	cs.NonceChanges[ch.account] = 0
 	cs.CodeHashChanges[ch.account] = types.EmptyCodeHash
-	cs.StorageChanges[ch.account] = make(map[libcommon.Hash]libcommon.Hash)
+	cs.StorageChanges[ch.account] = make(map[common.Hash]common.Hash)
 	log.Debug(fmt.Sprintf("[Realtime] createObjectChange: %v", ch.account))
 }
 
@@ -497,7 +496,7 @@ func (ch storageChange) copy() journalEntry {
 
 func (ch storageChange) collectChangeset(cs *realtimeTypes.Changeset) {
 	if _, ok := cs.StorageChanges[ch.account]; !ok {
-		cs.StorageChanges[ch.account] = make(map[libcommon.Hash]libcommon.Hash)
+		cs.StorageChanges[ch.account] = make(map[common.Hash]common.Hash)
 	}
 	cs.StorageChanges[ch.account][ch.key] = ch.postvalue
 	log.Debug(fmt.Sprintf("[Realtime] storageChange: %v -> %v -> %v", ch.account, ch.key, cs.StorageChanges[ch.account][ch.key]))

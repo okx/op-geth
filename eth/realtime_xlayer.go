@@ -58,7 +58,7 @@ func (eth *Ethereum) InitRealtime() {
 			}
 		} else {
 			// Rpc execution mode
-			eth.finishChan = make(chan realtimeTypes.FinishedEntry)
+			eth.finishChan = make(chan realtimeTypes.FinishedEntry, 100)
 			eth.blockchain.SetRealtimeFinishChan(eth.finishChan)
 			if eth.config.XLayer.Realtime.EnableSubscribe {
 				eth.realtimeSub = realtimeSub.NewRealtimeSubscription()
