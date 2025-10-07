@@ -84,6 +84,8 @@ type environment struct {
 
 	// For X Layer
 	okPayTxs int
+	// For X Layer, realtime
+	txInfos []state.TxInfo
 }
 
 const (
@@ -105,8 +107,10 @@ type newPayloadResult struct {
 	requests [][]byte               // Consensus layer requests collected during block construction
 	witness  *stateless.Witness     // Witness is an optional stateless proof
 	// For X Layer
-	env       *environment // Environment snapshot for incremental building
-	changeset *realtimeTypes.Changeset
+	env *environment // Environment snapshot for incremental building
+	// For X Layer, realtime
+	txInfos                []state.TxInfo
+	finalizeBlockChangeset *realtimeTypes.Changeset
 }
 
 // generateParams wraps various settings for generating sealing task.
@@ -266,8 +270,10 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		requests: requests,
 		witness:  work.witness,
 		// For X Layer
-		env:       work,
-		changeset: work.state.GenerateChangeset(),
+		env: work,
+		// For X Layer, realtime
+		txInfos:                work.txInfos,
+		finalizeBlockChangeset: work.state.GenerateChangeset(),
 	}
 }
 
@@ -384,7 +390,7 @@ func (miner *Miner) prepareWork(genParams *generateParams, witness bool) (*envir
 // makeEnv creates a new environment for the sealing block.
 func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase common.Address, witness bool, rpcCtx context.Context) (*environment, error) {
 	// Retrieve the parent state to execute on top.
-	state, err := miner.chain.StateAt(parent.Root)
+	statedb, err := miner.chain.StateAt(parent.Root)
 	if err != nil {
 		return nil, err
 	}
@@ -392,11 +398,11 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 		if historicalBackend, ok := miner.backend.(BackendWithHistoricalState); ok {
 			var release tracers.StateReleaseFunc
 			parentBlock := miner.backend.BlockChain().GetBlockByHash(parent.Hash())
-			state, release, err = historicalBackend.StateAtBlock(context.Background(), parentBlock, ^uint64(0), nil, false, false)
+			statedb, release, err = historicalBackend.StateAtBlock(context.Background(), parentBlock, ^uint64(0), nil, false, false)
 			if err != nil {
 				return nil, err
 			}
-			state = state.Copy()
+			statedb = statedb.Copy()
 			release()
 		}
 	}
@@ -406,19 +412,21 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 		if err != nil {
 			return nil, err
 		}
-		state.StartPrefetcher("miner", bundle)
+		statedb.StartPrefetcher("miner", bundle)
 	}
 	// Note the passed coinbase may be different with header.Coinbase.
 	return &environment{
 		signer:   types.MakeSigner(miner.chainConfig, header.Number, header.Time),
-		state:    state,
+		state:    statedb,
 		coinbase: coinbase,
 		header:   header,
-		witness:  state.Witness(),
-		evm:      vm.NewEVM(core.NewEVMBlockContext(header, miner.chain, &coinbase, miner.chainConfig, state), state, miner.chainConfig, vm.Config{EnableInnerTxs: miner.backend.RealtimeEnabled()}),
+		witness:  statedb.Witness(),
+		evm:      vm.NewEVM(core.NewEVMBlockContext(header, miner.chain, &coinbase, miner.chainConfig, statedb), statedb, miner.chainConfig, vm.Config{EnableInnerTxs: miner.backend.RealtimeEnabled()}),
 		rpcCtx:   rpcCtx,
 		// For X Layer
 		okPayTxs: 0,
+		// For X Layer, realtime
+		txInfos: make([]state.TxInfo, 0),
 	}, nil
 }
 
@@ -489,7 +497,14 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction, r
 
 	// For X Layer, realtime
 	if realtimeEnabled {
-		miner.RealtimeSendTxInfo(env.header.Time, tx, receipt, innertxs, entries)
+		env.txInfos = append(env.txInfos, state.TxInfo{
+			BlockNumber: receipt.BlockNumber.Uint64(),
+			BlockTime:   env.header.Time,
+			Tx:          tx,
+			Receipt:     receipt,
+			InnerTxs:    innertxs,
+			Entries:     *entries,
+		})
 	}
 	env.state.Finalise(true)
 
@@ -526,7 +541,14 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 
 	// For X Layer, realtime
 	if realtimeEnabled {
-		miner.RealtimeSendTxInfo(env.header.Time, tx, receipt, innertxs, entries)
+		env.txInfos = append(env.txInfos, state.TxInfo{
+			BlockNumber: receipt.BlockNumber.Uint64(),
+			BlockTime:   env.header.Time,
+			Tx:          tx,
+			Receipt:     receipt,
+			InnerTxs:    innertxs,
+			Entries:     *entries,
+		})
 	}
 	return nil
 }

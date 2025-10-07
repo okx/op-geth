@@ -116,13 +116,12 @@ type Payload struct {
 	rpcCtx    context.Context // context to limit RPC-coupled payload checks
 	rpcCancel context.CancelFunc
 
-	// For X Layer, realtime
-	changeset *realtimeTypes.Changeset
-
 	// For X Layer, incremental building
 	incrementalFlag bool
 	baseEnv         *environment
 	baseParent      common.Hash
+	// For X Layer, realtime
+	finalizeBlockChangeset *realtimeTypes.Changeset
 }
 
 // newPayload initializes the payload object.
@@ -184,7 +183,7 @@ func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration) {
 		payload.requests = r.requests
 		payload.fullWitness = r.witness
 		// For X Layer, realtime
-		payload.changeset = r.changeset
+		payload.finalizeBlockChangeset = r.finalizeBlockChangeset
 
 		// For X Layer, cache successful env for incremental updates
 		if r.env != nil {
@@ -266,7 +265,7 @@ func (payload *Payload) resolve(onlyFull bool) *engine.ExecutionPayloadEnvelope 
 	if payload.full != nil {
 		envelope := engine.BlockToExecutableData(payload.full, payload.fullFees, payload.sidecars, payload.requests)
 		// For X Layer, realtime
-		envelope.Changeset = payload.changeset
+		envelope.Changeset = payload.finalizeBlockChangeset
 		if payload.fullWitness != nil {
 			envelope.Witness = new(hexutil.Bytes)
 			*envelope.Witness, _ = rlp.EncodeToBytes(payload.fullWitness) // cannot fail
@@ -351,7 +350,7 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 		payload.fullWitness = empty.witness
 		payload.requests = empty.requests
 		// For X Layer, realtime
-		payload.changeset = empty.changeset
+		payload.finalizeBlockChangeset = empty.finalizeBlockChangeset
 		payload.cond.Broadcast() // unblocks Resolve
 		return payload, nil
 	}
@@ -429,6 +428,8 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 				// after first successful pass, we're updating
 				fullParams.isUpdate = true
 			}
+			// For X Layer, realtime
+			miner.RealtimeSendTxInfos(r.txInfos)
 			timer.Reset(miner.config.Recommit)
 			return dur
 		}

@@ -131,16 +131,16 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 		return &newPayloadResult{err: err}, false
 	}
 	return &newPayloadResult{
-		block:    block,
-		fees:     totalFees(block, work.receipts),
-		sidecars: work.sidecars,
-		stateDB:  work.state,
-		receipts: work.receipts,
-		requests: requests,
-		witness:  work.witness,
-		// For X Layer
-		env:       work,
-		changeset: work.state.GenerateChangeset(),
+		block:                  block,
+		fees:                   totalFees(block, work.receipts),
+		sidecars:               work.sidecars,
+		stateDB:                work.state,
+		receipts:               work.receipts,
+		requests:               requests,
+		witness:                work.witness,
+		env:                    work,
+		txInfos:                work.txInfos,
+		finalizeBlockChangeset: work.state.GenerateChangeset(),
 	}, true
 }
 
@@ -195,17 +195,12 @@ func (miner *Miner) RealtimeSendNewPendingBlock(statedb *state.StateDB, header *
 	}
 }
 
-func (miner *Miner) RealtimeSendTxInfo(blockTime uint64, tx *types.Transaction, receipt *types.Receipt, innerTxs []*types.InnerTx, entries *state.Entries) {
+func (miner *Miner) RealtimeSendTxInfos(txInfos []state.TxInfo) {
 	if miner.backend.RealtimeEnabled() {
 		txInfoChan := miner.backend.GetRealtimeTxInfoChan()
 		if txInfoChan != nil {
-			txInfoChan <- state.TxInfo{
-				BlockNumber: receipt.BlockNumber.Uint64(),
-				BlockTime:   blockTime,
-				Tx:          tx,
-				Receipt:     receipt,
-				InnerTxs:    innerTxs,
-				Entries:     *entries,
+			for _, txInfo := range txInfos {
+				txInfoChan <- txInfo
 			}
 		}
 	}

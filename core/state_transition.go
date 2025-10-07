@@ -491,7 +491,7 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 		}
 		err = nil
 	}
-	// For X Layer, realtim
+	// For X Layer, realtime
 	if result != nil {
 		entries := st.state.GenerateEntriesSinceSnapshot(snap)
 		result.Entries = entries
