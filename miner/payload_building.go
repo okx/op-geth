@@ -118,6 +118,11 @@ type Payload struct {
 
 	// For X Layer, realtime
 	changeset *realtimeTypes.Changeset
+
+	// For X Layer, incremental building
+	incrementalFlag bool
+	baseEnv         *environment
+	baseParent      common.Hash
 }
 
 // newPayload initializes the payload object.
@@ -134,6 +139,10 @@ func newPayload(lifeCtx context.Context, empty *types.Block, emptyRequests [][]b
 
 		rpcCtx:    rpcCtx,
 		rpcCancel: rpcCancel,
+
+		// For X Layer
+		incrementalFlag: false,
+		baseEnv:         nil,
 	}
 	log.Info("Starting work on payload", "id", payload.id)
 	payload.cond = sync.NewCond(&payload.lock)
@@ -176,6 +185,13 @@ func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration) {
 		payload.fullWitness = r.witness
 		// For X Layer, realtime
 		payload.changeset = r.changeset
+
+		// For X Layer, cache successful env for incremental updates
+		if r.env != nil {
+			payload.incrementalFlag = true
+			payload.baseEnv = r.env.snapshot()
+			payload.baseParent = r.block.ParentHash()
+		}
 
 		feesInEther := new(big.Float).Quo(new(big.Float).SetInt(r.fees), big.NewFloat(params.Ether))
 		log.Info("Updated payload",
@@ -394,8 +410,18 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 
 		updatePayload := func() time.Duration {
 			start := time.Now()
-			// getSealingBlock is interrupted by shared interrupt
-			r := miner.generateWork(fullParams, witness)
+			var r *newPayloadResult
+			// For X Layer, incremental building
+			if !payload.incrementalFlag {
+				// getSealingBlock is interrupted by shared interrupt
+				r = miner.generateWork(fullParams, witness)
+			} else {
+				incResult, ok := miner.tryIncrementalUpdate(payload, fullParams, witness)
+				if !ok {
+					log.Debug("Incremental update returned with error, rebuilding", "id", payload.id, "err", incResult.err)
+				}
+				r = incResult
+			}
 			dur := time.Since(start)
 			// update handles error case
 			payload.update(r, dur)

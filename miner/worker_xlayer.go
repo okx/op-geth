@@ -3,11 +3,15 @@ package miner
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
@@ -16,6 +20,128 @@ type RealtimeBackend interface {
 	RealtimeEnabled() bool
 	GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo
 	GetRealtimeTxInfoChan() chan state.TxInfo
+}
+
+// snapshot creates a lightweight copy of the environment for incremental building.
+// The EVM is not copied as it will be recreated when needed.
+func (env *environment) snapshot() *environment {
+	snap := &environment{
+		signer:   env.signer,
+		state:    env.state.Copy(),
+		tcount:   env.tcount,
+		gasPool:  new(core.GasPool).AddGas(env.gasPool.Gas()),
+		coinbase: env.coinbase,
+		evm:      nil,
+		header:   types.CopyHeader(env.header),
+		txs:      append([]*types.Transaction(nil), env.txs...),
+		receipts: append([]*types.Receipt(nil), env.receipts...),
+		sidecars: append([]*types.BlobTxSidecar(nil), env.sidecars...),
+		blobs:    env.blobs,
+		noTxs:    env.noTxs,
+		rpcCtx:   env.rpcCtx,
+		okPayTxs: env.okPayTxs,
+	}
+	if env.witness != nil {
+		snap.witness = env.witness.Copy()
+	}
+	return snap
+}
+
+func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParams, witness bool) (*newPayloadResult, bool) {
+	// Validation cached state
+	if payload.baseEnv == nil {
+		return nil, false // No base to build on
+	}
+
+	parent := miner.chain.GetBlockByHash(params.parentHash)
+	if parent == nil || parent.Hash() != payload.baseParent {
+		log.Debug("Incremental update skipped: cannot find parent block", "id", payload.id)
+		return nil, false
+	}
+
+	work := payload.baseEnv.snapshot()
+	if witness {
+		work.state.StartPrefetcher("miner-incremental", work.witness)
+		defer work.state.StopPrefetcher()
+	}
+	work.evm = vm.NewEVM(core.NewEVMBlockContext(work.header, miner.chain, &work.coinbase, miner.chainConfig, work.state), work.state, miner.chainConfig, vm.Config{EnableInnerTxs: miner.backend.RealtimeEnabled()})
+	existingTxHashes := make(map[common.Hash]struct{}, len(work.txs))
+	for _, tx := range work.txs {
+		existingTxHashes[tx.Hash()] = struct{}{}
+	}
+
+	if !params.noTxs {
+		// use shared interrupt if present
+		interrupt := params.interrupt
+		if interrupt == nil {
+			interrupt = new(atomic.Int32)
+		}
+		timer := time.AfterFunc(max(minRecommitInterruptInterval, miner.config.Recommit), func() {
+			interrupt.Store(commitInterruptTimeout)
+		})
+
+		err := miner.fillTransactions(interrupt, work, existingTxHashes, params.realtimeEnabled)
+		timer.Stop() // don't need timeout interruption any more
+		if errors.Is(err, errBlockInterruptedByTimeout) {
+			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(miner.config.Recommit))
+		} else if errors.Is(err, errBlockInterruptedByResolve) {
+			log.Info("Block building got interrupted by payload resolution")
+		}
+	}
+	if intr := params.interrupt; intr != nil && params.isUpdate && intr.Load() != commitInterruptNone {
+		log.Info("Block building got interrupted from interrupt signal", "id", payload.id)
+		return &newPayloadResult{err: errInterruptedUpdate}, false
+	}
+
+	body := types.Body{Transactions: work.txs, Withdrawals: params.withdrawals}
+	allLogs := make([]*types.Log, 0)
+	for _, r := range work.receipts {
+		allLogs = append(allLogs, r.Logs...)
+	}
+
+	isIsthmus := miner.chainConfig.IsIsthmus(work.header.Time)
+
+	// Collect consensus-layer requests if Prague is enabled.
+	var requests [][]byte
+	if miner.chainConfig.IsPrague(work.header.Number, work.header.Time) && !isIsthmus {
+		requests = [][]byte{}
+		// EIP-6110 deposits
+		if err := core.ParseDepositLogs(&requests, allLogs, miner.chainConfig); err != nil {
+			return &newPayloadResult{err: err}, false
+		}
+		// EIP-7002
+		if err := core.ProcessWithdrawalQueue(&requests, work.evm); err != nil {
+			return &newPayloadResult{err: err}, false
+		}
+		// EIP-7251 consolidations
+		if err := core.ProcessConsolidationQueue(&requests, work.evm); err != nil {
+			return &newPayloadResult{err: err}, false
+		}
+	}
+	if isIsthmus {
+		requests = [][]byte{}
+	}
+	if requests != nil {
+		reqHash := types.CalcRequestsHash(requests)
+		work.header.RequestsHash = &reqHash
+	}
+
+	block, err := miner.engine.FinalizeAndAssemble(miner.chain, work.header, work.state, &body, work.receipts)
+	if err != nil {
+		return &newPayloadResult{err: err}, false
+	}
+	return &newPayloadResult{
+		block:    block,
+		fees:     totalFees(block, work.receipts),
+		sidecars: work.sidecars,
+		stateDB:  work.state,
+		receipts: work.receipts,
+		requests: requests,
+		witness:  work.witness,
+		// For X Layer
+		env:       work,
+		changeset: work.state.GenerateChangeset(),
+	}, true
 }
 
 func (miner *Miner) applyTransaction_XLayer(env *environment, tx *types.Transaction) (*types.Receipt, []*types.InnerTx, *state.Entries, error) {
@@ -83,4 +209,21 @@ func (miner *Miner) RealtimeSendTxInfo(blockTime uint64, tx *types.Transaction, 
 			}
 		}
 	}
+}
+
+// filterNewTxs filters out transactions that are already included in the given set.
+func filterNewTxs(pending map[common.Address][]*txpool.LazyTransaction, existing map[common.Hash]struct{}) map[common.Address][]*txpool.LazyTransaction {
+	filtered := make(map[common.Address][]*txpool.LazyTransaction)
+	for addr, txs := range pending {
+		var newTxs []*txpool.LazyTransaction
+		for _, tx := range txs {
+			if _, exists := existing[tx.Hash]; !exists {
+				newTxs = append(newTxs, tx)
+			}
+		}
+		if len(newTxs) > 0 {
+			filtered[addr] = newTxs
+		}
+	}
+	return filtered
 }
