@@ -1,5 +1,5 @@
 ## run on local
-```
+```bash
 make clean
 cp local.env .env
 ./build_images.sh --all # build aggkit, cdk-erigon etc.
@@ -39,7 +39,7 @@ make reproducible-prestate
 ```
 
 ## run on testnet
-```
+```bash
 # pause erigon, update .env fork_num
 ./3-deploy-op-contracts.sh
 
