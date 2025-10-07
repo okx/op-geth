@@ -75,7 +75,7 @@ docker build \
 docker run \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "/data/test-pp-op:/app/op-geth/test-pp-op" \
-  -v "/data:/data/cannon-data:/app/op-program/bin" \
+  -v "/data/cannon-data:/app/op-program/bin" \
   -e DOCKER_HOST=unix:///var/run/docker.sock \
   -d op-migrate:amd64 sleep infinity
 # ssh into container.
