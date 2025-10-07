@@ -1,8 +1,6 @@
 package main
 
 import (
-	"slices"
-
 	"github.com/apolloconfig/agollo/v4/env/config"
 	gethApollo "github.com/ethereum/go-ethereum/cmd/geth/apollo"
 	"github.com/ethereum/go-ethereum/cmd/utils"
@@ -23,9 +21,7 @@ func initApollo(stack *node.Node, cfg *gethConfig) {
 
 		handler := gethApollo.NewGethConfigHandler()
 
-		flags := slices.Concat(utils.XLayerFlags, nodeFlags, rpcFlags, metricsFlags)
-
-		flags = apollo.SanitizeFlags(flags)
+		flags := apollo.SanitizeFlags(app.Flags)
 
 		client, err := apollo.GetInstance(&config.AppConfig{
 			AppID:         cfg.Eth.XLayer.Apollo.AppID,

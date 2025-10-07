@@ -52,7 +52,7 @@ func containsAddressOldImpl(addresses []string, addr common.Address) bool {
 }
 
 func SanitizeFlags(flags []cli.Flag) []cli.Flag {
-	seen := make(map[string]bool)
+	var seen map[string]struct{}
 	var result []cli.Flag
 
 	for _, flag := range flags {
@@ -62,11 +62,11 @@ func SanitizeFlags(flags []cli.Flag) []cli.Flag {
 
 		// Use flag name as key to detect duplicates
 		flagName := flag.Names()[0]
-		if seen[flagName] {
+		if _, ok := seen[flagName]; ok {
 			continue // skip duplicate flags
 		}
 
-		seen[flagName] = true
+		seen[flagName] = struct{}{}
 		result = append(result, flag)
 	}
 
