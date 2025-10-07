@@ -81,6 +81,9 @@ type environment struct {
 
 	noTxs  bool            // true if we are reproducing a block, and do not have to check interop txs
 	rpcCtx context.Context // context to control block-building RPC work. No RPC allowed if nil.
+
+	// For X Layer
+	okPayTxs int
 }
 
 const (
@@ -101,7 +104,8 @@ type newPayloadResult struct {
 	receipts []*types.Receipt       // Receipts collected during construction
 	requests [][]byte               // Consensus layer requests collected during block construction
 	witness  *stateless.Witness     // Witness is an optional stateless proof
-	// For X Layer, realtime
+	// For X Layer
+	env       *environment // Environment snapshot for incremental building
 	changeset *realtimeTypes.Changeset
 }
 
@@ -174,7 +178,7 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 			interrupt.Store(commitInterruptTimeout)
 		})
 
-		err := miner.fillTransactions(interrupt, work, params.realtimeEnabled)
+		err := miner.fillTransactions(interrupt, work, nil, params.realtimeEnabled)
 		timer.Stop() // don't need timeout interruption any more
 		if errors.Is(err, errBlockInterruptedByTimeout) {
 			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(miner.config.Recommit))
@@ -261,7 +265,8 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		receipts: work.receipts,
 		requests: requests,
 		witness:  work.witness,
-		// For X Layer, realtime
+		// For X Layer
+		env:       work,
 		changeset: work.state.GenerateChangeset(),
 	}
 }
@@ -412,6 +417,8 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 		witness:  state.Witness(),
 		evm:      vm.NewEVM(core.NewEVMBlockContext(header, miner.chain, &coinbase, miner.chainConfig, state), state, miner.chainConfig, vm.Config{EnableInnerTxs: miner.backend.RealtimeEnabled()}),
 		rpcCtx:   rpcCtx,
+		// For X Layer
+		okPayTxs: 0,
 	}, nil
 }
 
@@ -687,7 +694,7 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 // fillTransactions retrieves the pending transactions from the txpool and fills them
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
-func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment, realtimeEnabled bool) error {
+func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment, existTxs map[common.Hash]struct{}, realtimeEnabled bool) error {
 	miner.confMu.RLock()
 	tip := miner.config.GasPrice
 	prio := miner.prio
@@ -711,6 +718,10 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment, 
 
 	filter.OnlyPlainTxs, filter.OnlyBlobTxs = false, true
 	pendingBlobTxs := miner.txpool.Pending(filter)
+
+	// For X Layer, filter out already-included transactions
+	pendingPlainTxs = filterNewTxs(pendingPlainTxs, existTxs)
+	pendingBlobTxs = filterNewTxs(pendingBlobTxs, existTxs)
 
 	// Split the pending transactions into locals and remotes.
 	prioPlainTxs, normalPlainTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingPlainTxs
@@ -752,11 +763,15 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment, 
 			sortedOkPayTxs.Sort()
 			items := sortedOkPayTxs.Items()
 
-			limit := int(miner.config.OkPayBlockPriorityTxsLimit)
+			limit := int(miner.config.OkPayBlockPriorityTxsLimit) - env.okPayTxs
+			if limit < 0 {
+				limit = 0
+			}
 			if len(items) > limit {
 				// Process priority transactions
 				for _, item := range items[:limit] {
 					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
+					env.okPayTxs++
 				}
 				// Put back unselected transactions
 				for _, item := range items[limit:] {
@@ -766,6 +781,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment, 
 				// All transactions get priority
 				for _, item := range items {
 					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
+					env.okPayTxs++
 				}
 			}
 		}
