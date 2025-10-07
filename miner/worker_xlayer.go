@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
@@ -49,15 +48,11 @@ func (env *environment) snapshot() *environment {
 }
 
 func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParams, witness bool) (*newPayloadResult, bool) {
-	// Use per-call statistics to avoid shared state across concurrent builds
-	proposeStats := metrics.NewLogStatistics()
-
 	// Validation cached state
 	if payload.baseEnv == nil {
 		return nil, false // No base to build on
 	}
 
-	startBuildTime := time.Now()
 	parent := miner.chain.GetBlockByHash(params.parentHash)
 	if parent == nil || parent.Hash() != payload.baseParent {
 		log.Debug("Incremental update skipped: cannot find parent block", "id", payload.id)
@@ -74,9 +69,7 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 	for _, tx := range work.txs {
 		existingTxHashes[tx.Hash()] = struct{}{}
 	}
-	proposeStats.CumulativeTiming(metrics.ProposePrepareMs, time.Since(startBuildTime))
 
-	execStart := time.Now()
 	if !params.noTxs {
 		// use shared interrupt if present
 		interrupt := params.interrupt
@@ -95,7 +88,6 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 			log.Info("Block building got interrupted by payload resolution")
 		}
 	}
-	proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
 	if intr := params.interrupt; intr != nil && params.isUpdate && intr.Load() != commitInterruptNone {
 		log.Info("Block building got interrupted from interrupt signal", "id", payload.id)
 		return &newPayloadResult{err: errInterruptedUpdate}, false
@@ -114,7 +106,6 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 	if miner.chainConfig.IsPrague(work.header.Number, work.header.Time) && !isIsthmus {
 		requests = [][]byte{}
 		// EIP-6110 deposits
-		xstart := time.Now()
 		if err := core.ParseDepositLogs(&requests, allLogs, miner.chainConfig); err != nil {
 			return &newPayloadResult{err: err}, false
 		}
@@ -126,46 +117,18 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 		if err := core.ProcessConsolidationQueue(&requests, work.evm); err != nil {
 			return &newPayloadResult{err: err}, false
 		}
-		proposeStats.CumulativeTiming(metrics.ProposePragueMs, time.Since(xstart))
 	}
-
 	if isIsthmus {
 		requests = [][]byte{}
 	}
-
 	if requests != nil {
 		reqHash := types.CalcRequestsHash(requests)
 		work.header.RequestsHash = &reqHash
 	}
 
-	assembleStart := time.Now()
 	block, err := miner.engine.FinalizeAndAssemble(miner.chain, work.header, work.state, &body, work.receipts)
 	if err != nil {
 		return &newPayloadResult{err: err}, false
-	}
-	proposeStats.CumulativeTiming(metrics.ProposeAssembleMs, time.Since(assembleStart))
-
-	// Include StateDB internal timings
-	if work != nil && work.state != nil {
-		sdb := work.state
-		proposeStats.CumulativeTiming(metrics.AccountReadMs, sdb.AccountReads)
-		proposeStats.CumulativeTiming(metrics.AccountHashMs, sdb.AccountHashes)
-		proposeStats.CumulativeTiming(metrics.AccountUpdateMs, sdb.AccountUpdates)
-		proposeStats.CumulativeTiming(metrics.StorageReadMs, sdb.StorageReads)
-		proposeStats.CumulativeTiming(metrics.StorageUpdateMs, sdb.StorageUpdates)
-	}
-
-	// Counters and total time
-	// Set block number and counters
-	proposeStats.CumulativeValue(metrics.BlockNumberTag, int64(block.NumberU64()))
-	proposeStats.CumulativeValue(metrics.TxCounter, int64(len(work.txs)))
-	proposeStats.CumulativeValue(metrics.GasUsedCounter, int64(block.GasUsed()))
-	proposeStats.CumulativeTiming(metrics.ProposeTotalMs, time.Since(startBuildTime))
-
-	// store propose stats snapshot keyed by block hash; output will be merged at insertChain
-	if block != nil {
-		// Store the statistics instance directly; it is local and no longer written after this point
-		metrics.GlobalStatsStore.Put(block.Hash(), proposeStats)
 	}
 	return &newPayloadResult{
 		block:    block,
