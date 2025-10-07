@@ -24,7 +24,7 @@ var globalApolloConfig *ApolloConfigImpl
 
 // UnsafeGetApolloConfig returns the global Apollo configuration
 // This is unsafe and should be used carefully
-func UnsafeGetApolloConfig() *ApolloConfigImpl {
+func TryUnsafeGetApolloConfig() *ApolloConfigImpl {
 	return globalApolloConfig
 }
 
