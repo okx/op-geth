@@ -410,11 +410,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// For XLayer: Set up migration configuration if configured
 	if config.XLayer.LegacyPp.PPRPCUrl != "" {
 		if chainConfig.LegacyXLayerBlock != nil {
+			// if the legacy xlayer block is set, use the block as migration block
 			log.Info("LegacyXLayerBlock detected, use the block as migration block", "legacyBlock", chainConfig.LegacyXLayerBlock.Uint64())
 			migrationBlock := chainConfig.LegacyXLayerBlock.Uint64()
 			config.XLayer.LegacyPp.MigrationBlock = &migrationBlock
-		} else if config.XLayer.LegacyPp.MigrationBlock == nil {
-			log.Error("Migration block not set, please set the migration block")
+		}
+		// if we can't retrieve the migration block from either the chain config or the config, return an error
+		if config.XLayer.LegacyPp.MigrationBlock == nil || *config.XLayer.LegacyPp.MigrationBlock == 0 {
 			return nil, errors.New("migration block not set")
 		}
 		log.Info("Migration block set to", "migrationBlock", *config.XLayer.LegacyPp.MigrationBlock)
