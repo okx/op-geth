@@ -1,3 +1,6 @@
+//go:build !skip_stress_realtime
+// +build !skip_stress_realtime
+
 package test
 
 import (
