@@ -9,13 +9,13 @@ import (
 
 // XLayer gas price types
 const (
-	DefaultType  = "default"  // Default gas price from config
-	FollowerType = "follower" // Calculate gas price based on L1 gas price
-	FixedType    = "fixed"    // Fixed gas price in USDT
+	GasPriceDefaultType  = "default"  // Default gas price from config
+	GasPriceFollowerType = "follower" // Calculate gas price based on L1 gas price
+	GasPriceFixedType    = "fixed"    // Fixed gas price in USDT
 )
 
-// XLayerConfig is the X Layer gas price config
-type XLayerConfig struct {
+// XLayerGasPriceConfig is the X Layer gas price config
+type XLayerGasPriceConfig struct {
 	Type         string        `toml:",omitempty"`
 	UpdatePeriod time.Duration `toml:",omitempty"`
 	Factor       float64       `toml:",omitempty"`

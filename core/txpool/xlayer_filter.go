@@ -94,9 +94,9 @@ func (f *XLayerFilter) FilterTx(ctx context.Context, tx *types.Transaction) bool
 
 	// Additional filtering based on XLayer type
 	switch f.config.XLayer.Type {
-	case gasprice.FollowerType:
+	case gasprice.GasPriceFollowerType:
 		return f.filterFollowerTx(ctx, tx)
-	case gasprice.FixedType:
+	case gasprice.GasPriceFixedType:
 		return f.filterFixedTx(ctx, tx)
 	default:
 		// Default type - no additional filtering

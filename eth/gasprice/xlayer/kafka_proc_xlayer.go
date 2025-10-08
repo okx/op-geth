@@ -82,7 +82,7 @@ type L1L2PriceRecord struct {
 
 // KafkaProcessor kafka processor
 type KafkaProcessor struct {
-	cfg       gasprice.XLayerConfig
+	cfg       gasprice.XLayerGasPriceConfig
 	kreader   *kafka.Reader
 	ctx       context.Context
 	rwLock    sync.RWMutex
@@ -93,7 +93,7 @@ type KafkaProcessor struct {
 	tmpPrices L1L2PriceRecord
 }
 
-func newKafkaProcessor(cfg gasprice.XLayerConfig, ctx context.Context) *KafkaProcessor {
+func newKafkaProcessor(cfg gasprice.XLayerGasPriceConfig, ctx context.Context) *KafkaProcessor {
 	rp := &KafkaProcessor{
 		cfg:      cfg,
 		kreader:  getKafkaReader(cfg),
@@ -114,7 +114,7 @@ func newKafkaProcessor(cfg gasprice.XLayerConfig, ctx context.Context) *KafkaPro
 	return rp
 }
 
-func getKafkaReader(cfg gasprice.XLayerConfig) *kafka.Reader {
+func getKafkaReader(cfg gasprice.XLayerGasPriceConfig) *kafka.Reader {
 	brokers := strings.Split(cfg.KafkaURL, ",")
 
 	var dialer *kafka.Dialer
@@ -179,13 +179,13 @@ func (rp *KafkaProcessor) ReadAndUpdate(ctx context.Context) error {
 
 // Update update the coin price
 func (rp *KafkaProcessor) Update(data []byte) error {
-	if rp.cfg.Type == gasprice.FixedType {
+	if rp.cfg.Type == gasprice.GasPriceFixedType {
 		price, err := rp.parseCoinPrice(data, []int{rp.l2CoinId})
 		if err == nil {
 			rp.updateL2CoinPrice(price[rp.l2CoinId])
 		}
 		return err
-	} else if rp.cfg.Type == gasprice.FollowerType {
+	} else if rp.cfg.Type == gasprice.GasPriceFollowerType {
 		prices, err := rp.parseCoinPrice(data, []int{rp.l1CoinId, rp.l2CoinId})
 		if err == nil {
 			rp.updateL1L2CoinPrice(prices)

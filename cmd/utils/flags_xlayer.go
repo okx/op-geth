@@ -1,19 +1,21 @@
 package utils
 
 import (
+	"math/big"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/filters"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
+	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/urfave/cli/v2"
 )
 
@@ -177,6 +179,110 @@ var (
 		Usage: "Cache dump path",
 		Value: "/home/erigon/data/cache",
 	}
+	// Apollo
+	ApolloEnabledFlag = &cli.BoolFlag{
+		Name:  "apollo.enabled",
+		Usage: "Enable Apollo configuration service",
+		Value: false,
+	}
+	ApolloAppIDFlag = &cli.StringFlag{
+		Name:  "apollo.app-id",
+		Usage: "Apollo app ID",
+		Value: "",
+	}
+	ApolloIPFlag = &cli.StringFlag{
+		Name:  "apollo.ip",
+		Usage: "Apollo IP",
+		Value: "",
+	}
+	ApolloClusterFlag = &cli.StringFlag{
+		Name:  "apollo.cluster",
+		Usage: "Apollo cluster name",
+		Value: "default",
+	}
+	ApolloNamespaceFlag = &cli.StringFlag{
+		Name:  "apollo.namespace",
+		Usage: "Apollo namespace",
+		Value: "application",
+	}
+	// GPO
+	GpoType = &cli.StringFlag{
+		Name:  "gpo.type",
+		Usage: "GPO type",
+		Value: "follower",
+	}
+
+	GpoUpdatePeriod = &cli.Uint64Flag{
+		Name:  "gpo.update-period",
+		Usage: "GPO update period",
+		Value: 100000000000,
+	}
+
+	GpoFactor = &cli.Float64Flag{
+		Name:  "gpo.factor",
+		Usage: "raw gas price factor (Follower mode only)",
+		Value: 0,
+	}
+
+	GpoKafkaURL = &cli.StringFlag{
+		Name:  "gpo.kafka-url",
+		Usage: "GPO kafka url",
+		Value: "localhost:9092",
+	}
+
+	GpoTopic = &cli.StringFlag{
+		Name:  "gpo.topic",
+		Usage: "GPO topic",
+		Value: "middle_coinPrice_push",
+	}
+
+	GpoGroupID = &cli.StringFlag{
+		Name:  "gpo.group-id",
+		Usage: "GPO group id",
+		Value: "geth-consumer",
+	}
+
+	GpoL1CoinId = &cli.Uint64Flag{
+		Name:  "gpo.l1-coin-id",
+		Usage: "GPO l1 coin id",
+		Value: 15756,
+	}
+
+	GpoL2CoinId = &cli.Uint64Flag{
+		Name:  "gpo.l2-coin-id",
+		Usage: "GPO l2 coin id",
+		Value: 7184,
+	}
+
+	GpoDefaultL1CoinPrice = &cli.Float64Flag{
+		Name:  "gpo.default-l1-coin-price",
+		Usage: "GPO default l1 coin price",
+		Value: 2000.0,
+	}
+
+	GpoDefaultL2CoinPrice = &cli.Float64Flag{
+		Name:  "gpo.default-l2-coin-price",
+		Usage: "GPO default l2 coin price",
+		Value: 0.5,
+	}
+
+	GpoGasPriceUsdt = &cli.Float64Flag{
+		Name:  "gpo.gas-price-usdt",
+		Usage: "GPO gas price usdt",
+		Value: 0,
+	}
+
+	GpoCongestionThreshold = &cli.Uint64Flag{
+		Name:  "gpo.congestion-threshold",
+		Usage: "GPO congestion threshold",
+		Value: 0,
+	}
+
+	GpoDefault = &cli.StringFlag{
+		Name:  "gpo.default",
+		Usage: "GPO default",
+		Value: "100000000",
+	}
 
 	// XLayerFlags are the default flags for X Layer features
 	XLayerFlags = []cli.Flag{
@@ -208,6 +314,24 @@ var (
 		RealtimeStreamerUseTLS,
 		RealtimeStreamerTimeout,
 		RealtimeCacheDumpPath,
+		ApolloEnabledFlag,
+		ApolloAppIDFlag,
+		ApolloIPFlag,
+		ApolloClusterFlag,
+		ApolloNamespaceFlag,
+		GpoType,
+		GpoUpdatePeriod,
+		GpoDefault,
+		GpoKafkaURL,
+		GpoTopic,
+		GpoGroupID,
+		GpoL1CoinId,
+		GpoL2CoinId,
+		GpoDefaultL1CoinPrice,
+		GpoDefaultL2CoinPrice,
+		GpoGasPriceUsdt,
+		GpoCongestionThreshold,
+		GpoFactor,
 	}
 )
 
@@ -217,6 +341,8 @@ func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setInnerTxXLayer(ctx, cfg)
 	setMigrationXLayer(ctx, cfg)
 	setMonitorXLayer(ctx, cfg)
+	setApolloXLayer(ctx, cfg)
+	setGPOXLayer(ctx, cfg)
 	setRealtimeXLayer(ctx, cfg)
 }
 
@@ -270,6 +396,27 @@ func setMigrationXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 		cfg.XLayer.LegacyPp.PPRPCTimeout = ctx.Duration(PPRPCTimeoutFlag.Name)
 	} else if cfg.XLayer.LegacyPp.PPRPCTimeout == 0 && cfg.XLayer.LegacyPp.PPRPCUrl != "" {
 		cfg.XLayer.LegacyPp.PPRPCTimeout = 10 * time.Second
+	}
+}
+
+func setApolloXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(ApolloEnabledFlag.Name) {
+		cfg.XLayer.Apollo.Enable = ctx.Bool(ApolloEnabledFlag.Name)
+	}
+	if !cfg.XLayer.Apollo.Enable {
+		return
+	}
+	if ctx.IsSet(ApolloAppIDFlag.Name) {
+		cfg.XLayer.Apollo.AppID = ctx.String(ApolloAppIDFlag.Name)
+	}
+	if ctx.IsSet(ApolloIPFlag.Name) {
+		cfg.XLayer.Apollo.IP = ctx.String(ApolloIPFlag.Name)
+	}
+	if ctx.IsSet(ApolloClusterFlag.Name) {
+		cfg.XLayer.Apollo.Cluster = ctx.String(ApolloClusterFlag.Name)
+	}
+	if ctx.IsSet(ApolloNamespaceFlag.Name) {
+		cfg.XLayer.Apollo.NamespaceName = ctx.String(ApolloNamespaceFlag.Name)
 	}
 }
 
@@ -354,4 +501,22 @@ func setRealtimeXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.IsSet(RealtimeStreamerTimeout.Name) {
 		cfg.XLayer.Realtime.WSConn.RealtimeStreamerTimeout = ctx.Duration(RealtimeStreamerTimeout.Name)
 	}
+
+}
+
+func setGPOXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(GpoDefault.Name) {
+		cfg.GPO.XLayer.Default = big.NewInt(ctx.Int64(GpoDefault.Name))
+	}
+	if ctx.IsSet(GpoFactor.Name) {
+		cfg.GPO.XLayer.Factor = ctx.Float64(GpoFactor.Name)
+	}
+	if ctx.IsSet(GpoCongestionThreshold.Name) {
+		cfg.GPO.XLayer.CongestionThreshold = ctx.Int(GpoCongestionThreshold.Name)
+	}
+}
+
+// SetApolloGPOXLayer is a public wrapper function to internally call setGPO
+func SetApolloGPOXLayer(ctx *cli.Context, cfg *gasprice.Config) {
+	setGPO(ctx, cfg)
 }

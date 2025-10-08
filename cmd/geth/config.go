@@ -242,6 +242,9 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	// Start metrics export if enabled
 	utils.SetupMetrics(&cfg.Metrics)
 
+	// For X Layer
+	initApollo(stack, &cfg)
+
 	// For X Layer, initialize monitoring system
 	monitor.InitTraceLogger(cfg.Eth.XLayer.Monitor.EnableTraceLog, cfg.Eth.XLayer.Monitor.TraceLogPath)
 
