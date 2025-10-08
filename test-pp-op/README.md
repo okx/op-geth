@@ -60,8 +60,8 @@ docker build \
 docker pull golang@sha256:3077e12cda6debf8a9eba8eba0b6b4efe6f9c17295a18e3883cc5797d1688acb
 docker tag 3077e12cd golang:1.24.2-alpine3.21
 # 2) docker.io/library/golang:1.23.8-alpine3.21
-docker pull golang@sha256:cc94cc0110a0ca83ec24991c0e981ca57f88a0bc959c7e7532701d6b1956668d
-docker tag cc94cc01 golang:1.23.8-alpine3.21
+docker pull golang@sha256:b6da2ff7e4eb4c632f7f21532b775078f77a790b159c56a0a7963a1532364cf0
+docker tag b6da2ff7e4e golang:1.23.8-alpine3.21
 
 docker save golang:1.24.2-alpine3.21 | gzip > golang-1.24.2-alpine3.21.tar.gz
 docker save golang:1.23.8-alpine3.21 | gzip > golang-1.23.8-alpine3.21.tar.gz
@@ -81,9 +81,15 @@ md5sum upload-to-ecs.tar.gz
 # Use osstool to upload images to ECS. 
 ./osstool -f upload-to-ecs.tar.gz -a upload -ticket ${ticket-id}
 
-
 # INSIDE ECS MACHINE
 # ----------------------------------------------------------------------------
+
+# untar the uploaded file
+tar -xzvf upload-to-ecs.tar.gz
+cd upload-to-ecs
+# load the docker images into local registry
+docker load < [filename].tar.gz
+
 docker run \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "/data/test-pp-op:/app/op-geth/test-pp-op" \
@@ -103,7 +109,6 @@ cp config-op/rollup.json /app/op-program/chainconfig/configs/196-rollup.json
 cp config-op/merged.genesis.gz.json /app/op-program/chainconfig/configs/196-genesis-l2.json
 cd /app
 make reproducible-prestate
-
 # Leave the container
 exit
 
