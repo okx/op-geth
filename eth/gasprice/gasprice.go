@@ -54,7 +54,7 @@ type Config struct {
 	MinSuggestedPriorityFee *big.Int `toml:",omitempty"` // for Optimism fee suggestion
 
 	// For X Layer
-	XLayer XLayerConfig
+	XLayer XLayerGasPriceConfig
 }
 
 // OracleBackend includes all necessary background APIs for oracle.

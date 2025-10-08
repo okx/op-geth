@@ -27,13 +27,13 @@ type L2GasPricer interface {
 func NewL2GasPriceSuggester(ctx context.Context, cfg gasprice.Config) L2GasPricer {
 	var gpricer L2GasPricer
 	switch cfg.XLayer.Type {
-	case gasprice.FollowerType:
+	case gasprice.GasPriceFollowerType:
 		log.Info("Follower type selected")
 		gpricer = newFollowerGasPriceSuggester(ctx, cfg)
-	case gasprice.DefaultType:
+	case gasprice.GasPriceDefaultType:
 		log.Info("Default type selected")
 		gpricer = newDefaultGasPriceSuggester(ctx, cfg)
-	case gasprice.FixedType:
+	case gasprice.GasPriceFixedType:
 		log.Info("Fixed type selected")
 		gpricer = newFixedGasPriceSuggester(ctx, cfg)
 	default:
