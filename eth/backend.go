@@ -457,6 +457,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// Successful startup; push a marker and check previous unclean shutdowns.
 	eth.shutdownTracker.MarkStartup()
 
+	// For X Layer
+	vm.InitEnvConfig(eth.networkID)
+
 	return eth, nil
 }
 

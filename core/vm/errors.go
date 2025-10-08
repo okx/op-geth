@@ -42,6 +42,9 @@ var (
 	// errStopToken is an internal token indicating interpreter loop termination,
 	// never returned to outside callers.
 	errStopToken = errors.New("stop token")
+
+	// For xlayer
+	ErrUnsupportedPrecompile = errors.New("unsupported precompile")
 )
 
 // ErrStackUnderflow wraps an evm error when the items on the stack less
@@ -147,7 +150,7 @@ const (
 	VMErrorCodeStackUnderflow
 	VMErrorCodeStackOverflow
 	VMErrorCodeInvalidOpCode
-
+	VMErrorCodeUnsupportedPrecompile
 	// VMErrorCodeUnknown explicitly marks an error as unknown, this is useful when error is converted
 	// from an actual `error` in which case if the mapping is not known, we can use this value to indicate that.
 	VMErrorCodeUnknown = math.MaxInt - 1
@@ -181,7 +184,8 @@ func vmErrorCodeFromErr(err error) int {
 		return VMErrorCodeInvalidCode
 	case errors.Is(err, ErrNonceUintOverflow):
 		return VMErrorCodeNonceUintOverflow
-
+	case errors.Is(err, ErrUnsupportedPrecompile):
+		return VMErrorCodeUnsupportedPrecompile
 	default:
 		// Dynamic errors
 		if v := (*ErrStackUnderflow)(nil); errors.As(err, &v) {

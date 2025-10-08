@@ -273,6 +273,12 @@ const (
 
 	// BalanceMint is an OP-Stack addition for an event that is emitted when the balance changes due to a mint operation.
 	BalanceMint BalanceChangeReason = 200
+
+	// For xlayer
+	// BalanceBridge
+	BalanceBridge BalanceChangeReason = 250
+	// BalanceClean
+	BalanceClean BalanceChangeReason = 251
 )
 
 // GasChangeReason is used to indicate the reason for a gas change, useful
