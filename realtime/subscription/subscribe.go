@@ -13,9 +13,7 @@ import (
 )
 
 const (
-	DefaultChannelSize          = 10000
-	DefaultSubscribeChannelSize = 256
-
+	DefaultChannelSize = 10000
 	// Limit the number of subscriptions on the node
 	MaxSubscriptionsCount = 100
 )
@@ -118,7 +116,7 @@ func (ff *RealtimeSubscription) SubscribeRealtime() (<-chan RealtimeSubMessage, 
 	}
 
 	id := SubID(generateSubID())
-	sub := newChanSub[RealtimeSubMessage](DefaultSubscribeChannelSize)
+	sub := newChanSub[RealtimeSubMessage](DefaultChannelSize)
 	ff.rtSubs.Put(id, sub)
 	return sub.ch, id, nil
 }
@@ -141,7 +139,7 @@ func (ff *RealtimeSubscription) SubscribeRealtimeLogs(crit filters.FilterCriteri
 	}
 
 	id := SubID(generateSubID())
-	sub := newChanSub[*types.Log](DefaultSubscribeChannelSize)
+	sub := newChanSub[*types.Log](DefaultChannelSize)
 	filter := &LogsFilter{addrs: map[common.Address]int{}, topics: map[common.Hash]int{}, sender: sub}
 	filter.addrs = map[common.Address]int{}
 	if len(crit.Addresses) == 0 {

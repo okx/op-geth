@@ -1,5 +1,5 @@
-//go:build !skip_stress_realtime
-// +build !skip_stress_realtime
+//go:build !skip_smoke_realtime
+// +build !skip_smoke_realtime
 
 package test
 
@@ -71,7 +71,6 @@ func TestStressSendErc20Txs(t *testing.T) {
 	for i := 1; i < NumTxs; i++ {
 		signedTx := erc20TransferTx(t, ctx, privateKey, client, transferAmount, gasPrice, testAddress, erc20Address, startNonce+uint64(i))
 		signedTxs[signedTx.Hash().String()] = struct{}{}
-		fmt.Println("Sent tx count: ", i)
 	}
 
 	// Send start nonce to trigger stress test
@@ -81,17 +80,22 @@ func TestStressSendErc20Txs(t *testing.T) {
 	fmt.Println("Starting stress test")
 
 	count := 0
+	timer := time.NewTimer(500 * time.Millisecond)
+	defer timer.Stop()
 	for count < NumTxs {
 		select {
 		case msg := <-realtimeMsgCh:
 			if _, ok := signedTxs[msg.TxHash]; ok {
-				fmt.Printf("Confirmed tx: %s\n", msg.TxHash)
+				delete(signedTxs, msg.TxHash)
 				count++
 			}
 		case err := <-realtimeSub.Err():
 			require.NoError(t, err)
+		case <-timer.C:
+			fmt.Printf("Confirmed tx count: %d\n", count)
 		}
 	}
+	fmt.Printf("Confirmed tx count: %d\n", count)
 	totalRealtimeDuration = time.Since(startTime)
 	fmt.Printf("Stress test took: %s\n", totalRealtimeDuration)
 }
