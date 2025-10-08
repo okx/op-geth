@@ -39,7 +39,6 @@ RUN echo '🚀 Building reproducible-prestate...' && \
 # Third stage: clean runtime image
 ARG OP_STACK_IMAGE=op-stack:v1.13.4
 FROM ${OP_STACK_IMAGE}
-ARG ENV=local
 
 COPY --from=builder /go/pkg/mod /go/pkg/mod
 
@@ -53,7 +52,4 @@ WORKDIR /app
 COPY --from=geth-builder /app/op-geth/test-pp-op /app/op-geth/test-pp-op
 COPY --from=geth-builder /app/op-geth/build/bin/geth /usr/local/bin/geth
 
-# If local, this will be copied over into image.
-# Otherwise, copy testnet.env as .env
-RUN if [ "$ENV" = "testnet" ]; then cp /app/op-geth/test-pp-op/testnet.env /app/.env; fi
 COPY --from=builder /app/.env /app/op-geth/test-pp-op/.env
