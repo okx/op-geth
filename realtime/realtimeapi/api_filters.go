@@ -48,7 +48,7 @@ func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.S
 
 				result := RealtimeSubResult{}
 				if criteria.NewHeads && msg.BlockMsg != nil {
-					if err != nil || msg.BlockMsg.Header == nil {
+					if msg.BlockMsg.Header == nil {
 						log.Warn(fmt.Sprintf("[Realtime] subscription error: getting block info, err: %v", err))
 						continue
 					}
@@ -56,7 +56,7 @@ func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.S
 					result.BlockTime = msg.BlockMsg.Header.Time
 					err = notifier.Notify(rpcSub.ID, result)
 					if err != nil {
-						log.Warn("[Realtime] error while notifying subscription", "err", err)
+						log.Warn(fmt.Sprintf("[Realtime] subscription error while notifying, err: %v", err))
 					}
 				}
 				if msg.TxMsg != nil {
@@ -105,7 +105,7 @@ func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.S
 					}
 					err = notifier.Notify(rpcSub.ID, result)
 					if err != nil {
-						log.Warn("[Realtime] error while notifying subscription", "err", err)
+						log.Warn(fmt.Sprintf("[Realtime] subscription error while notifying, err: %v", err))
 					}
 				}
 			case <-rpcSub.Err():
