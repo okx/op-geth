@@ -516,8 +516,8 @@ services:
       - --ws.api=debug,eth,txpool,net,engine
       - --syncmode=full
       - --gcmode=archive
-      - --nodiscover
-      - --maxpeers=0
+      #- --nodiscover
+      - --maxpeers=1
       - --networkid=901
       - --authrpc.vhosts=*
       - --authrpc.addr=0.0.0.0
@@ -592,7 +592,7 @@ services:
       - --p2p.priv.path=/config-op/opnode_p2p_priv.txt
       - --p2p.peerstore.path=/p2p-data/opnode_peerstore_db
       - --p2p.discovery.path=/p2p-data/opnode_discovery_db
-      - --p2p.test-pp-op=/dns4/op-seq/tcp/9223/p2p/16Uiu2HAkzHdkbmS2VrCsccLibsu7MvGHpmFUMJnMTkKifrtS5m65
+      #- --p2p.test-pp-op=/dns4/op-seq/tcp/9223/p2p/16Uiu2HAkzHdkbmS2VrCsccLibsu7MvGHpmFUMJnMTkKifrtS5m65
       - --p2p.no-discovery
       - --rpc.enable-admin=true
       - --l1=${L1_RPC_URL_IN_DOCKER}
@@ -686,7 +686,6 @@ services:
       - --private-key=${OP_PROPOSER_PRIVATE_KEY}
       - --trace-type=cannon,permissioned
       - --datadir=/data
-      - --game-window=${GAME_WINDOW}s
 
   op-dispute-mon:
     image: "${OP_STACK_IMAGE_TAG}"
@@ -699,6 +698,5 @@ services:
       - --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER}
       - --rollup-rpc=http://op-seq:9545
       - --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
-      - --game-window=${GAME_WINDOW}s
       - --honest-actors=${PROPOSER_ADDRESS}
 
