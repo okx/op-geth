@@ -1,8 +1,14 @@
+#!/bin/bash
 set -e
 set -x
 
 source .env
 source tools.sh
+
+if [ "$ENV" = "testnet" ];then
+	shopt -s expand_aliases
+	alias cast='docker run --network host op-migrate:latest cast'
+fi
 
 PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd $PWD_DIR
