@@ -42,6 +42,12 @@ FROM ${OP_STACK_IMAGE}
 
 COPY --from=builder /go/pkg/mod /go/pkg/mod
 
+RUN apt-get update && apt-get install -y curl && \
+    mkdir -p /usr/local/lib/docker/cli-plugins && \
+    curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose && \
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends docker.io \
     vim && \
@@ -49,7 +55,7 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-COPY --from=geth-builder /app/op-geth/test-pp-op /app/op-geth/test-pp-op
+COPY . /app/op-geth/test-pp-op
 COPY --from=geth-builder /app/op-geth/build/bin/geth /usr/local/bin/geth
 
 COPY --from=builder /app/.env /app/op-geth/test-pp-op/.env
