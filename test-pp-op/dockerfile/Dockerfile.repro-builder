@@ -1,0 +1,19 @@
+# For caching deps to build reproducible prestate images on ECS.
+ARG GO_VERSION=1.23.8-alpine3.21
+ARG EXPORT_TARGET=current
+FROM golang:${GO_VERSION} AS src
+
+RUN apk add --no-cache make gcc musl-dev linux-headers git jq bash just
+
+COPY ./go.mod /app/go.mod
+COPY ./go.sum /app/go.sum
+COPY ./op-geth /app/op-geth
+
+WORKDIR /app
+
+RUN echo "go mod cache: $(go env GOMODCACHE)"
+RUN echo "go build cache: $(go env GOCACHE)"
+
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build go mod download
+
+COPY . /app
