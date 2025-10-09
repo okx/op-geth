@@ -33,6 +33,7 @@ cp config-op/rollup.json /app/op-program/chainconfig/configs/195-rollup.json
 cp config-op/merged.genesis.gz.json /app/op-program/chainconfig/configs/195-genesis-l2.json
 cd /app
 make reproducible-prestate
+exit # exit container
 
 ./6-start-op.sh
 ./7-setup-fraud-proof.sh
@@ -40,17 +41,24 @@ make reproducible-prestate
 
 ## run on testnet
 ```bash
-# pause erigon, update .env fork_num
 cp testnet.env .env
 ./3-deploy-op-contracts.sh
 # AFTER DEPLOYING OP CONTRACTS, CHECK TRANSACTOR ADDRESS ON SEPOLIA.
+# NOTE: l1ProxyAdminOwner + opcm + transactor addr checking (check intent.toml)
+
+# Update .env ()
+# pause erigon, update .env fork_num.
+Update FORK_BLOCK+1
+# Overwrite .env to replace with inner node sepolia/beacon node
+# Do this before you build op-migrate image.
+https://fullnode-inner.okg.com/sepolia/fork/okbc/rpc
+https://fullnode-inner.okg.com/ethsepoliabeacon/native/layer1/rpc
 
 # LOCAL ENVIRONMENT
 # ----------------------------------------------------------------------------
 # Build the image locally after deploying contracts (rollup.json and genesis.json).
 docker build \
   --platform linux/amd64 \
-  --build-arg ENV=testnet \
   --build-arg CHAIN_ID=196 \
   --build-arg OP_STACK_IMAGE=op-stack:amd64 \
   --progress=plain \
@@ -63,10 +71,14 @@ docker tag 3077e12cd golang:1.24.2-alpine3.21
 docker pull golang@sha256:b6da2ff7e4eb4c632f7f21532b775078f77a790b159c56a0a7963a1532364cf0
 docker tag b6da2ff7e4e golang:1.23.8-alpine3.21
 
-docker save golang:1.24.2-alpine3.21 | gzip > golang-1.24.2-alpine3.21.tar.gz
-docker save golang:1.23.8-alpine3.21 | gzip > golang-1.23.8-alpine3.21.tar.gz
+# From optimism root directory, build amd64 version of the golang base images above first.
+docker build --platform linux/amd64 -t golang:1.23.8-alpine3.21-builder --build-arg GO_VERSION=1.23.8-alpine3.21 -f Dockerfile.repro-builder .
+docker build --platform linux/amd64 -t golang:1.24.2-alpine3.21-builder --build-arg GO_VERSION=1.24.2-alpine3.21 -f Dockerfile.repro-builder .
+
+docker save golang:1.24.2-alpine3.21-builder | gzip > golang-1.24.2-alpine3.21.tar.gz
+docker save golang:1.23.8-alpine3.21-builder | gzip > golang-1.23.8-alpine3.21.tar.gz
+docker save op-geth:v1.101511.0-patch | gzip > op-geth.tar.gz # starting new OP sequencer
 docker save op-migrate:amd64 | gzip > op-migrate-amd64.tar.gz
-docker save op-geth:7706694 | gzip > op-geth.tar.gz # starting new OP sequencer
 
 # Make a new folder in current directory.
 mkdir upload-to-ecs
@@ -83,39 +95,83 @@ md5sum upload-to-ecs.tar.gz
 
 # INSIDE ECS MACHINE
 # ----------------------------------------------------------------------------
+# If not mounted memory, do this ONCE.
+mkdir -p /mnt/ramdisk_op
+mount -t tmpfs -o size=128g tmpfs /mnt/ramdisk_op
+df -hT /mnt/ramdisk_op
 
+# In disk
+cd /data
+# download from OSS
+osstool download -ticket ${ticket-id} 
 # untar the uploaded file
 tar -xzvf upload-to-ecs.tar.gz
 cd upload-to-ecs
 # load the docker images into local registry
 docker load < [filename].tar.gz
+# Retag golang builder images as base golang images. During `make reproducible-prestate`,
+# this will use the cached images instead of pulling from internet.
+docker tag golang:1.23.8-alpine3.21-builder golang:1.23.8-alpine3.21
+docker tag golang:1.24.2-alpine3.21-builder golang:1.24.2-alpine3.21
 
+# config files (eg. .env) are inside container
 docker run \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "/data/test-pp-op:/app/op-geth/test-pp-op" \
-  -v "/data/cannon-data:/app/op-program/bin" \
+  -v /data/erigon-data:/data/erigon-data \
+  -v /mnt/ramdisk_op:/mnt/ramdisk_op \
+  -v /mnt/ramdisk_op/test-pp-op/data/op-geth-data:/app/op-geth/test-pp-op/data/op-geth-seq \
+  -v /mnt/ramdisk_op/test-pp-op/data/cannon-data:/app/op-program/bin \
   -e DOCKER_HOST=unix:///var/run/docker.sock \
   -d op-migrate:amd64 sleep infinity
+
 # ssh into container.
 docker exec -it ${CONTAINER_ID} /bin/bash
 
 # INSIDE CONTAINER 
 # ----------------------------------------------------------------------------
+
 cd /app/op-geth/test-pp-op
+
 ./5-1-migrate-prepare.sh
 ./5-2-migrate-op.sh
 gzip -c merged.genesis.json > config-op/merged.genesis.gz.json
 cp config-op/rollup.json /app/op-program/chainconfig/configs/196-rollup.json
 cp config-op/merged.genesis.gz.json /app/op-program/chainconfig/configs/196-genesis-l2.json
+# Overwrite Dockerfile.repro in OP repo using dockerfile/Dockerfile.repro
+cp dockerfile/Dockerfile.repro /app/op-program/Dockerfile.repro
 cd /app
 make reproducible-prestate
+
+cp -rfv /app/op-geth/test-pp-op/* /app/op-geth/test-pp-op/.* /mnt/ramdisk_op/test-pp-op
+
 # Leave the container
 exit
 
 # OUTSIDE CONTAINER 
 # ----------------------------------------------------------------------------
-./6-start-op.sh
-./7-setup-fraud-proof.sh
+# RPC (init) since we couldn't start RPC with custom block.
+# Once init, start the RPC (geth + node), it will take some time before it starts
+# syncing new blocks from sequencer.
+docker run --rm \
+  -v "$(pwd):/app" \
+  -v "$(pwd)/data/op-geth-rpc:/datadir" \
+  op-geth:v1.101511.0-patch \
+  geth \
+  --datadir "/datadir" \
+  --gcmode=archive \
+  --db.engine=pebble \
+  --log.format json \
+  init \
+  --state.scheme=hash \
+  /app/merged.genesis.json 2>&1 | tee init.log
+
+
+# All configs (including .env, op-geth-data, cannon-data) should be copied to this location.
+cd /mnt/ramdisk_op/test-pp-op
+
+# start OP services
+./6-start-op.sh # docker compose + .env
+./7-setup-fraud-proof.sh # needs cast, docker compose
 ```
 
 ## Troubleshooting
