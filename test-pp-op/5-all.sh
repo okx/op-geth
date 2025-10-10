@@ -65,6 +65,12 @@ while [[ $# -gt 0 ]]; do
 			exit 0
       ;;
 
+    --clean)
+			echo "Removing container: $CONTAINER_ID"
+			docker stop $CONTAINER_ID | xargs docker rm
+			exit 0
+      ;;
+
     -h|--help)
       echo "Usage: $0 [OPTIONS]"
       echo "Options:"
