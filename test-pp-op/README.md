@@ -18,6 +18,7 @@ docker build \
 docker run \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "$(pwd):/app/op-geth/test-pp-op" \
+  -v "$(pwd)/data/op-geth-seq:/app/op-geth/test-pp-op/data/op-geth-seq" \
   -v "$(pwd)/data/cannon-data:/app/op-program/bin" \
   -e DOCKER_HOST=unix:///var/run/docker.sock \
   -d op-migrate:latest sleep infinity
@@ -114,41 +115,14 @@ docker load < [filename].tar.gz
 docker tag golang:1.23.8-alpine3.21-builder golang:1.23.8-alpine3.21
 docker tag golang:1.24.2-alpine3.21-builder golang:1.24.2-alpine3.21
 
-# config files (eg. .env) are inside container
-docker run \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v /data/erigon-data:/data/erigon-data \
-  -v /mnt/ramdisk_op:/mnt/ramdisk_op \
-  -v /mnt/ramdisk_op/test-pp-op/data/op-geth-data:/app/op-geth/test-pp-op/data/op-geth-seq \
-  -v /mnt/ramdisk_op/test-pp-op/data/cannon-data:/app/op-program/bin \
-  -e DOCKER_HOST=unix:///var/run/docker.sock \
-  -d op-migrate:amd64 sleep infinity
 
-# ssh into container.
-docker exec -it ${CONTAINER_ID} /bin/bash
-
-# INSIDE CONTAINER 
+# START REGENESIS (ECS host machine)
 # ----------------------------------------------------------------------------
+docker run op-migrate:amd64 cp -rfv /app/op-geth/test-pp-op/* /app/op-geth/test-pp-op/.* /mnt/ramdisk_op/test-pp-op
 
-cd /app/op-geth/test-pp-op
+# Execute all stage 5 in one step.
+./5-all.sh
 
-./5-1-migrate-prepare.sh
-./5-2-migrate-op.sh
-gzip -c merged.genesis.json > config-op/merged.genesis.gz.json
-cp config-op/rollup.json /app/op-program/chainconfig/configs/196-rollup.json
-cp config-op/merged.genesis.gz.json /app/op-program/chainconfig/configs/196-genesis-l2.json
-# Overwrite Dockerfile.repro in OP repo using dockerfile/Dockerfile.repro
-cp dockerfile/Dockerfile.repro /app/op-program/Dockerfile.repro
-cd /app
-make reproducible-prestate
-
-cp -rfv /app/op-geth/test-pp-op/* /app/op-geth/test-pp-op/.* /mnt/ramdisk_op/test-pp-op
-
-# Leave the container
-exit
-
-# OUTSIDE CONTAINER 
-# ----------------------------------------------------------------------------
 # RPC (init) since we couldn't start RPC with custom block.
 # Once init, start the RPC (geth + node), it will take some time before it starts
 # syncing new blocks from sequencer.
@@ -164,7 +138,6 @@ docker run --rm \
   init \
   --state.scheme=hash \
   /app/merged.genesis.json 2>&1 | tee init.log
-
 
 # All configs (including .env, op-geth-data, cannon-data) should be copied to this location.
 cd /mnt/ramdisk_op/test-pp-op
