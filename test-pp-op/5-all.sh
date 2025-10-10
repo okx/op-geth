@@ -48,9 +48,8 @@ while [[ $# -gt 0 ]]; do
 			fi
       shift 2
       ;;
-    --ssh)
-			echo "ssh"
 
+    --ssh)
 			if [ "$ENV" = "local" ];then
 				echo "ssh local"
 				start_local_container
@@ -65,6 +64,7 @@ while [[ $# -gt 0 ]]; do
 			fi
 			exit 0
       ;;
+
     -h|--help)
       echo "Usage: $0 [OPTIONS]"
       echo "Options:"
@@ -73,6 +73,7 @@ while [[ $# -gt 0 ]]; do
       echo "  -h, --help    Show this help message"
       exit 0
       ;;
+
     *)
       echo "Unknown option: $1"
       echo "Use --help for usage information"
@@ -91,6 +92,7 @@ prompt_before_continue() {
 }
 
 echo "STAGE = $STAGE"
+
 if [ "$ENV" = "local" ];then
 
 	start_local_container
