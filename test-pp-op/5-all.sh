@@ -76,6 +76,7 @@ while [[ $# -gt 0 ]]; do
       echo "Options:"
       echo "  --stage       Select stage to start from (1,2, or 3)."
       echo "  --ssh         SSH into existing container. Otherwise create new container and SSH into it." 
+      echo "  --clean       Stop and remove the migrate container."
       echo "  -h, --help    Show this help message"
       exit 0
       ;;
