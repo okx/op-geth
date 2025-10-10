@@ -14,6 +14,7 @@ set -x
 # OPTIONS:
 #   --op-geth     Build op-geth image only
 #   --op-stack    Build op-stack images only (contracts + opstack)
+#   --op-contract    Build op-contracts images only
 #   --bridge      Build bridge service image only
 #   --aggkit      Build aggkit image only
 #   --all         Build all images (default if no options specified)
@@ -40,6 +41,7 @@ set -x
 source .env
 
 # Default values
+ARCH=linux/arm64
 BUILD_CDK_ERIGON=false
 BUILD_OP_GETH=false
 BUILD_OP_STACK=false
@@ -83,6 +85,11 @@ while [[ $# -gt 0 ]]; do
     --force)
       FORCE=true
       shift
+      ;;
+    --arch)
+			echo "ARCH: $2"
+			ARCH="$2"
+      shift 2
       ;;
     -h|--help)
       echo "Usage: $0 [OPTIONS]"
@@ -136,7 +143,7 @@ build_patched_zkevm_bridge_service_image() {
   git apply $PWD_DIR/patch/xlayer-bridge-service-0002-skip-reorg-check-after-regenesis.patch
   git apply $PWD_DIR/patch/xlayer-bridge-service-0003-skip-syncing-blocks-before-regenesis.patch
 
-  docker build -t $XLAYER_BRIDGE_SERVICE_IMAGE_TAG .
+  docker build --platform $ARCH -t $XLAYER_BRIDGE_SERVICE_IMAGE_TAG .
   cd $PWD_DIR
 }
 
@@ -167,7 +174,7 @@ build_cdk_erigon_image() {
   git clone -b dev https://github.com/okx/xlayer-erigon.git
   cd ./xlayer-erigon
   git reset --hard; git checkout dev;git pull
-  docker build -t ${CDK_ERIGON_IMAGE_TAG} -f ./Dockerfile.local .
+  docker build --platform $ARCH -t ${CDK_ERIGON_IMAGE_TAG} -f ./Dockerfile.local .
   cd $PWD_DIR
 }
 
@@ -192,7 +199,7 @@ build_op_stack_contract() {
     cp $PWD_DIR/contracts/Transactor.sol optimism/packages/contracts-bedrock/src/periphery/Transactor.sol
 
     cd optimism
-    docker build -t $OP_CONTRACTS_IMAGE_TAG -f Dockerfile-contracts .
+    docker build --platform $ARCH -t $OP_CONTRACTS_IMAGE_TAG -f Dockerfile-contracts .
 
     cd $PWD_DIR
 
@@ -208,7 +215,7 @@ build_op_stack_image() {
   git clone --recurse-submodules -b dev https://github.com/okx/optimism.git
 
   cd optimism
-  docker build -t $OP_STACK_IMAGE_TAG -f Dockerfile-opstack .
+  docker build --platform $ARCH -t $OP_STACK_IMAGE_TAG -f Dockerfile-opstack .
 
   cd $PWD_DIR
 }
@@ -229,7 +236,7 @@ build_op_geth_image() {
   fi
 
   cd "$PWD_DIR/tmp/op-geth"
-  docker build -t $OP_GETH_IMAGE_TAG .
+  docker build --platform $ARCH -t $OP_GETH_IMAGE_TAG .
   cd $PWD_DIR
 }
 
