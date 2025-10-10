@@ -7,7 +7,7 @@ source tools.sh
 
 if [ "$ENV" = "testnet" ];then
 	shopt -s expand_aliases
-	alias cast='docker run --network host op-migrate:amd64 cast'
+	alias cast='docker run --rm --network host op-migrate:amd64 cast'
 fi
 
 PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
