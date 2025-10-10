@@ -4,6 +4,14 @@ source .env
 source utils.sh
 source tools.sh
 
+if [ "$ENV" = "testnet" ];then
+  L1_RPC_URL="https://fullnode-inner.okg.com/sepolia/fork/okbc/rpc"
+  L1_BEACON_URL_IN_DOCKER="https://fullnode-inner.okg.com/ethsepoliabeacon/native/layer1/rpc"
+  sed_inplace "s|L1_RPC_URL=.*|L1_RPC_URL=$L1_RPC_URL|" .env
+  sed_inplace "s|L1_RPC_URL_IN_DOCKER=.*|L1_RPC_URL_IN_DOCKER=$L1_RPC_URL|" .env
+  sed_inplace "s|L1_BEACON_URL_IN_DOCKER=.*|L1_BEACON_URL_IN_DOCKER=$L1_BEACON_URL_IN_DOCKER|" .env
+fi
+
 ## run op-geth-seq op-seq op-batcher
 ${DOCKER_COMPOSE_CMD} up -d op-batcher
 
