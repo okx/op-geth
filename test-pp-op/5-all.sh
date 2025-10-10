@@ -148,8 +148,8 @@ if [ "$ENV" = "testnet" ];then
 		docker exec $CONTAINER_ID bash -c "
 			cd /app/op-geth/test-pp-op
 			./5-2-migrate-op.sh
-			gzip -c merged.genesis.json > config-op/merged.genesis.gz.json                              
 			echo 'Compressing merged.genesis.json...'
+			gzip -c merged.genesis.json > config-op/merged.genesis.gz.json                              
 			cp config-op/rollup.json /app/op-program/chainconfig/configs/196-rollup.json                
 			cp config-op/merged.genesis.gz.json /app/op-program/chainconfig/configs/196-genesis-l2.json 
 			cp dockerfile/Dockerfile.repro /app/op-program/Dockerfile.repro                             
