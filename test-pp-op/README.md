@@ -120,6 +120,9 @@ docker tag golang:1.24.2-alpine3.21-builder golang:1.24.2-alpine3.21
 # ----------------------------------------------------------------------------
 docker run op-migrate:amd64 cp -rfv /app/op-geth/test-pp-op/* /app/op-geth/test-pp-op/.* /mnt/ramdisk_op/test-pp-op
 
+# All configs (including .env, op-geth-data, cannon-data) should be copied to this location.
+cd /mnt/ramdisk_op/test-pp-op
+
 # Execute all stage 5 in one step.
 ./5-all.sh
 
@@ -138,9 +141,6 @@ docker run --rm \
   init \
   --state.scheme=hash \
   /app/merged.genesis.json 2>&1 | tee init.log
-
-# All configs (including .env, op-geth-data, cannon-data) should be copied to this location.
-cd /mnt/ramdisk_op/test-pp-op
 
 # start OP services
 ./6-start-op.sh # docker compose + .env
