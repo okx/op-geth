@@ -8,8 +8,6 @@ WORKDIR /app
 
 # Copy go mod files first for dependency resolution
 COPY go.mod go.sum ./
-COPY erigon-lib/go.mod erigon-lib/go.mod
-COPY erigon-lib/go.sum erigon-lib/go.sum
 
 # Download dependencies
 RUN go mod download
@@ -17,8 +15,8 @@ RUN go mod download
 # Copy the entire project
 COPY . .
 
-# Build the client with CGO enabled (needed for erigon dependencies)
-WORKDIR /app/zk/realtime/relayer/cmd/test-client
+# Build the client with CGO enabled
+WORKDIR /app/realtime/relayer/cmd/test-client
 RUN --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/tmp/go-build \
     --mount=type=cache,target=/go/pkg/mod \
