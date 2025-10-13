@@ -618,7 +618,9 @@ services:
       - --rpc.addr=0.0.0.0
       - --rpc.port=8548
       - --rpc.enable-admin
-      - --max-channel-duration=25
+      - --max-channel-duration=150
+      - --batch-type=1
+      - --data-availability-type=auto
       - --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER}
       - --private-key=${OP_BATCHER_PRIVATE_KEY}
     depends_on:
@@ -636,11 +638,10 @@ services:
       - --rpc.port=8560
       - --rollup-rpc=http://op-seq:9545
       - --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
-      - --proposal-interval=1m
+      - --proposal-interval=5m
       - --private-key=${OP_PROPOSER_PRIVATE_KEY}
       - --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER}
       - --game-type=${GAME_TYPE}
-      - --allow-non-finalized
       - --genesis-height=${FORK_BLOCK}
     depends_on:
       - op-batcher

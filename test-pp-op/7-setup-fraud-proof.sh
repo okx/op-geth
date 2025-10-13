@@ -317,14 +317,14 @@ wait_op_proposer_create_game
 echo "⏰ Sleeping for ($TEMP_MAX_CLOCK_DURATION seconds)..."
 sleep $TEMP_MAX_CLOCK_DURATION
 
-fetch_and_set_latest_game_address
-resolve_claim
-resolve_game
+#fetch_and_set_latest_game_address
+#resolve_claim
+#resolve_game
 
-sleep $DISPUTE_GAME_FINALITY_DELAY_SECONDS
-claim_credit
+#sleep $DISPUTE_GAME_FINALITY_DELAY_SECONDS
+#claim_credit
 
-set_game_type_permissionless
+#set_game_type_permissionless
 
-sleep $TEMP_GAME_WINDOW
+#sleep $TEMP_GAME_WINDOW
 ${DOCKER_COMPOSE_CMD} up -d op-proposer op-challenger op-dispute-mon
