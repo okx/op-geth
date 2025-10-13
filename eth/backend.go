@@ -20,6 +20,7 @@ package eth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"runtime"
@@ -406,8 +407,19 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, config.GPO, config.Miner.GasPrice)
 
-	// Set up migration configuration if configured
-	if config.XLayer.LegacyPp.MigrationBlock != nil && config.XLayer.LegacyPp.PPRPCUrl != "" {
+	// For XLayer: Set up migration configuration if configured
+	if config.XLayer.LegacyPp.PPRPCUrl != "" {
+		if chainConfig.LegacyXLayerBlock != nil {
+			// if the legacy xlayer block is set, use the block as migration block
+			log.Info("LegacyXLayerBlock detected, use the block as migration block", "legacyBlock", chainConfig.LegacyXLayerBlock.Uint64())
+			migrationBlock := chainConfig.LegacyXLayerBlock.Uint64()
+			config.XLayer.LegacyPp.MigrationBlock = &migrationBlock
+		}
+		// if we can't retrieve the migration block from either the chain config or the config, return an error
+		if config.XLayer.LegacyPp.MigrationBlock == nil || *config.XLayer.LegacyPp.MigrationBlock == 0 {
+			return nil, errors.New("migration block not set")
+		}
+		log.Info("Migration block set to", "migrationBlock", *config.XLayer.LegacyPp.MigrationBlock)
 		migrationConfig, err := NewXlayerLegacyRPCService(config)
 		if err != nil {
 			log.Error("Failed to create migration configuration", "error", err)

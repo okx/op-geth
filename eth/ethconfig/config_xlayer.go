@@ -9,6 +9,7 @@ import (
 // XLayerConfig is the X Layer config used on the eth backend
 type XLayerConfig struct {
 	OkPay    OkPayConfig     `toml:",omitempty"`
+	Apollo   ApolloConfig    `toml:",omitempty"`
 	LegacyPp MigrationConfig `toml:",omitempty"` // The erigon RPC endpoint URL for pre-migration blocks
 }
 
@@ -24,4 +25,17 @@ type OkPayConfig struct {
 	SenderAccountsList []common.Address
 	// BlockPriorityTxsLimit is the max number of OkX Pay txs that we will prioritize per block
 	BlockPriorityTxsLimit uint64
+}
+
+type ApolloConfig struct {
+	// Enable Apollo service
+	Enable bool `toml:",omitempty"`
+	// Apollo app ID
+	AppID string `toml:",omitempty"`
+	// Apollo server endpoint
+	IP string `toml:",omitempty"`
+	// Apollo cluster name
+	Cluster string `toml:",omitempty"`
+	// Apollo namespace
+	NamespaceName string `toml:",omitempty"`
 }

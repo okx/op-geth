@@ -43,7 +43,7 @@ func (m *mockXLayerGpricer) GetLastRawGP() *big.Int {
 
 func (m *mockXLayerGpricer) GetConfig() gasprice.Config {
 	return gasprice.Config{
-		XLayer: gasprice.XLayerConfig{
+		XLayer: gasprice.XLayerGasPriceConfig{
 			Default: m.minGasPrice,
 		},
 	}
@@ -81,7 +81,7 @@ func TestNewXLayerFilter(t *testing.T) {
 		{
 			name: "With default XLayer price",
 			config: gasprice.Config{
-				XLayer: gasprice.XLayerConfig{
+				XLayer: gasprice.XLayerGasPriceConfig{
 					Default: big.NewInt(10 * params.GWei),
 				},
 			},
@@ -90,7 +90,7 @@ func TestNewXLayerFilter(t *testing.T) {
 		{
 			name: "With zero XLayer price",
 			config: gasprice.Config{
-				XLayer: gasprice.XLayerConfig{
+				XLayer: gasprice.XLayerGasPriceConfig{
 					Default: big.NewInt(0),
 				},
 			},
@@ -99,7 +99,7 @@ func TestNewXLayerFilter(t *testing.T) {
 		{
 			name: "With nil XLayer price",
 			config: gasprice.Config{
-				XLayer: gasprice.XLayerConfig{
+				XLayer: gasprice.XLayerGasPriceConfig{
 					Default: nil,
 				},
 			},
@@ -128,7 +128,7 @@ func TestNewXLayerFilter(t *testing.T) {
 
 func TestXLayerFilterFilterTx_NoXLayerConfig(t *testing.T) {
 	config := gasprice.Config{
-		XLayer: gasprice.XLayerConfig{
+		XLayer: gasprice.XLayerGasPriceConfig{
 			Type: "", // No XLayer type configured
 		},
 	}
@@ -159,8 +159,8 @@ func TestXLayerFilterFilterTx_NoXLayerConfig(t *testing.T) {
 
 func TestXLayerFilterFilterTx_LegacyTx(t *testing.T) {
 	config := gasprice.Config{
-		XLayer: gasprice.XLayerConfig{
-			Type:    gasprice.DefaultType,
+		XLayer: gasprice.XLayerGasPriceConfig{
+			Type:    gasprice.GasPriceDefaultType,
 			Default: big.NewInt(10 * params.GWei),
 		},
 	}
@@ -215,8 +215,8 @@ func TestXLayerFilterFilterTx_LegacyTx(t *testing.T) {
 
 func TestXLayerFilterFilterTx_EIP1559(t *testing.T) {
 	config := gasprice.Config{
-		XLayer: gasprice.XLayerConfig{
-			Type:    gasprice.DefaultType,
+		XLayer: gasprice.XLayerGasPriceConfig{
+			Type:    gasprice.GasPriceDefaultType,
 			Default: big.NewInt(10 * params.GWei),
 		},
 	}
@@ -280,8 +280,8 @@ func TestXLayerFilterFilterTx_EIP1559(t *testing.T) {
 
 func TestXLayerFilterFilterTx_NilMinPrice(t *testing.T) {
 	config := gasprice.Config{
-		XLayer: gasprice.XLayerConfig{
-			Type:    gasprice.DefaultType,
+		XLayer: gasprice.XLayerGasPriceConfig{
+			Type:    gasprice.GasPriceDefaultType,
 			Default: big.NewInt(10 * params.GWei),
 		},
 	}
@@ -311,8 +311,8 @@ func TestXLayerFilterFilterTx_NilMinPrice(t *testing.T) {
 
 func TestXLayerFilterUpdateConfig(t *testing.T) {
 	initialConfig := gasprice.Config{
-		XLayer: gasprice.XLayerConfig{
-			Type:    gasprice.DefaultType,
+		XLayer: gasprice.XLayerGasPriceConfig{
+			Type:    gasprice.GasPriceDefaultType,
 			Default: big.NewInt(10 * params.GWei),
 		},
 	}
@@ -332,8 +332,8 @@ func TestXLayerFilterUpdateConfig(t *testing.T) {
 		{
 			name: "Update to higher price",
 			newConfig: gasprice.Config{
-				XLayer: gasprice.XLayerConfig{
-					Type:    gasprice.DefaultType,
+				XLayer: gasprice.XLayerGasPriceConfig{
+					Type:    gasprice.GasPriceDefaultType,
 					Default: big.NewInt(20 * params.GWei),
 				},
 			},
@@ -342,8 +342,8 @@ func TestXLayerFilterUpdateConfig(t *testing.T) {
 		{
 			name: "Update to zero price",
 			newConfig: gasprice.Config{
-				XLayer: gasprice.XLayerConfig{
-					Type:    gasprice.DefaultType,
+				XLayer: gasprice.XLayerGasPriceConfig{
+					Type:    gasprice.GasPriceDefaultType,
 					Default: big.NewInt(0),
 				},
 			},
@@ -352,8 +352,8 @@ func TestXLayerFilterUpdateConfig(t *testing.T) {
 		{
 			name: "Update with nil price",
 			newConfig: gasprice.Config{
-				XLayer: gasprice.XLayerConfig{
-					Type:    gasprice.DefaultType,
+				XLayer: gasprice.XLayerGasPriceConfig{
+					Type:    gasprice.GasPriceDefaultType,
 					Default: nil,
 				},
 			},
@@ -373,8 +373,8 @@ func TestXLayerFilterUpdateConfig(t *testing.T) {
 
 func TestXLayerFilterFilterTx_EIP1559_And_UpdatePrice(t *testing.T) {
 	config := gasprice.Config{
-		XLayer: gasprice.XLayerConfig{
-			Type:    gasprice.DefaultType,
+		XLayer: gasprice.XLayerGasPriceConfig{
+			Type:    gasprice.GasPriceDefaultType,
 			Default: big.NewInt(10 * params.GWei),
 		},
 	}
