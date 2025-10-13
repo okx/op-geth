@@ -231,7 +231,7 @@ build_op_geth_image() {
     mkdir -p $PWD_DIR/tmp
     cd $PWD_DIR/tmp/
     echo "Cloning op-geth repository..."
-    git clone --recurse-submodules -b dev https://github.com/okx/op-geth.git
+    git clone --recurse-submodules -b sync/optimism https://github.com/okx/op-geth.git
     cd $PWD_DIR
   fi
 
