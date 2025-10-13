@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
@@ -17,13 +17,16 @@ import (
 // execution logic. The highest block number in the block state cache holds the latest
 // confirmed realtime state.
 type StateCache struct {
-	cacheLock    sync.RWMutex
+	blockchain   *core.BlockChain
 	globalHeight uint64
-	blocksCache  map[uint64]*BlockStateCache
+
+	cacheLock   sync.RWMutex
+	blocksCache map[uint64]*BlockStateCache
 }
 
-func NewStateCache(blocksCacheSize int) *StateCache {
+func NewStateCache(blockchain *core.BlockChain, blocksCacheSize int) *StateCache {
 	return &StateCache{
+		blockchain:   blockchain,
 		globalHeight: 0,
 		blocksCache:  make(map[uint64]*BlockStateCache, blocksCacheSize),
 	}
@@ -124,9 +127,34 @@ func (cache *StateCache) FlushBlock(blockNum uint64) error {
 	return nil
 }
 
+// -------------- Retrieve state readers utiliy operations --------------
+func (cache *StateCache) GetDbStateReader(height uint64) (state.Reader, error) {
+	prevRoot := cache.blockchain.GetHeaderByNumber(height).Root
+	reader, err := cache.blockchain.StateCache().Reader(prevRoot)
+	if err != nil {
+		return nil, err
+	}
+	return reader, nil
+}
+
+func (cache *StateCache) GetConfirmBlockStateReader(blockNum uint64) (state.Reader, error) {
+	cache.cacheLock.RLock()
+	defer cache.cacheLock.RUnlock()
+
+	if blockNum <= cache.globalHeight {
+		return cache.GetDbStateReader(blockNum)
+	} else {
+		bc, exists := cache.blocksCache[blockNum]
+		if !exists {
+			return nil, fmt.Errorf("block number %d not found in the state cache", blockNum)
+		}
+		return bc, nil
+	}
+}
+
 // -------------- Debug operations --------------
 func (cache *StateCache) DebugDumpToFile(cacheDumpPath string) error {
-	flatten, err := cache.flattenState()
+	flatten, _, err := cache.flattenState()
 	if err != nil {
 		return err
 	}
@@ -164,17 +192,28 @@ func (cache *StateCache) DebugDumpToFile(cacheDumpPath string) error {
 
 // DebugCompare compares the state cache with the chain-state db, and returns the
 // list of account addresses that have differing states.
-func (cache *StateCache) DebugCompare(statedb vm.StateDB) ([]string, error) {
-	flatten, err := cache.flattenState()
+func (cache *StateCache) DebugCompare() ([]string, error) {
+	flatten, blockNum, err := cache.flattenState()
+	if err != nil {
+		return nil, err
+	}
+
+	reader, err := cache.GetDbStateReader(blockNum)
 	if err != nil {
 		return nil, err
 	}
 
 	mismatches := []string{}
 	for addr, accCache := range flatten.accountCache {
+		accDb, err := reader.Account(addr)
+		if err != nil {
+			mismatch := fmt.Sprintf("chain-state db reader error, failed to read account. address: %s, error: %v", addr.String(), err)
+			mismatches = append(mismatches, mismatch)
+			continue
+		}
+
 		if _, ok := flatten.deletedAccountsCache[addr]; ok {
-			accDbBalance := statedb.GetBalance(addr)
-			if accDbBalance.Cmp(common.U2560) != 0 {
+			if accDb != nil {
 				mismatch := fmt.Sprintf("delete account %s mismatch, cache deleted but account found in database", addr.String())
 				mismatches = append(mismatches, mismatch)
 			}
@@ -182,19 +221,21 @@ func (cache *StateCache) DebugCompare(statedb vm.StateDB) ([]string, error) {
 		}
 
 		// Not deleted account, check for state consistency
-		accDbNonce := statedb.GetNonce(addr)
-		if accCache.Nonce != accDbNonce {
-			mismatch := fmt.Sprintf("nonce mismatch, account %s, cache nonce: %d, db nonce: %d", addr.String(), accCache.Nonce, accDbNonce)
+		if accDb == nil {
+			mismatch := fmt.Sprintf("account %s not found in database", addr.String())
+			mismatches = append(mismatches, mismatch)
+			continue
+		}
+		if accCache.Nonce != accDb.Nonce {
+			mismatch := fmt.Sprintf("nonce mismatch, account %s, cache nonce: %d, db nonce: %d", addr.String(), accCache.Nonce, accDb.Nonce)
 			mismatches = append(mismatches, mismatch)
 		}
-		accDbBalance := statedb.GetBalance(addr)
-		if accCache.Balance.Cmp(accDbBalance) != 0 {
-			mismatch := fmt.Sprintf("balance mismatch, account %s, cache balance: %d, db balance: %d", addr.String(), accCache.Balance.ToBig(), accDbBalance.ToBig())
+		if accCache.Balance.Cmp(accDb.Balance) != 0 {
+			mismatch := fmt.Sprintf("balance mismatch, account %s, cache balance: %d, db balance: %d", addr.String(), accCache.Balance.ToBig(), accDb.Balance.ToBig())
 			mismatches = append(mismatches, mismatch)
 		}
-		accDbCodeHash := statedb.GetCodeHash(addr)
-		if !bytes.Equal(accCache.CodeHash, accDbCodeHash[:]) {
-			mismatch := fmt.Sprintf("codehash mismatch, account %s, cache codehash: %s, db codehash: %s", addr.String(), hex.EncodeToString(accCache.CodeHash), accDbCodeHash.String())
+		if !bytes.Equal(accCache.CodeHash, accDb.CodeHash[:]) {
+			mismatch := fmt.Sprintf("codehash mismatch, account %s, cache codehash: %s, db codehash: %s", addr.String(), hex.EncodeToString(accCache.CodeHash), hex.EncodeToString(accDb.CodeHash[:]))
 			mismatches = append(mismatches, mismatch)
 		}
 	}
@@ -202,7 +243,7 @@ func (cache *StateCache) DebugCompare(statedb vm.StateDB) ([]string, error) {
 	return mismatches, nil
 }
 
-func (cache *StateCache) flattenState() (*plainStateCache, error) {
+func (cache *StateCache) flattenState() (*plainStateCache, uint64, error) {
 	cache.cacheLock.RLock()
 	defer cache.cacheLock.RUnlock()
 
@@ -217,5 +258,5 @@ func (cache *StateCache) flattenState() (*plainStateCache, error) {
 		blockNum++
 	}
 
-	return flatten, nil
+	return flatten, blockNum - 1, nil
 }

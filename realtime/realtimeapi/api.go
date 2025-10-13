@@ -71,10 +71,7 @@ func (api *RealtimeAPIImpl) getBlockNumber(blockNr rpc.BlockNumber) (uint64, boo
 	if err != nil {
 		return 0, false, false, err
 	}
-	pendingHeight, err := api.getPendingHeightFromCache()
-	if err != nil {
-		return 0, false, false, err
-	}
+	pendingHeight := api.cacheDB.GetNextPendingHeight()
 
 	switch blockNr {
 	case rpc.LatestBlockNumber:
@@ -97,14 +94,6 @@ func (api *RealtimeAPIImpl) getBlockNumber(blockNr rpc.BlockNumber) (uint64, boo
 	}
 }
 
-func (api *RealtimeAPIImpl) getPendingHeightFromCache() (uint64, error) {
-	pendingHeight := api.cacheDB.GetPendingHeight()
-	if pendingHeight == 0 {
-		return 0, fmt.Errorf("no pending block number found in realtime cache")
-	}
-	return pendingHeight, nil
-}
-
 func (api *RealtimeAPIImpl) getConfirmHeightFromCache() (uint64, error) {
 	confirmHeight := api.cacheDB.GetHighestConfirmHeight()
 	if confirmHeight == 0 {
@@ -120,14 +109,14 @@ func (api *RealtimeAPIImpl) createStateReader(blockNrOrHash rpc.BlockNumberOrHas
 	}
 
 	if isPending {
-		pendingReader, pendingHeight := api.cacheDB.GetPendingStateCache()
+		pendingReader, pendingHeight := api.cacheDB.GetPendingStateReader()
 		if pendingReader == nil {
 			// No pending block opened yet, use latest state cache
-			pendingReader, pendingHeight = api.cacheDB.GetLatestStateCache()
+			pendingReader, pendingHeight = api.cacheDB.GetLatestStateReader()
 		}
 		return pendingReader, pendingHeight, nil
 	} else {
-		reader := api.cacheDB.GetStateCacheByHeight(blockHeight)
+		reader := api.cacheDB.GetStateReaderByHeight(blockHeight)
 		if reader == nil {
 			return nil, 0, fmt.Errorf("state reader not found for block %d", blockHeight)
 		}

@@ -7,7 +7,6 @@ import (
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	realtimeCache "github.com/ethereum/go-ethereum/realtime/cache"
-	"github.com/ethereum/go-ethereum/rpc"
 )
 
 type RealtimeDebugApiImpl struct {
@@ -45,12 +44,7 @@ func (api *RealtimeDebugApiImpl) RealtimeCompareStateCache(ctx context.Context) 
 		return nil, ErrRealtimeNotEnabled
 	}
 
-	reader, _, err := api.b.StateAndHeaderByNumber(ctx, rpc.LatestBlockNumber)
-	if err != nil {
-		return nil, fmt.Errorf("compareStateCache cannot create latest state reader: %w", err)
-	}
-
-	mismatches, err := api.cacheDB.State.DebugCompare(reader)
+	mismatches, err := api.cacheDB.State.DebugCompare()
 	if err != nil {
 		return nil, fmt.Errorf("compareStateCache cannot compare state cache: %w", err)
 	}
