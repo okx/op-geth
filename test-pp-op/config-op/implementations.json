@@ -1,11 +1,11 @@
 {
-  "opcmAddress": "0xc6e4043583f83fc448ca9d6a3306897a2eb586a0",
+  "opcmAddress": "0x430e0007d1e62152ebec059ae8aba0e2e3af21d6",
   "opcmContractsContainerAddress": "0x20a82f12476d6e468a379ab8ee5e9b3fa1861505",
   "opcmGameTypeAdderAddress": "0x1bd8d15956a0087aad32d19c6881c586d790e83e",
   "opcmDeployerAddress": "0xb3c6db18c1c7223755601701c9d1d5ca760c14f8",
   "opcmUpgraderAddress": "0x4f1b05c739b606a7a7f43c8ae120dd2dbe61a04c",
   "opcmInteropMigratorAddress": "0xfd7bf0b226e011ef3b78676015c7e06aba90e7c8",
-  "opcmStandardValidatorAddress": "0xc28df07a2e4e26ef3d3c5ac53466237d6e427a12",
+  "opcmStandardValidatorAddress": "0x9a59ab3586fc5fe0867761aaaa33b91ad78060c4",
   "delayedWETHImplAddress": "0x7dff255a2448e7edfa1ac0ebd8df430b6044571d",
   "optimismPortalImplAddress": "0x5a28b3542b48ed5c228d50130b24b368d659b865",
   "optimismPortalInteropImplAddress": "0x305726f37d9300cc0d2895dea06474ea395f18f8",

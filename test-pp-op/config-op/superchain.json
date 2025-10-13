@@ -1,8 +1,8 @@
 {
   "protocolVersionsImplAddress": "0x1f734b89bb1b422b9910118fb8d44c06e33d4dda",
-  "protocolVersionsProxyAddress": "0xeda7ca6f3911843486864ab697496a1782ebc534",
+  "protocolVersionsProxyAddress": "0xa3b3b6a495eb05c7e4ee2e06a15b79357016c8d8",
   "superchainConfigImplAddress": "0xb08cc720f511062537ca78bdb0ae691f04f5a957",
-  "superchainConfigProxyAddress": "0x3dd23e966b3ff30a7259376917c3e4ac61c2276b",
-  "proxyAdminAddress": "0x940e1bb5b0df4506e1051af5bcb67ad13790e606"
+  "superchainConfigProxyAddress": "0x17c2066fd196399eccf1465fd5b36d2c7678e946",
+  "proxyAdminAddress": "0x5531022d035425258daae249c9dd9a11d8a433c2"
 }
 
