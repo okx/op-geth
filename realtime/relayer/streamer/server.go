@@ -3,7 +3,6 @@ package streamer
 import (
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -15,12 +14,10 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/realtime/kafka"
-	kafkaTypes "github.com/ethereum/go-ethereum/realtime/kafka/types"
-	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
 const (
-	MaxWSConnections = 100 // Maximum number of connected clients
+	MaxWSConnections = 50 // Maximum number of connected clients
 	TimeoutInterval  = 2 * time.Second
 )
 
@@ -328,37 +325,6 @@ func (server *StreamServer) getResetFlagMessage() []byte {
 
 func (server *StreamServer) fromKafkaMessage(kafkaMessage *sarama.ConsumerMessage) []byte {
 	typeFlag := server.typeFlagFromTopic(kafkaMessage.Topic)
-
-	if typeFlag == TopicBlock {
-		var blockMsg realtimeTypes.BlockInfo
-		if err := json.Unmarshal(kafkaMessage.Value, &blockMsg); err != nil {
-			log.Warn(fmt.Sprintf("[Realtime] consume error, unmarshaling block message. error: %v", err))
-		} else {
-			// Overwrite blockTime with current time
-			blockMsg.Header.Time = uint64(time.Now().Unix())
-			// Re-marshal the updated block message
-			if updatedValue, err := json.Marshal(blockMsg); err != nil {
-				log.Warn(fmt.Sprintf("[Realtime] consume error, marshaling updated block message. error: %v", err))
-			} else {
-				kafkaMessage.Value = updatedValue
-			}
-		}
-	} else if typeFlag == TopicTx {
-		var txMsg kafkaTypes.TransactionMessage
-		if err := json.Unmarshal(kafkaMessage.Value, &txMsg); err != nil {
-			log.Warn(fmt.Sprintf("[Realtime] consume error, unmarshaling transaction message. error: %v", err))
-		} else {
-			// Overwrite blockTime with current time
-			txMsg.BlockTime = uint64(time.Now().Unix())
-			// Re-marshal the updated block message
-			if updatedValue, err := json.Marshal(txMsg); err != nil {
-				log.Warn(fmt.Sprintf("[Realtime] consume error, marshaling updated block message. error: %v", err))
-			} else {
-				kafkaMessage.Value = updatedValue
-			}
-		}
-	}
-
 	value := kafkaMessage.Value
 
 	return serializeMessage(typeFlag, value)
