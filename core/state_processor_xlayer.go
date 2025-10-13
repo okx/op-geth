@@ -23,7 +23,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/internal/monitor"
 )
 
 // ApplyTransaction_XLayer is called on the miner that attempts to apply a transaction to
@@ -36,16 +35,10 @@ func ApplyTransaction_XLayer(evm *vm.EVM, gp *GasPool, statedb *state.StateDB, h
 		return nil, nil, nil, err
 	}
 	// Create a new context to be used in the EVM environment
-	return ApplyTransactionWithEVM_XLayer(msg, gp, statedb, header.Number, common.Hash{}, tx, usedGas, evm, shouldFinalize)
+	return ApplyTransactionWithEVM_XLayer(msg, gp, statedb, header.Number, common.Hash{}, header.Time, tx, usedGas, evm, shouldFinalize)
 }
 
-func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, shouldFinalize bool) (receipt *types.Receipt, innerTxs []*types.InnerTx, entries *state.Entries, err error) {
-	txHash := tx.Hash().Hex()
-
-	// For X Layer, log transaction application start
-	monitor.LogTransactionProgress(txHash, monitor.ServiceNameState, monitor.StepStateApplyTx.ID,
-		monitor.StepStateApplyTx.Key, blockNumber.Uint64(), int8(tx.Type()), "applying", 0)
-
+func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, blockTime uint64, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, shouldFinalize bool) (receipt *types.Receipt, innerTxs []*types.InnerTx, entries *state.Entries, err error) {
 	if hooks := evm.Config.Tracer; hooks != nil {
 		if hooks.OnTxStart != nil {
 			hooks.OnTxStart(evm.GetVMContext(), tx, msg.From)
@@ -78,20 +71,15 @@ func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.St
 
 	// Merge the tx-local access event into the "block-local" one, in order to collect
 	// all values, so that the witness can be built.
-	if statedb.GetTrie().IsVerkle() {
+	if statedb.Database().TrieDB().IsVerkle() {
 		statedb.AccessEvents().Merge(evm.AccessEvents)
 	}
 
-	// For X Layer, log receipt generation
-	monitor.LogTransactionProgress(txHash, monitor.ServiceNameState, monitor.StepStateGenerateReceipt.ID,
-		monitor.StepStateGenerateReceipt.Key, blockNumber.Uint64(), int8(tx.Type()), "generating_receipt", result.UsedGas)
-
-	// For X Layer
 	if evm.Config.EnableInnerTxs {
 		innerTxs = afterApplyTransaction(evm, result.Failed())
 	}
 
-	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce), innerTxs, &result.Entries, nil
+	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, blockTime, tx, *usedGas, root, evm.ChainConfig(), nonce), innerTxs, &result.Entries, nil
 }
 
 func afterApplyTransaction(env *vm.EVM, failed bool) []*types.InnerTx {
