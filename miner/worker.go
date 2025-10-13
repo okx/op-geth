@@ -194,7 +194,7 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 	for _, tx := range genParam.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
-		err = miner.commitTransaction(work, tx, params.realtimeEnabled)
+		err = miner.commitTransaction(work, tx, genParam.realtimeEnabled)
 		if err != nil {
 			return &newPayloadResult{err: fmt.Errorf("failed to force-include tx: %s type: %d sender: %s nonce: %d, err: %w", tx.Hash(), tx.Type(), from, tx.Nonce(), err)}
 		}
@@ -209,7 +209,7 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 			interrupt.Store(commitInterruptTimeout)
 		})
 
-		err := miner.fillTransactions(interrupt, work, nil, params.realtimeEnabled)
+		err := miner.fillTransactions(interrupt, work, nil, genParam.realtimeEnabled)
 		timer.Stop() // don't need timeout interruption any more
 		if errors.Is(err, errBlockInterruptedByTimeout) {
 			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(miner.config.Recommit))

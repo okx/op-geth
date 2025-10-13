@@ -60,7 +60,7 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 
 	work := payload.baseEnv.snapshot()
 	if witness {
-		work.state.StartPrefetcher("miner-incremental", work.witness)
+		work.state.StartPrefetcher("miner-incremental", work.witness, nil)
 		defer work.state.StopPrefetcher()
 	}
 	work.evm = vm.NewEVM(core.NewEVMBlockContext(work.header, miner.chain, &work.coinbase, miner.chainConfig, work.state), work.state, miner.chainConfig, vm.Config{EnableInnerTxs: miner.backend.RealtimeEnabled()})

@@ -38,7 +38,7 @@ func createInteropMiner(t *testing.T, supervisorInFailsafe bool, queryFailsafeCb
 	testBankKey, _ := crypto.GenerateKey()
 	testBankAddress := crypto.PubkeyToAddress(testBankKey.PublicKey)
 
-	genesis := minerTestGenesisBlock(15, 11_500_000, testBankAddress)
+	genesis := minerTestGenesisBlock(15, 11_500_000, testBankAddress, nil)
 
 	// Enable interop by setting InteropTime to 0
 	genesis.Config.InteropTime = new(uint64)
