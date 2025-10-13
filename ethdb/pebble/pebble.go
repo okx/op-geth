@@ -20,7 +20,6 @@ package pebble
 import (
 	"bytes"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -28,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -153,6 +153,7 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 		handles = minHandles
 	}
 	logger := log.New("database", file)
+	logger.Info("Allocated cache and file handles", "cache", common.StorageSize(cache*1024*1024), "handles", handles)
 
 	// The max memtable size is limited by the uint32 offsets stored in
 	// internal/arenaskl.node, DeferredBatchOp, and flushableBatchEntry.
@@ -208,8 +209,6 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 		// Here use all available CPUs for faster compaction.
 		MaxConcurrentCompactions: runtime.NumCPU,
 
-		//L0CompactionThreshold: 8,
-
 		// Per-level options. Options for at least one level must be specified. The
 		// options for the last level are used for all subsequent levels.
 		Levels: []pebble.LevelOptions{
@@ -233,8 +232,6 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 	// Disable seek compaction explicitly. Check https://github.com/ethereum/go-ethereum/pull/20130
 	// for more details.
 	opt.Experimental.ReadSamplingMultiplier = -1
-
-	logger.Info("Allocated cache and file handles", "cache", common.StorageSize(cache*1024*1024), "handles", handles, "L0CompactionThreshold", opt.L0CompactionThreshold)
 
 	// Open the db and recover any potential corruptions
 	innerDB, err := pebble.Open(file, opt)
