@@ -155,8 +155,8 @@ var (
 		Value: "",
 	}
 	RealtimeSubscribeWebsocket = &cli.BoolFlag{
-		Name:  "realtime.subscribe-wesocket",
-		Usage: "Subscribe wesocket",
+		Name:  "realtime.subscribe-websocket",
+		Usage: "Subscribe websocket",
 		Value: false,
 	}
 	RealtimeStreamerUrl = &cli.StringFlag{
@@ -169,10 +169,15 @@ var (
 		Usage: "Streamer use tls",
 		Value: false,
 	}
-	RealtimeStreamerTimeout = &cli.DurationFlag{
-		Name:  "realtime.streamer-timeout",
+	RealtimeStreamerWriteTimeout = &cli.DurationFlag{
+		Name:  "realtime.streamer-write-timeout",
 		Usage: "Streamer timeout",
-		Value: 200 * time.Second,
+		Value: 30 * time.Second,
+	}
+	RealtimeStreamerReadTimeout = &cli.DurationFlag{
+		Name:  "realtime.streamer-read-timeout",
+		Usage: "Streamer timeout",
+		Value: 300 * time.Second,
 	}
 	RealtimeCacheDumpPath = &cli.StringFlag{
 		Name:  "realtime.cache-dump-path",
@@ -312,7 +317,8 @@ var (
 		RealtimeSubscribeWebsocket,
 		RealtimeStreamerUrl,
 		RealtimeStreamerUseTLS,
-		RealtimeStreamerTimeout,
+		RealtimeStreamerWriteTimeout,
+		RealtimeStreamerReadTimeout,
 		RealtimeCacheDumpPath,
 		ApolloEnabledFlag,
 		ApolloAppIDFlag,
@@ -498,8 +504,11 @@ func setRealtimeXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.IsSet(RealtimeStreamerUseTLS.Name) {
 		cfg.XLayer.Realtime.WSConn.RealtimeStreamerUseTLS = ctx.Bool(RealtimeStreamerUseTLS.Name)
 	}
-	if ctx.IsSet(RealtimeStreamerTimeout.Name) {
-		cfg.XLayer.Realtime.WSConn.RealtimeStreamerTimeout = ctx.Duration(RealtimeStreamerTimeout.Name)
+	if ctx.IsSet(RealtimeStreamerWriteTimeout.Name) {
+		cfg.XLayer.Realtime.WSConn.RealtimeStreamerWriteTimeout = ctx.Duration(RealtimeStreamerWriteTimeout.Name)
+	}
+	if ctx.IsSet(RealtimeStreamerReadTimeout.Name) {
+		cfg.XLayer.Realtime.WSConn.RealtimeStreamerReadTimeout = ctx.Duration(RealtimeStreamerReadTimeout.Name)
 	}
 
 }

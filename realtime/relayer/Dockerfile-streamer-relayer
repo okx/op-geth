@@ -1,0 +1,42 @@
+# syntax = docker/dockerfile:1.2
+FROM golang:1.24-alpine3.21 AS builder
+
+# Install build dependencies including C libraries for CGO
+RUN apk add --no-cache git build-base gcc musl-dev
+
+WORKDIR /app
+
+# Copy go mod files first for dependency resolution
+COPY go.mod go.sum ./
+COPY erigon-lib/go.mod erigon-lib/go.mod
+COPY erigon-lib/go.sum erigon-lib/go.sum
+
+# Download dependencies
+RUN go mod download
+
+# Copy the entire project
+COPY . .
+
+# Build the relayer with CGO enabled (needed for erigon dependencies)
+WORKDIR /app/zk/realtime/relayer/cmd/server
+RUN --mount=type=cache,target=/root/.cache \
+    --mount=type=cache,target=/tmp/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /app/relayer .
+
+# --- RUNTIME ---
+FROM alpine:3.18
+# Install runtime dependencies for CGO binary
+RUN apk add --no-cache ca-certificates tzdata libstdc++
+WORKDIR /home/relayer
+
+# Copy binary as root, set perms, then drop privileges
+COPY --from=builder /app/relayer /home/relayer/relayer
+RUN chmod +x /home/relayer/relayer \
+ && addgroup -g 1000 relayer \
+ && adduser -D -H -u 1000 -G relayer relayer \
+ && chown relayer:relayer /home/relayer/relayer
+
+USER relayer
+EXPOSE 8000
+CMD ["/home/relayer/relayer", "-port=8000", "-kafka=kafka:9095"]

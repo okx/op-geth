@@ -1,0 +1,44 @@
+# syntax = docker/dockerfile:1.2
+FROM golang:1.24-alpine3.21 AS builder
+
+# Install build dependencies including C libraries for CGO
+RUN apk add --no-cache git build-base gcc musl-dev
+
+WORKDIR /app
+
+# Copy go mod files first for dependency resolution
+COPY go.mod go.sum ./
+COPY erigon-lib/go.mod erigon-lib/go.mod
+COPY erigon-lib/go.sum erigon-lib/go.sum
+
+# Download dependencies
+RUN go mod download
+
+# Copy the entire project
+COPY . .
+
+# Build the client with CGO enabled (needed for erigon dependencies)
+WORKDIR /app/zk/realtime/relayer/cmd/test-client
+RUN --mount=type=cache,target=/root/.cache \
+    --mount=type=cache,target=/tmp/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /app/test-client .
+
+# --- RUNTIME ---
+FROM alpine:3.18
+# Install runtime dependencies for CGO binary
+RUN apk add --no-cache ca-certificates tzdata libstdc++
+
+WORKDIR /home/client
+
+# Copy binary as root, set perms, then drop privileges
+COPY --from=builder /app/test-client /home/client/client
+RUN chmod +x /home/client/client \
+ && addgroup -g 1000 client \
+ && adduser -D -H -u 1000 -G client client \
+ && chown client:client /home/client/client
+
+USER client
+
+# Default command
+CMD ["/home/client/client", "-relayer-url=xlayer-relayer-server:8000"]
