@@ -542,6 +542,8 @@ services:
       - --gcmode=archive
       # - --rollup.sequencerhttp=http://op-geth-seq:8545
       - --rollup.enabletxpooladmission
+      - --migration-block=${FORK_BLOCK}
+      - --pp-rpc-url=${PP_RPC_URL}
 
   op-seq:
     image: "${OP_STACK_IMAGE_TAG}"
