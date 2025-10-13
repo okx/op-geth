@@ -9,7 +9,6 @@ import (
 	"math/big"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -44,9 +43,9 @@ func TestPrecompile(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, txReceipt, "tx receipt not found")
 	require.Equal(t, uint64(1), txReceipt.Status, "tx should be successful")
+	WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
 
 	// // Compare state cache. Precompile should be found in state cache
-	time.Sleep(2 * time.Second)
 	mismatches, err := client.RealtimeCompareStateCache(ctx)
 	require.NoError(t, err)
 	if len(mismatches) != 0 {
@@ -124,7 +123,9 @@ func TestTransferToPrecompileAddress(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, balanceBefore, balance, "realtime balance should have incremented")
 
-	time.Sleep(2 * time.Second)
+	WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
+	WaitEthTxToBeMined(ctx, nonRealtimeRPCClient, signedTx, DefaultTimeoutTxToBeMined)
+
 	// Check to ensure non-realtime balance of precompile address is 1gwei
 	nonRTBalance, err := nonRealtimeRPCClient.BalanceAt(ctx, testAddress, nil)
 	require.NoError(t, err)

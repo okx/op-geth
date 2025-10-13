@@ -53,6 +53,30 @@ func WaitTxToBeMined(parentCtx context.Context, client *rtclient.RealtimeClient,
 	return nil
 }
 
+// WaitEthTxToBeMined waits until a tx has been mined or the given timeout expires.
+func WaitEthTxToBeMined(parentCtx context.Context, client ethClienter, tx *types.Transaction, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(parentCtx, timeout)
+	defer cancel()
+	receipt, err := WaitMined(ctx, client, tx.Hash())
+	if errors.Is(err, context.DeadlineExceeded) {
+		return err
+	} else if err != nil {
+		fmt.Printf("error waiting tx %s to be mined: %v\n", tx.Hash(), err)
+		return err
+	}
+	if receipt.Status == types.ReceiptStatusFailed {
+		// Get revert reason
+		reason, reasonErr := RevertReason(ctx, client, tx, receipt.BlockNumber)
+		if reasonErr != nil {
+			reason = reasonErr.Error()
+		}
+		return fmt.Errorf("transaction has failed, reason: %s, receipt: %+v. tx: %+v, gas: %v", reason, receipt, tx, tx.Gas())
+	}
+
+	fmt.Printf("Eth transaction successfully mined: %v\n", tx.Hash())
+	return err
+}
+
 // WaitRealtimeTxToBeConfirmed waits until a tx has been confirmed or the given timeout expires.
 func WaitRealtimeTxToBeConfirmed(parentCtx context.Context, client *rtclient.RealtimeClient, tx *types.Transaction, timeout time.Duration, toAddress common.Address, initialBalance *big.Int) error {
 	ctx, cancel := context.WithTimeout(parentCtx, timeout)
