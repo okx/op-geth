@@ -20,11 +20,14 @@ package eth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/eth/gasprice/xlayer"
 
 	"github.com/holiman/uint256"
 
@@ -45,6 +48,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
+
 	"github.com/ethereum/go-ethereum/eth/interop"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
@@ -116,10 +120,13 @@ type Ethereum struct {
 	xlayerLegacyRPCService *XlayerLegacyRPCService // Migration configuration for routing to xlayer-erigon
 
 	nodeCloser func() error
+
+	// XLayer additions
+	xlayerGpricer   xlayer.L2GasPricer
+	xlayerScheduler *xlayer.XLayerScheduler
 }
 
 // New creates a new Ethereum object (including the initialisation of the common Ethereum object),
-// whose lifecycle will be managed by the provided node.
 func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// Ensure configuration values are compatible and sane
 	if !config.SyncMode.IsValid() {
@@ -164,6 +171,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if chainConfig.IsXLayer() {
+		if err := core.CommitXLayerFirstBlock(chainDb, chainConfig); err != nil {
+			return nil, err
+		}
+	}
+
 	engine, err := ethconfig.CreateConsensusEngine(chainConfig, chainDb)
 	if err != nil {
 		return nil, err
@@ -321,6 +335,23 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		chainID := uint256.MustFromBig(chainConfig.ChainID)
 		poolFilters = append(poolFilters, txpool.NewInteropFilter(eth, *chainID))
 	}
+
+	// Add XLayer Filter if XLayer is configured
+	if config.GPO.XLayer.Type != "" {
+		eth.xlayerGpricer = xlayer.NewL2GasPriceSuggester(context.Background(), config.GPO)
+
+		// Create a wrapper that implements EthereumBackend interface
+		ethBackend := &xlayerEthereumBackend{eth: eth}
+		eth.xlayerScheduler = xlayer.NewXLayerScheduler(context.Background(), eth.xlayerGpricer, ethBackend)
+
+		xlayerFilter := txpool.NewXLayerFilter(config.GPO, eth.xlayerGpricer, eth.blockchain, eth.xlayerGpricer.GetGasCache())
+		poolFilters = append(poolFilters, xlayerFilter)
+
+		// Start XLayer gas price scheduler
+		eth.xlayerScheduler.Start()
+
+		log.Info("XLayer gas price filter and scheduler enabled", "type", config.GPO.XLayer.Type)
+	}
 	eth.txPool, err = txpool.New(config.TxPool.PriceLimit, eth.blockchain, txPools, poolFilters)
 	if err != nil {
 		return nil, err
@@ -370,14 +401,25 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 	eth.miner.SetPrioAddresses(config.TxPool.Locals)
 
-	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, config.RollupDisableTxPoolAdmission, eth, nil}
+	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, config.RollupDisableTxPoolAdmission, eth, nil, eth.xlayerGpricer, nil}
 	if eth.APIBackend.allowUnprotectedTxs {
 		log.Info("Unprotected transactions allowed")
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, config.GPO, config.Miner.GasPrice)
 
-	// Set up migration configuration if configured
-	if config.XLayer.LegacyPp.MigrationBlock != nil && config.XLayer.LegacyPp.PPRPCUrl != "" {
+	// For XLayer: Set up migration configuration if configured
+	if config.XLayer.LegacyPp.PPRPCUrl != "" {
+		if chainConfig.LegacyXLayerBlock != nil {
+			// if the legacy xlayer block is set, use the block as migration block
+			log.Info("LegacyXLayerBlock detected, use the block as migration block", "legacyBlock", chainConfig.LegacyXLayerBlock.Uint64())
+			migrationBlock := chainConfig.LegacyXLayerBlock.Uint64()
+			config.XLayer.LegacyPp.MigrationBlock = &migrationBlock
+		}
+		// if we can't retrieve the migration block from either the chain config or the config, return an error
+		if config.XLayer.LegacyPp.MigrationBlock == nil || *config.XLayer.LegacyPp.MigrationBlock == 0 {
+			return nil, errors.New("migration block not set")
+		}
+		log.Info("Migration block set to", "migrationBlock", *config.XLayer.LegacyPp.MigrationBlock)
 		migrationConfig, err := NewXlayerLegacyRPCService(config)
 		if err != nil {
 			log.Error("Failed to create migration configuration", "error", err)
@@ -399,6 +441,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			return nil, err
 		}
 		eth.seqRPCService = client
+		eth.APIBackend.seqRPCService = client
 	}
 
 	if config.RollupHistoricalRPC != "" {

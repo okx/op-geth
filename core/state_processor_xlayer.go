@@ -25,16 +25,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 )
 
-func afterApplyTransaction(env *vm.EVM, failed bool) []*types.InnerTx {
-	innerTxs := env.GetInnerTxMeta().InnerTxs
-	if failed {
-		for _, innerTx := range innerTxs {
-			innerTx.IsError = true
-		}
-	}
-	return innerTxs
-}
-
 func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (receipt *types.Receipt, innerTXs []*types.InnerTx, err error) {
 	if hooks := evm.Config.Tracer; hooks != nil {
 		if hooks.OnTxStart != nil {
@@ -77,4 +67,14 @@ func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.St
 	}
 
 	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce), innerTxs, nil
+}
+
+func afterApplyTransaction(env *vm.EVM, failed bool) []*types.InnerTx {
+	innerTxs := env.PopInnerTxs()
+	if failed {
+		for _, innerTx := range innerTxs {
+			innerTx.IsError = true
+		}
+	}
+	return innerTxs
 }

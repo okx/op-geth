@@ -620,6 +620,20 @@ func (bc *BlockChain) loadLastState() error {
 func (bc *BlockChain) initializeHistoryPruning(latest uint64) error {
 	freezerTail, _ := bc.db.Tail()
 
+	// For xlayer
+	// update the prune point to the LegacyXLayerBlock
+	if bc.chainConfig.LegacyXLayerBlock != nil {
+		log.Info("LegacyXLayerBlock detected, use the block as prune point", "legacyBlock", bc.chainConfig.LegacyXLayerBlock.Uint64())
+		legacyBlock := bc.chainConfig.LegacyXLayerBlock.Uint64()
+		legacyBlockHash := rawdb.ReadCanonicalHash(bc.db, legacyBlock)
+		legacyPrunePoint := &history.PrunePoint{
+			BlockNumber: legacyBlock,
+			BlockHash:   legacyBlockHash,
+		}
+		bc.historyPrunePoint.Store(legacyPrunePoint)
+		return nil
+	}
+
 	switch bc.cacheConfig.ChainHistoryMode {
 	case history.KeepAll:
 		if freezerTail == 0 {
@@ -1868,7 +1882,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		if err != nil {
 			return nil, it.index, err
 		}
-		metrics.GetLogStatistics().ResetStatistics()
+		// use local statistics instance per block insertion
 
 		// If we are past Byzantium, enable prefetching to pull in trie node paths
 		// while processing transactions. Before Byzantium the prefetcher is mostly
@@ -1924,7 +1938,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		}
 		trieDiffNodes, trieBufNodes, _ := bc.triedb.Size()
 		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead)
-		_ = metrics.GetLogStatistics().SummaryCheckpoint()
 		// Print confirmation that a future fork is scheduled, but not yet active.
 		bc.logForkReadiness(block)
 
@@ -2014,8 +2027,8 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		return nil, err
 	}
 	ptime := time.Since(pstart)
-	// Export to LogStatistics
-	ls := metrics.GetLogStatistics()
+	// Export to a fresh LogStatistics instance (no global singleton)
+	ls := metrics.NewLogStatistics()
 
 	vstart := time.Now()
 	if err := bc.validator.ValidateState(block, statedb, res, false); err != nil {
@@ -2127,6 +2140,13 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainFinalize.ID,
 		monitor.StepBlockchainFinalize.Key, blockHeight, blockHash, block.Time(),
 		0, "finalized", "", res.GasUsed)
+
+	// Try merge propose stats snapshot if exists (and add propose time into final block time)
+	if pstat, ok := metrics.GlobalStatsStore.GetAndDelete(block.Hash()); ok {
+		_ = ls.CombinedSummary(pstat)
+	} else {
+		ls.CombinedSummary(nil)
+	}
 
 	return &blockProcessingResult{usedGas: res.GasUsed, procTime: proctime, status: status}, nil
 }
