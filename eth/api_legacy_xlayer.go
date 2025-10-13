@@ -93,7 +93,7 @@ func (api *XlayerHybridBlockChainAPI) Call(ctx context.Context, args ethapi.Tran
 	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
 		if api.legacyRpc.shouldProxy(uint64(blockNr)) {
 			var result hexutil.Bytes
-			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_call", args, blockNrOrHash, overrides)
+			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_call", args, blockNrOrHash, overrides, blockOverrides)
 			return result, err
 		} else {
 			return api.BlockChainAPI.Call(ctx, args, blockNrOrHash, overrides, blockOverrides)
@@ -106,7 +106,7 @@ func (api *XlayerHybridBlockChainAPI) Call(ctx context.Context, args ethapi.Tran
 	}
 
 	var result hexutil.Bytes
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_call", args, blockNrOrHash, overrides)
+	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_call", args, blockNrOrHash, overrides, blockOverrides)
 	return result, err
 }
 
@@ -159,7 +159,7 @@ func (api *XlayerHybridBlockChainAPI) CreateAccessList(ctx context.Context, args
 	}
 
 	var result *accessListResult
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_createAccessList", args, blockNrOrHash)
+	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_createAccessList", args, blockNrOrHash, stateOverrides)
 	return result, err
 }
 
