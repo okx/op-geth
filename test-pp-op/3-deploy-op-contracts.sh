@@ -23,6 +23,7 @@ deploy_transactor_contract() {
   
   # Debug: Show environment variables
   echo "ENV: $ENV"
+  echo "CHAIN_ID: $CHAIN_ID"
   echo "DOCKER_NETWORK: $DOCKER_NETWORK"
   echo "L1_RPC_URL_IN_DOCKER: $L1_RPC_URL_IN_DOCKER"
   echo "DEPLOYER_PRIVATE_KEY: ${DEPLOYER_PRIVATE_KEY:0:10}..."
@@ -31,37 +32,48 @@ deploy_transactor_contract() {
   
   # Build docker run command with conditional network flag
   DOCKER_ARGS=()
+  DOCKER_ARGS+=("--rm")
   DOCKER_ARGS+=("-v" "$(pwd)/$CONFIG_DIR:/deployments")
-  DOCKER_ARGS+=("-w" "/app")
-  DOCKER_ARGS+=("-e" "CURL_CA_BUNDLE=")
-  DOCKER_ARGS+=("-e" "GIT_SSL_NO_VERIFY=true")
-  DOCKER_ARGS+=("-e" "NODE_TLS_REJECT_UNAUTHORIZED=0")
-  DOCKER_ARGS+=("-e" "GODEBUG=x509ignoreCN=1")
-  DOCKER_ARGS+=("--network" "$DOCKER_NETWORK_ARG")
+  DOCKER_ARGS+=("-w" "/app/packages/contracts-bedrock")
+  
+  if [ "$ENV" = "local" ]; then
+    DOCKER_ARGS+=("--network" "$DOCKER_NETWORK")
+    echo "✅ Using Docker network: $DOCKER_NETWORK"
+  else
+    DOCKER_ARGS+=("--network" "host")
+    echo "✅ Skipping Docker network (ENV=$ENV)"
+  fi
   
   DOCKER_ARGS+=("$OP_CONTRACTS_IMAGE_TAG")
   
-  # Create the bash command with SSL verification disabled
-  BASH_CMD="set -e && cd /app/packages/contracts-bedrock && export CURL_CA_BUNDLE= && export GIT_SSL_NO_VERIFY=true && cast send --rpc-url $L1_RPC_URL_IN_DOCKER --private-key $DEPLOYER_PRIVATE_KEY --create \"\$(forge inspect src/periphery/Transactor.sol:Transactor bytecode)\$(cast abi-encode 'constructor(address)' $ADMIN_OWNER_ADDRESS | sed 's/0x//')\" --json"
+  # Create the forge create command
+  FORGE_CMD="forge create --json --broadcast --legacy \
+    --rpc-url $L1_RPC_URL_IN_DOCKER \
+    --private-key $DEPLOYER_PRIVATE_KEY \
+    src/periphery/Transactor.sol:Transactor.0.8.30 \
+    --constructor-args $ADMIN_OWNER_ADDRESS"
   
   echo "🔧 Executing Docker command..."
-  echo "Command: docker run ${DOCKER_ARGS[*]} bash -c \"$BASH_CMD\""
+  echo "Command: docker run ${DOCKER_ARGS[*]} $FORGE_CMD"
   
-  TRANSACTOR_DEPLOY_OUTPUT=$(docker run "${DOCKER_ARGS[@]}" bash -c "$BASH_CMD")
+  TRANSACTOR_DEPLOY_OUTPUT=$(docker run "${DOCKER_ARGS[@]}" $FORGE_CMD)
   
   echo "Raw deployment output:"
   echo "$TRANSACTOR_DEPLOY_OUTPUT"
   echo "--- End of raw output ---"
 
   # Extract contract address from deployment output
-  TRANSACTOR_ADDRESS=$(echo "$TRANSACTOR_DEPLOY_OUTPUT" | jq -r '.contractAddress // empty' 2>/dev/null || echo "")
+  TRANSACTOR_ADDRESS=$(echo "$TRANSACTOR_DEPLOY_OUTPUT" | jq -r '.deployedTo // empty' 2>/dev/null || echo "")
   if [ -z "$TRANSACTOR_ADDRESS" ] || [ "$TRANSACTOR_ADDRESS" = "null" ]; then
     echo "❌ Failed to extract Transactor contract address from deployment output"
     echo "Deployment output: $TRANSACTOR_DEPLOY_OUTPUT"
     echo "Trying to extract address manually..."
     
-    # Try alternative extraction methods
-    TRANSACTOR_ADDRESS=$(echo "$TRANSACTOR_DEPLOY_OUTPUT" | grep -o '"contractAddress":"[^"]*"' | cut -d'"' -f4 || echo "")
+    # Try alternative extraction methods for forge output
+    TRANSACTOR_ADDRESS=$(echo "$TRANSACTOR_DEPLOY_OUTPUT" | jq -r '.deployedTo' 2>/dev/null || echo "")
+    if [ -z "$TRANSACTOR_ADDRESS" ]; then
+      TRANSACTOR_ADDRESS=$(echo "$TRANSACTOR_DEPLOY_OUTPUT" | grep -o '"deployedTo":"[^"]*"' | cut -d'"' -f4 || echo "")
+    fi
     if [ -z "$TRANSACTOR_ADDRESS" ]; then
       TRANSACTOR_ADDRESS=$(echo "$TRANSACTOR_DEPLOY_OUTPUT" | grep -o '0x[a-fA-F0-9]\{40\}' | head -1 || echo "")
     fi
@@ -111,16 +123,16 @@ deploy_op_stack_bootstrap_superchain() {
   BASH_CMD="set -e && /app/op-deployer/bin/op-deployer bootstrap superchain --l1-rpc-url $L1_RPC_URL_IN_DOCKER --private-key $DEPLOYER_PRIVATE_KEY --artifacts-locator file:///app/packages/contracts-bedrock/forge-artifacts --superchain-proxy-admin-owner $TRANSACTOR_ADDRESS --protocol-versions-owner $ADMIN_OWNER_ADDRESS --guardian $ADMIN_OWNER_ADDRESS --outfile /deployments/superchain.json"
 
   docker run "${DOCKER_ARGS[@]}" bash -c "$BASH_CMD"
+}
 
+deploy_op_stack_bootstrap_implementations() {
+  source .env
+  TRANSACTOR_ADDRESS=${TRANSACTOR}
   echo "🔧 Bootstrapping implementations with op-deployer..."
-
   SUPERCHAIN_JSON="$CONFIG_DIR/superchain.json"
   PROTOCOL_VERSIONS_PROXY=$(jq -r '.protocolVersionsProxyAddress' "$SUPERCHAIN_JSON")
   SUPERCHAIN_CONFIG_PROXY=$(jq -r '.superchainConfigProxyAddress' "$SUPERCHAIN_JSON")
   PROXY_ADMIN=$(jq -r '.proxyAdminAddress' "$SUPERCHAIN_JSON")
-}
-
-deploy_op_stack_bootstrap_implementations() {
   # Build docker run command with conditional network flag
   DOCKER_ARGS=()
   DOCKER_ARGS+=("-v" "$(pwd)/$CONFIG_DIR:/deployments")
@@ -132,7 +144,7 @@ deploy_op_stack_bootstrap_implementations() {
 
   DOCKER_ARGS+=("$OP_CONTRACTS_IMAGE_TAG")
 
-  BASH_CMD="set -e && export CURL_CA_BUNDLE= && export GIT_SSL_NO_VERIFY=true && /app/op-deployer/bin/op-deployer bootstrap implementations --artifacts-locator file:///app/packages/contracts-bedrock/forge-artifacts --l1-rpc-url $L1_RPC_URL_IN_DOCKER --outfile /deployments/implementations.json --mips-version \"7\" --private-key $DEPLOYER_PRIVATE_KEY --protocol-versions-proxy $PROTOCOL_VERSIONS_PROXY --superchain-config-proxy $SUPERCHAIN_CONFIG_PROXY --superchain-proxy-admin $PROXY_ADMIN --upgrade-controller $ADMIN_OWNER_ADDRESS --challenge-period-seconds $CHALLENGE_PERIOD_SECONDS --withdrawal-delay-seconds $WITHDRAWAL_DELAY_SECONDS --proof-maturity-delay-seconds $PROOF_MATURITY_DELAY_SECONDS --dispute-game-finality-delay-seconds $DISPUTE_GAME_FINALITY_DELAY_SECONDS"
+  BASH_CMD="set -e && export CURL_CA_BUNDLE= && export GIT_SSL_NO_VERIFY=true && /app/op-deployer/bin/op-deployer bootstrap implementations --artifacts-locator file:///app/packages/contracts-bedrock/forge-artifacts --l1-rpc-url $L1_RPC_URL_IN_DOCKER --outfile /deployments/implementations.json --mips-version \"7\" --private-key $DEPLOYER_PRIVATE_KEY --protocol-versions-proxy $PROTOCOL_VERSIONS_PROXY --superchain-config-proxy $SUPERCHAIN_CONFIG_PROXY --superchain-proxy-admin $PROXY_ADMIN --upgrade-controller $ADMIN_OWNER_ADDRESS --challenger $CHALLENGER_ADDRESS --challenge-period-seconds $CHALLENGE_PERIOD_SECONDS --withdrawal-delay-seconds $WITHDRAWAL_DELAY_SECONDS --proof-maturity-delay-seconds $PROOF_MATURITY_DELAY_SECONDS --dispute-game-finality-delay-seconds $DISPUTE_GAME_FINALITY_DELAY_SECONDS"
 
   docker run "${DOCKER_ARGS[@]}" bash -c "$BASH_CMD"
 
@@ -172,8 +184,6 @@ deploy_op_stack_contracts() {
   echo "genesis.json and rollup.json are generated in deployments folder"
   echo "🎉 OP Stack deployment preparation completed!"
 }
-
-
 
 cp ./config-op/intent.${ENV}.toml.bak ./config-op/intent.toml
 cp ./config-op/state.json.bak ./config-op/state.json

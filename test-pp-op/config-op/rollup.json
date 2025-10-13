@@ -1,24 +1,25 @@
 {
   "genesis": {
     "l1": {
-      "hash": "0xbcbe097788f8f8217aff0213f234a935e3416aed4e5ea661cbefb272d77424ba",
-      "number": 9337961
+      "hash": "0xd1e2a4549bf82b14c49bd0114edcc6b61436aa6921476c60bb4a75282c37847e",
+      "number": 9400984
     },
     "l2": {
-      "hash": "0xaeba71cfb5db2cf1e7824477bac7dd40fe3e5aeff529bd8002de775d898ba055",
-      "number": 253
+      "hash": "0x7b209aca365edc1d5a07d8d1118754ec8bf5a575fb7ed5c8a0c0f79f2ebc4ab8",
+      "number": 0
     },
-    "l2_time": 1759542648,
+    "l2_time": 1760335488,
     "system_config": {
       "batcherAddr": "0x87eadd549cadc215c1296abcefd5b440fc7d896d",
       "overhead": "0x0000000000000000000000000000000000000000000000000000000000000000",
-      "scalar": "0x010000000000000000000000000000000000000000000000000c5fc500000558",
-      "gasLimit": 200000000,
+      "scalar": "0x010000000000000000000000000000000000000000000000000c3c9d00000558",
+      "gasLimit": 30000000,
       "eip1559Params": "0x0000000000000000",
-      "operatorFeeParams": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      "operatorFeeParams": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "minBaseFee": 0
     }
   },
-  "block_time": 2,
+  "block_time": 1,
   "max_sequencer_drift": 600,
   "seq_window_size": 3600,
   "channel_timeout": 300,
@@ -33,12 +34,13 @@
   "holocene_time": 0,
   "isthmus_time": 0,
   "batch_inbox_address": "0x002bde9b0c0857aee2cffdea6b8723eaf5989449",
-  "deposit_contract_address": "0x54826b71921bbc7b97640526c7e6c8af43459ec7",
-  "l1_system_config_address": "0x305dfa3b6f1ae0a8d013d2c1d834a74770c57e84",
-  "protocol_versions_address": "0x0a562faf7fec71418fc235877b67895190ede1a3",
+  "deposit_contract_address": "0x90fe0ea57ebe198ac2f6e0718b520b0dc260e5c0",
+  "l1_system_config_address": "0xf760dbba0e9dd6343800242e45807507bdb1d303",
+  "protocol_versions_address": "0x027c15d94e2485d6408faf41c37a744e91f22525",
   "chain_op_config": {
-    "eip1559Elasticity": 6,
-    "eip1559Denominator": 50,
+    "eip1559Elasticity": 1,
+    "eip1559Denominator": 2000000000,
     "eip1559DenominatorCanyon": 250
   }
 }
+
