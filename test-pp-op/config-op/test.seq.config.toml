@@ -1,0 +1,53 @@
+[Node]
+HTTPHost = "0.0.0.0"
+HTTPPort = 8545
+HTTPCors = ["*"]
+HTTPVirtualHosts = ["*"]
+HTTPModules = ["web3", "debug", "eth", "txpool", "net", "engine", "miner", "admin"]
+WSHost = "0.0.0.0"
+WSPort = 7546
+WSOrigins = ["*"]
+WSModules = ["debug", "eth", "txpool", "net", "engine"]
+AuthAddr = "0.0.0.0"
+AuthPort = 8552
+AuthVirtualHosts = ["*"]
+JWTSecret = "/jwt.txt"
+
+[Node.P2P]
+MaxPeers = 30
+DiscoveryV5 = true
+
+[Eth]
+NetworkId = 901
+SyncMode = "full"
+EnableInnerTx = true
+
+
+
+[Eth.TxPool]
+GlobalSlots = 500000
+GlobalQueue = 100000
+AccountSlots = 50000
+AccountQueue = 10000
+
+
+[Eth.GPO]
+Blocks = 20
+Percentile = 60
+MaxHeaderHistory = 1024
+MaxBlockHistory = 1024
+MaxPrice = "5000000000000000000000"
+IgnorePrice = "2000000000000000000"
+
+[Eth.GPO.XLayer]
+Type = "follower"
+UpdatePeriod = 100000000000
+Default = "100000000"
+KafkaURL = "localhost:9092"
+Topic = "middle_coinPrice_push"
+GroupID = "geth-consumer"
+L1CoinId = 15756
+L2CoinId = 7184
+DefaultL1CoinPrice = 2000.0
+DefaultL2CoinPrice = 0.5
+Factor = 0.1

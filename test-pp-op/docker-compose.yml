@@ -454,6 +454,7 @@ services:
     volumes:
       - ./data/op-geth-seq:/datadir
       - ./config-op/jwt.txt:/jwt.txt
+      - ./config-op/test.seq.config.toml:/config.toml
     ports:
       - "8123:8545"
       - "7546:7546"
@@ -461,30 +462,64 @@ services:
       - "30303:30303"
       - "30303:30303/udp"
     command:
-      - --datadir
-      - /datadir
+      - --verbosity=3
+      - --datadir=/datadir
       - --db.engine=${DB_ENGINE}
-      - --http
-      - --http.corsdomain=*
-      - --http.vhosts=*
-      - --http.port=8545
-      - --http.addr=0.0.0.0
-      - --http.api=web3,debug,eth,txpool,net,engine,miner
-      - --ws
-      - --ws.addr=0.0.0.0
-      - --ws.port=7546
-      - --ws.origins=*
-      - --ws.api=debug,eth,txpool,net,engine
-      - --syncmode=full
+      - --config=/config.toml
       - --gcmode=archive
-      - --nodiscover
-      - --maxpeers=0
-      - --networkid=901
-      - --authrpc.vhosts=*
-      - --authrpc.addr=0.0.0.0
-      - --authrpc.port=8552
-      - --authrpc.jwtsecret=/jwt.txt
-      - --rollup.disabletxpoolgossip=true
+      - --rollup.disabletxpoolgossip=false
+
+  op-geth-seq2:
+    image: "${OP_GETH_IMAGE_TAG}"
+    container_name: op-geth-seq2
+    entrypoint: geth
+    volumes:
+      - ./data/op-geth-seq2:/datadir
+      - ./config-op/jwt.txt:/jwt.txt
+      - ./config-op/test.seq.config.toml:/config.toml
+    ports:
+      - "8223:8545"
+      - "30305:30303"
+      - "30305:30303/udp"
+    command:
+      - --verbosity=3
+      - --datadir=/datadir
+      - --db.engine=${DB_ENGINE}
+      - --config=/config.toml
+      - --gcmode=archive
+      - --rollup.disabletxpoolgossip=false
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "--quiet", "http://localhost:8545" ]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
+  op-geth-seq3:
+    image: "${OP_GETH_IMAGE_TAG}"
+    container_name: op-geth-seq3
+    entrypoint: geth
+    volumes:
+      - ./data/op-geth-seq3:/datadir
+      - ./config-op/jwt.txt:/jwt.txt
+      - ./config-op/test.seq.config.toml:/config.toml
+    ports:
+      - "8323:8545"
+      - "30306:30303"
+      - "30306:30303/udp"
+    command:
+      - --verbosity=3
+      - --datadir=/datadir
+      - --db.engine=${DB_ENGINE}
+      - --config=/config.toml
+      - --gcmode=archive
+      - --rollup.disabletxpoolgossip=false
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "--quiet", "http://localhost:8545" ]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
 
   op-geth-rpc:
     image: "${OP_GETH_IMAGE_TAG}"
@@ -517,7 +552,7 @@ services:
       - --syncmode=full
       - --gcmode=archive
       #- --nodiscover
-      - --maxpeers=1
+      - --maxpeers=10
       - --networkid=901
       - --authrpc.vhosts=*
       - --authrpc.addr=0.0.0.0
@@ -552,9 +587,9 @@ services:
       - --rpc.addr=0.0.0.0
       - --p2p.listen.tcp=9223
       - --p2p.listen.udp=9223
-      - --p2p.priv.path=/opnode_p2p_priv.txt
-      - --p2p.peerstore.path=/p2p-data/opnode_peerstore_db
-      - --p2p.discovery.path=/p2p-data/opnode_discovery_db
+      - --p2p.priv.raw=e054b5748fb29a82994ea170af9e6094a163a0d11308dea91a38744c4e7c94da
+      - --p2p.peerstore.path=/data/p2p/opnode_peerstore_db
+      - --p2p.discovery.path=/data/p2p/opnode_discovery_db
       - --p2p.no-discovery
       - --rpc.enable-admin
       - --p2p.sequencer.key=${SEQUENCER_P2P_KEY}
@@ -562,8 +597,112 @@ services:
       - --l1.beacon=${L1_BEACON_URL_IN_DOCKER}
       - --l1.rpckind=standard
       - --safedb.path=/data/safedb
+      - --conductor.enabled=${CONDUCTOR_ENABLED:-false}    # 默认关闭
+      - --conductor.rpc=http://op-conductor:8547
+      - --pprof.enabled
+      - --pprof.addr=0.0.0.0
+      - --pprof.port=9091
     depends_on:
       - op-geth-seq
+
+
+  op-seq2:
+    image: "${OP_STACK_IMAGE_TAG}"
+    container_name: op-seq2
+    volumes:
+      - ./config-op/rollup.json:/rollup.json
+      - ./config-op/jwt.txt:/jwt.txt
+      - ./data/op-seq2:/data
+    ports:
+      - "9546:9545"
+      - "9224:9223"
+      - "9224:9223/udp"
+    command:
+      - /app/op-node/bin/op-node
+      - --log.level=info
+      - --l2=http://op-geth-seq2:8552
+      - --l2.jwt-secret=/jwt.txt
+      - --sequencer.enabled
+      - --sequencer.stopped
+      - --sequencer.l1-confs=5
+      - --verifier.l1-confs=1
+      - --rollup.config=/rollup.json
+      - --rpc.addr=0.0.0.0
+      - --p2p.listen.tcp=9223
+      - --p2p.listen.udp=9223
+      - --p2p.priv.raw=cff9dac7588f5e6755a72d1e5b5001da3d0f8c06c4242b27d67eb5df4216bd93
+      - --p2p.peerstore.path=/data/p2p/opnode_peerstore_db
+      - --p2p.discovery.path=/data/p2p/opnode_discovery_db
+      - --p2p.static=/dns4/op-seq/tcp/9223/p2p/16Uiu2HAkzHdkbmS2VrCsccLibsu7MvGHpmFUMJnMTkKifrtS5m65,/dns4/op-seq3/tcp/9223/p2p/16Uiu2HAmRDGMm3UUrP8CfQ3YQo9aaXEXFXA7LeFNztdPMNK5moyD
+      - --p2p.no-discovery
+      - --rpc.enable-admin
+      - --p2p.sequencer.key=${SEQUENCER_P2P_KEY}
+      - --l1=${L1_RPC_URL_IN_DOCKER}
+      - --l1.beacon=${L1_BEACON_URL_IN_DOCKER}
+      - --l1.rpckind=standard
+      - --rollup.l1-chain-config=/l1-genesis.json
+      - --safedb.path=/data/safedb
+      - --conductor.enabled=${CONDUCTOR_ENABLED:-false}
+      - --conductor.rpc=http://op-conductor2:8547
+    depends_on:
+      op-geth-seq2:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9545" ]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
+  op-seq3:
+    image: "${OP_STACK_IMAGE_TAG}"
+    container_name: op-seq3
+    volumes:
+      - ./config-op/rollup.json:/rollup.json
+      - ./config-op/jwt.txt:/jwt.txt
+      - ./data/op-seq3:/data
+      - ./l1-geth/execution/genesis.json:/l1-genesis.json
+    ports:
+      - "9547:9545"
+      #      - "7070:7070"
+      - "9225:9223"
+      - "9225:9223/udp"
+    command:
+      - /app/op-node/bin/op-node
+      - --log.level=info
+      - --l2=http://op-geth-seq3:8552
+      - --l2.jwt-secret=/jwt.txt
+      - --sequencer.enabled
+      - --sequencer.stopped
+      - --sequencer.l1-confs=5
+      - --verifier.l1-confs=1
+      - --rollup.config=/rollup.json
+      - --rpc.addr=0.0.0.0
+      - --p2p.listen.tcp=9223
+      - --p2p.listen.udp=9223
+      - --p2p.priv.raw=10785157e7c98628e5e47c3d9b8ebbd12525c45f1554b4a39652b5ce02bb29dc
+      - --p2p.peerstore.path=/data/p2p/opnode_peerstore_db
+      - --p2p.discovery.path=/data/p2p/opnode_discovery_db
+      - --p2p.static=/dns4/op-seq/tcp/9223/p2p/16Uiu2HAkzHdkbmS2VrCsccLibsu7MvGHpmFUMJnMTkKifrtS5m65,/dns4/op-seq2/tcp/9223/p2p/16Uiu2HAmDTjVuEF6V9DccV1JhrHg7DYc5SKm3bw2T75kAFPsGuSp
+      - --p2p.no-discovery
+      - --rpc.enable-admin
+      - --p2p.sequencer.key=${SEQUENCER_P2P_KEY}
+      - --l1=${L1_RPC_URL_IN_DOCKER}
+      - --l1.beacon=${L1_BEACON_URL_IN_DOCKER}
+      - --l1.rpckind=standard
+      - --rollup.l1-chain-config=/l1-genesis.json
+      - --safedb.path=/data/safedb
+      - --conductor.enabled=${CONDUCTOR_ENABLED:-false}
+      - --conductor.rpc=http://op-conductor3:8547
+    depends_on:
+      op-geth-seq3:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9545" ]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
 
   op-rpc:
     image: "${OP_STACK_IMAGE_TAG}"
@@ -592,7 +731,7 @@ services:
       - --p2p.priv.path=/config-op/opnode_p2p_priv.txt
       - --p2p.peerstore.path=/p2p-data/opnode_peerstore_db
       - --p2p.discovery.path=/p2p-data/opnode_discovery_db
-      #- --p2p.test-pp-op=/dns4/op-seq/tcp/9223/p2p/16Uiu2HAkzHdkbmS2VrCsccLibsu7MvGHpmFUMJnMTkKifrtS5m65
+      - --p2p.static=/dns4/op-seq/tcp/9223/p2p/16Uiu2HAkzHdkbmS2VrCsccLibsu7MvGHpmFUMJnMTkKifrtS5m65
       - --p2p.no-discovery
       - --rpc.enable-admin=true
       - --l1=${L1_RPC_URL_IN_DOCKER}
@@ -700,4 +839,116 @@ services:
       - --rollup-rpc=http://op-seq:9545
       - --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
       - --honest-actors=${PROPOSER_ADDRESS}
+
+  op-conductor:
+    image: "${OP_STACK_IMAGE_TAG}"
+    container_name: op-conductor
+    volumes:
+      - ./data/op-conductor:/data
+      - ./config-op/rollup.json:/rollup.json
+    ports:
+      - "8547:8547"  # RPC port
+      - "50050:50050"  # Consensus port
+    command:
+      - /app/op-conductor/bin/op-conductor
+      - --log.level=debug
+      # already existed service
+      - --node.rpc=http://op-seq:9545
+      - --execution.rpc=http://op-geth-seq:8545
+      # Raft Config
+      - --raft.server.id=conductor-1
+      - --raft.storage.dir=/data/raft
+      - --raft.bootstrap=true
+      - --consensus.addr=0.0.0.0
+      - --consensus.port=50050
+      - --consensus.advertised=op-conductor:50050
+      # RPC Config
+      - --rpc.addr=0.0.0.0
+      - --rpc.port=8547
+      - --rpc.enable-proxy=true
+      # Healthcheck Config
+      - --healthcheck.interval=1
+      - --healthcheck.unsafe-interval=3
+      - --healthcheck.min-peer-count=1
+      - --rollup.config=/rollup.json
+    depends_on:
+      op-seq:
+        condition: service_healthy
+      op-geth-seq:
+        condition: service_healthy
+
+  op-conductor2:
+    image: "${OP_STACK_IMAGE_TAG}"
+    container_name: op-conductor2
+    volumes:
+      - ./data/op-conductor2:/data
+      - ./config-op/rollup.json:/rollup.json
+    ports:
+      - "8548:8547"  # RPC port
+      - "50051:50050"  # Consensus port
+    command:
+      - /app/op-conductor/bin/op-conductor
+      - --log.level=debug
+      # already existed service
+      - --node.rpc=http://op-seq2:9545
+      - --execution.rpc=http://op-geth-seq2:8545
+      # Raft Config
+      - --raft.server.id=conductor-2
+      - --raft.storage.dir=/data/raft
+      - --raft.bootstrap=false
+      - --consensus.addr=0.0.0.0
+      - --consensus.port=50050
+      - --consensus.advertised=op-conductor2:50050
+      # RPC Config
+      - --rpc.addr=0.0.0.0
+      - --rpc.port=8547
+      - --rpc.enable-proxy=true
+      # Healthcheck Config
+      - --healthcheck.interval=1
+      - --healthcheck.unsafe-interval=3
+      - --healthcheck.min-peer-count=1
+      - --rollup.config=/rollup.json
+    depends_on:
+      op-seq2:
+        condition: service_healthy
+      op-geth-seq2:
+        condition: service_healthy
+
+
+  op-conductor3:
+    image: "${OP_STACK_IMAGE_TAG}"
+    container_name: op-conductor3
+    volumes:
+      - ./data/op-conductor3:/data
+      - ./config-op/rollup.json:/rollup.json
+    ports:
+      - "8549:8547"  # RPC port
+      - "50052:50050"  # Consensus port
+    command:
+      - /app/op-conductor/bin/op-conductor
+      - --log.level=debug
+      # already existed service
+      - --node.rpc=http://op-seq3:9545
+      - --execution.rpc=http://op-geth-seq3:8545
+      # Raft Config
+      - --raft.server.id=conductor-3
+      - --raft.storage.dir=/data/raft
+      - --raft.bootstrap=false
+      - --consensus.addr=0.0.0.0
+      - --consensus.port=50050
+      - --consensus.advertised=op-conductor3:50050
+      # RPC Config
+      - --rpc.addr=0.0.0.0
+      - --rpc.port=8547
+      - --rpc.enable-proxy=true
+      # Healthcheck Config
+      - --healthcheck.interval=1
+      - --healthcheck.unsafe-interval=3
+      - --healthcheck.min-peer-count=1
+      - --rollup.config=/rollup.json
+    depends_on:
+      op-seq3:
+        condition: service_healthy
+      op-geth-seq3:
+        condition: service_healthy
 
