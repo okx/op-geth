@@ -189,7 +189,7 @@ build_op_stack_contract() {
       mkdir -p $PWD_DIR/tmp
       cd $PWD_DIR/tmp/
       echo "Cloning Optimism repository..."
-      git clone --recurse-submodules -b dev https://github.com/okx/optimism.git
+      git clone --recurse-submodules -b pre-release https://github.com/okx/optimism.git
     else
       echo "Optimism repository already exists, using existing clone"
       cd $PWD_DIR/tmp/optimism
@@ -212,7 +212,7 @@ build_op_stack_image() {
   mkdir -p $PWD_DIR/tmp
   cd $PWD_DIR/tmp/
   echo "Cloning Optimism repository..."
-  git clone --recurse-submodules -b dev https://github.com/okx/optimism.git
+  git clone --recurse-submodules -b pre-release https://github.com/okx/optimism.git
 
   cd optimism
   docker build --platform $ARCH -t $OP_STACK_IMAGE_TAG -f Dockerfile-opstack .
