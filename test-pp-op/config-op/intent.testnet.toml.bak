@@ -24,7 +24,7 @@ l2ContractsLocator = "file:///app/packages/contracts-bedrock/forge-artifacts"
       enabled = true
       name = "OKB"
       symbol = "OKB"
-      initialLiquidity = "0x115EEC47F6CF7E35000000"
+      initialLiquidity = "0x0"
   [chains.roles]
     l1ProxyAdminOwner = "0x33f34d8b20696780ba07b1ea89f209b4dc51723a"
     l2ProxyAdminOwner = "0x33f34d8b20696780ba07b1ea89f209b4dc51723a"
