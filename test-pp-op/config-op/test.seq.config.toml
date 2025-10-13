@@ -36,13 +36,13 @@ Blocks = 20
 Percentile = 60
 MaxHeaderHistory = 1024
 MaxBlockHistory = 1024
-MaxPrice = "5000000000000000000000"
-IgnorePrice = "2000000000000000000"
+MaxPrice = "50000000000" #50GWei
+IgnorePrice = "2"
 
 [Eth.GPO.XLayer]
-Type = "follower"
-UpdatePeriod = 100000000000
-Default = "100000000"
+Type = "default"
+UpdatePeriod = 3000000000 # 3s
+Default = "100000000"             # 0.1 GWei
 KafkaURL = "localhost:9092"
 Topic = "middle_coinPrice_push"
 GroupID = "geth-consumer"
