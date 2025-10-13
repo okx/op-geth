@@ -20,10 +20,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/internal/monitor"
 	"math/big"
 	"sync/atomic"
 	"time"
+
+	"github.com/ethereum/go-ethereum/internal/monitor"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -46,7 +47,7 @@ import (
 const (
 	// minRecommitInterruptInterval is the minimum time interval used to interrupt filling a
 	// sealing block with pending transactions from the mempool
-	minRecommitInterruptInterval = 2 * time.Second
+	minRecommitInterruptInterval = 30 * time.Second // XLayer: increased from 2s to 30s for high-volume scenarios
 )
 
 var (
@@ -570,10 +571,40 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
 	}
 	blockDABytes := new(big.Int)
+
+	// XLayer: Add loop counter for debugging high-load scenarios
+	loopCount := 0
+	lastLogTime := time.Now()
+	startTime := time.Now()
+
 	for {
+		loopCount++
+
+		// XLayer: Log progress every 5000 iterations or every 10 seconds
+		// Only log if we've been running for more than 5 seconds (indicates high load)
+		if time.Since(startTime) > 5*time.Second {
+			if loopCount%5000 == 0 || time.Since(lastLogTime) > 10*time.Second {
+				log.Info("[XLayer] Commit progress (high load)",
+					"iterations", loopCount,
+					"txsIncluded", env.tcount,
+					"gasUsed", gasLimit-env.gasPool.Gas(),
+					"elapsed", time.Since(startTime))
+				lastLogTime = time.Now()
+			}
+		}
+
 		// Check interruption signal and abort building if it's fired.
 		if interrupt != nil {
 			if signal := interrupt.Load(); signal != commitInterruptNone {
+				// Only log interruption details if we've processed significant work
+				if env.tcount > 100 || time.Since(startTime) > 2*time.Second {
+					log.Warn("[XLayer] Commit interrupted",
+						"signal", signal,
+						"reason", signalToErr(signal),
+						"iterations", loopCount,
+						"txsIncluded", env.tcount,
+						"elapsed", time.Since(startTime))
+				}
 				return signalToErr(signal)
 			}
 		}
@@ -719,6 +750,8 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
 func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) error {
+	fillStart := time.Now()
+
 	miner.confMu.RLock()
 	tip := miner.config.GasPrice
 	prio := miner.prio
@@ -738,11 +771,46 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	if miner.chainConfig.IsOsaka(env.header.Number, env.header.Time) {
 		filter.GasLimitCap = params.MaxTxGas
 	}
+
+	// XLayer: Add timing logs for Pending() calls
+	pendingPlainStart := time.Now()
 	filter.OnlyPlainTxs, filter.OnlyBlobTxs = true, false
 	pendingPlainTxs := miner.txpool.Pending(filter)
+	pendingPlainDuration := time.Since(pendingPlainStart)
 
+	pendingPlainCount := 0
+	for _, txs := range pendingPlainTxs {
+		pendingPlainCount += len(txs)
+	}
+
+	pendingBlobStart := time.Now()
 	filter.OnlyPlainTxs, filter.OnlyBlobTxs = false, true
 	pendingBlobTxs := miner.txpool.Pending(filter)
+	pendingBlobDuration := time.Since(pendingBlobStart)
+
+	pendingBlobCount := 0
+	for _, txs := range pendingBlobTxs {
+		pendingBlobCount += len(txs)
+	}
+
+	// XLayer: Only log detailed metrics if pool is large or Pending() is slow
+	totalPendingTxs := pendingPlainCount + pendingBlobCount
+	totalPendingAccounts := len(pendingPlainTxs) + len(pendingBlobTxs)
+	isHighLoad := totalPendingTxs > 100000 || pendingPlainDuration > time.Second
+
+	if isHighLoad {
+		log.Warn("[XLayer] High txpool load detected",
+			"totalAccounts", totalPendingAccounts,
+			"totalTxs", totalPendingTxs,
+			"pendingPlainElapsed", pendingPlainDuration,
+			"pendingBlobElapsed", pendingBlobDuration,
+			"blockNumber", env.header.Number)
+	} else {
+		log.Debug("[XLayer] TxPool pending retrieved",
+			"accounts", totalPendingAccounts,
+			"txs", totalPendingTxs,
+			"elapsed", pendingPlainDuration+pendingBlobDuration)
+	}
 
 	// Split the pending transactions into locals and remotes.
 	prioPlainTxs, normalPlainTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingPlainTxs
@@ -802,17 +870,28 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 			}
 		}
 	}
+
+	okPayCount := 0
+	for _, txs := range okPayTxs {
+		okPayCount += len(txs)
+	}
+
 	// Process OkPay transactions first (highest priority)
 	if len(okPayTxs) > 0 {
 		okpayPlainTxs := newTransactionsByPriceAndNonce(env.signer, okPayTxs, env.header.BaseFee)
 		emptyBlobTxs := newTransactionsByPriceAndNonce(env.signer, nil, env.header.BaseFee)
-		// execStart removed: caller accumulates timings
+
 		if err := miner.commitTransactions(env, okpayPlainTxs, emptyBlobTxs, interrupt); err != nil {
+			if isHighLoad {
+				log.Warn("[XLayer] OkPay commit interrupted", "err", err, "txsIncluded", env.tcount)
+			}
 			return err
 		}
-		// Note: execution timing is accumulated in caller scope (generateWork)
+		if isHighLoad {
+			log.Info("[XLayer] OkPay commit completed", "txs", okPayCount, "included", env.tcount)
+		}
 	}
-	
+
 	for _, account := range prio {
 		if txs := normalPlainTxs[account]; len(txs) > 0 {
 			delete(normalPlainTxs, account)
@@ -823,22 +902,59 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 			prioBlobTxs[account] = txs
 		}
 	}
+
 	// Fill the block with all available pending transactions.
 	if len(prioPlainTxs) > 0 || len(prioBlobTxs) > 0 {
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, prioPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, prioBlobTxs, env.header.BaseFee)
 
 		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt); err != nil {
+			if isHighLoad {
+				log.Warn("[XLayer] Priority commit interrupted", "err", err, "txsIncluded", env.tcount)
+			}
 			return err
 		}
 	}
+
 	if len(normalPlainTxs) > 0 || len(normalBlobTxs) > 0 {
+		heapStart := time.Now()
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, normalPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, normalBlobTxs, env.header.BaseFee)
+		heapDuration := time.Since(heapStart)
 
+		// XLayer: Log heap construction time if it's slow (> 500ms indicates large account count)
+		if heapDuration > 500*time.Millisecond {
+			log.Warn("[XLayer] Slow heap construction detected",
+				"accounts", len(normalPlainTxs),
+				"heapBuildTime", heapDuration)
+		}
+
+		commitStart := time.Now()
 		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt); err != nil {
+			commitDuration := time.Since(commitStart)
+			if isHighLoad {
+				log.Warn("[XLayer] Normal commit interrupted",
+					"err", err,
+					"elapsed", commitDuration,
+					"txsIncluded", env.tcount)
+			}
 			return err
 		}
+	}
+
+	fillDuration := time.Since(fillStart)
+
+	// XLayer: Summary log - always show for high load, debug for normal load
+	if isHighLoad {
+		log.Warn("[XLayer] Block building completed (high load)",
+			"totalElapsed", fillDuration,
+			"txsIncluded", env.tcount,
+			"pendingRemaining", totalPendingTxs-env.tcount,
+			"blockNumber", env.header.Number)
+	} else {
+		log.Debug("[XLayer] Block building completed",
+			"elapsed", fillDuration,
+			"txsIncluded", env.tcount)
 	}
 	return nil
 }
