@@ -535,30 +535,12 @@ services:
       - "30304:30303"
       - "30304:30303/udp"
     command:
-      - --datadir
-      - /datadir
+      - --verbosity=3
+      - --datadir=/datadir
       - --db.engine=${DB_ENGINE}
-      - --http
-      - --http.corsdomain=*
-      - --http.vhosts=*
-      - --http.port=8545
-      - --http.addr=0.0.0.0
-      - --http.api=web3,debug,eth,txpool,net,engine,miner
-      - --ws
-      - --ws.addr=0.0.0.0
-      - --ws.port=7546
-      - --ws.origins=*
-      - --ws.api=debug,eth,txpool,net,engine
-      - --syncmode=full
+      - --config=/config.toml
       - --gcmode=archive
-      #- --nodiscover
-      - --maxpeers=10
-      - --networkid=901
-      - --authrpc.vhosts=*
-      - --authrpc.addr=0.0.0.0
-      - --authrpc.port=8552
-      - --authrpc.jwtsecret=/jwt.txt
-      - --rollup.sequencerhttp=http://op-geth-seq:8545
+      # - --rollup.sequencerhttp=http://op-geth-seq:8545
       - --rollup.enabletxpooladmission
 
   op-seq:

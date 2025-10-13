@@ -23,14 +23,6 @@ SyncMode = "full"
 EnableInnerTx = true
 
 
-
-[Eth.TxPool]
-GlobalSlots = 500000
-GlobalQueue = 100000
-AccountSlots = 50000
-AccountQueue = 10000
-
-
 [Eth.GPO]
 Blocks = 20
 Percentile = 60
