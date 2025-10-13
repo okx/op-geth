@@ -44,6 +44,18 @@ func TestPebbleDB(t *testing.T) {
 	})
 }
 
+func TestPebbleDBDisk(t *testing.T) {
+	t.Run("DatabaseSuite", func(t *testing.T) {
+		dbtest.TestDatabaseSuite(t, func() ethdb.KeyValueStore {
+			db, err := New(fmt.Sprintf("/tmp/test-pebble-%d-%d", os.Getpid(), time.Now().UnixNano()), 1024, 16, "", false, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return db
+		})
+	})
+}
+
 func BenchmarkPebbleDB(b *testing.B) {
 	dbtest.BenchDatabaseSuite(b, func() ethdb.KeyValueStore {
 		db, err := pebble.Open("", &pebble.Options{
