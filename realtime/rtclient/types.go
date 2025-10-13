@@ -6,6 +6,8 @@ import (
 	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 type RealtimeDebugResult struct {
@@ -78,4 +80,33 @@ type RpcTransaction struct {
 	Type             *Int            `json:"type,omitempty"`
 	V                *string         `json:"v,omitempty"`
 	Value            *BigInt         `json:"value,omitempty"`
+}
+
+type RpcBlock struct {
+	Hash             *common.Hash     `json:"hash"`
+	ParentHash       common.Hash      `json:"parentHash"`
+	UncleHash        common.Hash      `json:"sha3Uncles"`
+	Coinbase         common.Address   `json:"miner"`
+	Root             common.Hash      `json:"stateRoot"`
+	TxHash           common.Hash      `json:"transactionsRoot"`
+	ReceiptHash      common.Hash      `json:"receiptsRoot"`
+	Bloom            types.Bloom      `json:"logsBloom"`
+	Difficulty       *hexutil.Big     `json:"difficulty"`
+	Number           *hexutil.Big     `json:"number"`
+	GasLimit         hexutil.Uint64   `json:"gasLimit"`
+	GasUsed          hexutil.Uint64   `json:"gasUsed"`
+	Time             hexutil.Uint64   `json:"timestamp"`
+	Extra            hexutil.Bytes    `json:"extraData"`
+	MixDigest        common.Hash      `json:"mixHash"`
+	Nonce            types.BlockNonce `json:"nonce"`
+	BaseFee          *hexutil.Big     `json:"baseFeePerGas,omitempty"`
+	WithdrawalsHash  *common.Hash     `json:"withdrawalsRoot,omitempty"`
+	BlobGasUsed      *hexutil.Uint64  `json:"blobGasUsed,omitempty"`
+	ExcessBlobGas    *hexutil.Uint64  `json:"excessBlobGas,omitempty"`
+	ParentBeaconRoot *common.Hash     `json:"parentBeaconBlockRoot,omitempty"`
+
+	Size         hexutil.Uint64      `json:"size"`
+	Transactions []RpcTransaction    `json:"transactions"`
+	UncleHashes  []common.Hash       `json:"uncles"`
+	Withdrawals  []*types.Withdrawal `json:"withdrawals,omitempty"`
 }

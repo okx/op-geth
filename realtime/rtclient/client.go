@@ -156,25 +156,25 @@ func (rc *RealtimeClient) RealtimeGetInternalTransactions(ctx context.Context, t
 	return innerTxs, err
 }
 
-func (rc *RealtimeClient) RealtimeGetBlock(ctx context.Context, tag string) (map[string]interface{}, error) {
+func (rc *RealtimeClient) RealtimeGetBlock(ctx context.Context, tag string) (RpcBlock, error) {
 	// Call eth_getBlockByNumber with fullTx=true to get full transaction details
 	fullTx := true
-	var result map[string]interface{}
+	var result RpcBlock
 	err := rc.c.CallContext(ctx, &result, "eth_getBlockByNumber", tag, fullTx)
 	return result, err
 }
 
-func (rc *RealtimeClient) RealtimeGetBlockByNumber(ctx context.Context, blockNumber uint64) (map[string]interface{}, error) {
+func (rc *RealtimeClient) RealtimeGetBlockByNumber(ctx context.Context, blockNumber uint64) (RpcBlock, error) {
 	// Call eth_getBlockByNumber with fullTx=true to get full transaction details
 	fullTx := true
-	var result map[string]interface{}
+	var result RpcBlock
 	err := rc.c.CallContext(ctx, &result, "eth_getBlockByNumber", blockNumber, fullTx)
 	return result, err
 }
 
 // RealtimeGetBlockByHash returns the information about a block requested by block hash in real-time
-func (rc *RealtimeClient) RealtimeGetBlockByHash(ctx context.Context, blockHash common.Hash, fullTx bool) (map[string]interface{}, error) {
-	var result map[string]interface{}
+func (rc *RealtimeClient) RealtimeGetBlockByHash(ctx context.Context, blockHash common.Hash, fullTx bool) (RpcBlock, error) {
+	var result RpcBlock
 	err := rc.c.CallContext(ctx, &result, "eth_getBlockByHash", blockHash, fullTx)
 	return result, err
 }

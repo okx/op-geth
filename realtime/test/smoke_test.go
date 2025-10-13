@@ -43,7 +43,7 @@ func TestRealtimeRPC(t *testing.T) {
 		t.Skip()
 	}
 
-	// Preapre to deploy a ERC20 contract
+	// Prepare to deploy a ERC20 contract
 	ctx := context.Background()
 	ec, err := ethclient.Dial(DefaultL2NetworkRealtimeURL)
 	require.NoError(t, err)
@@ -60,14 +60,14 @@ func TestRealtimeRPC(t *testing.T) {
 	testAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
 
 	// Used to check whether the result returned by the interface call is correct
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 	originNonce, err := client.RealtimeGetTransactionCount(ctx, fromAddress)
 	require.NoError(t, err)
 	originBalance, err := client.RealtimeGetBalance(ctx, testAddress)
 	require.NoError(t, err)
 
 	// Transfer native token
-	txHash := transToken(t, ctx, client, big.NewInt(Gwei), testAddress.String())
+	txHash := transNativeToken(t, ctx, client, big.NewInt(Gwei), testAddress.String())
 
 	// Deploy the contract
 	erc20Address := deployERC20Contract(t, ctx, privateKey, client)
@@ -252,15 +252,15 @@ func TestRealtimeRPC(t *testing.T) {
 		block, err := client.RealtimeGetBlockByNumber(ctx, latestBlockNumber)
 		require.NoError(t, err)
 		require.NotNil(t, block, "Block should not be nil")
-		require.NotNil(t, block["hash"], "Block hash should not be nil")
-		fmt.Printf("RealtimeGetBlockByNumber result block number: %v, hash: %v, txCount: %v\n", block["number"], block["hash"], len(block["transactions"].([]interface{})))
+		require.NotNil(t, block.Hash, "Block hash should not be nil")
+		fmt.Printf("RealtimeGetBlockByNumber result block number: %v, hash: %v, txCount: %v\n", block.Number, block.Hash, len(block.Transactions))
 	})
 
 	t.Run("RealtimeGetPendingBlock", func(t *testing.T) {
 		pendingBlock, err := client.RealtimeGetBlock(ctx, "pending")
 		require.NoError(t, err)
 		require.NotNil(t, pendingBlock, "Pending block should not be nil")
-		fmt.Printf("RealtimeGetBlock result block number: %v, txCount: %v\n", pendingBlock["number"], len(pendingBlock["transactions"].([]interface{})))
+		fmt.Printf("RealtimeGetBlock result block number: %v, txCount: %v\n", pendingBlock.Number, len(pendingBlock.Transactions))
 	})
 
 	t.Run("RealtimeGetBlockByHash", func(t *testing.T) {
@@ -275,54 +275,39 @@ func TestRealtimeRPC(t *testing.T) {
 		require.NotNil(t, blockByNumber, "Block by number should not be nil")
 
 		// Extract the block hash
-		blockHashStr, ok := blockByNumber["hash"].(string)
-		require.True(t, ok, "Block hash should be a string")
-		require.NotEmpty(t, blockHashStr, "Block hash should not be empty")
+		blockHash := *blockByNumber.Hash
+		require.NotEmpty(t, blockHash, "Block hash should not be empty")
 
 		// Test getting the same block by hash
-		blockByHash, err := client.RealtimeGetBlockByHash(ctx, common.HexToHash(blockHashStr), true)
+		blockByHash, err := client.RealtimeGetBlockByHash(ctx, blockHash, true)
 		require.NoError(t, err)
 		require.NotNil(t, blockByHash, "Block should not be nil")
-		require.NotNil(t, blockByHash["hash"], "Block hash should not be nil")
+		require.NotNil(t, blockByHash.Hash, "Block hash should not be nil")
 
 		// Verify that both methods return the same block
-		require.Equal(t, blockByNumber["hash"], blockByHash["hash"], "Block hashes should match")
-		require.Equal(t, blockByNumber["number"], blockByHash["number"], "Block numbers should match")
-
-		fmt.Printf("RealtimeGetBlockByHash result - finalized block number: %v, hash: %v, txCount: %v\n", blockByHash["number"], blockByHash["hash"], len(blockByHash["transactions"].([]interface{})))
+		require.Equal(t, blockByNumber, blockByHash)
+		fmt.Printf("RealtimeGetBlockByHash result - finalized block number: %v, hash: %v, txCount: %v\n", blockByHash.Number, blockByHash.Hash, len(blockByHash.Transactions))
 	})
 
-	t.Run("RealtimeGetBlockTransactionCountByHash", func(t *testing.T) {
+	t.Run("RealtimeGetBlockTransactionCount", func(t *testing.T) {
 		numberOfTransactions := 10
+		txHashes, targetBlockNumber, targetBlockHash := transErc20TokenBatch(t, context.Background(), client, nil, erc20Address, big.NewInt(Gwei), testAddress.String(), numberOfTransactions)
 
-		// Create the specified number of transactions and wait for them to be mined
-		txHashes := transTokenBatch(t, context.Background(), client, big.NewInt(Gwei), testAddress.String(), numberOfTransactions)
-		lastTxHash := txHashes[len(txHashes)-1]
-
-		// Get the block information from the last transaction's receipt
-		receipt, err := client.RealtimeGetTransactionReceipt(ctx, common.HexToHash(lastTxHash))
+		// Test getting transaction count by number
+		transactionCount, err := client.RealtimeGetBlockTransactionCountByNumber(ctx, targetBlockNumber)
 		require.NoError(t, err)
-		require.NotNil(t, receipt, "Transaction receipt should not be nil")
-
-		targetBlockNumber := receipt.BlockNumber.Uint64()
-		targetBlockHash := receipt.BlockHash
-
-		// Get the actual transaction count for this block by number
-		actualTxCount, err := client.RealtimeGetBlockTransactionCountByNumber(ctx, targetBlockNumber)
-		require.NoError(t, err)
+		require.Equal(t, uint64(len(txHashes)+1), transactionCount)
+		fmt.Printf("RealtimeGetBlockTransactionCountByNumber result: %d (verified against block content) ✓\n", transactionCount)
 
 		// Test getting transaction count by hash
-		transactionCount, err := client.RealtimeGetBlockTransactionCountByHash(ctx, targetBlockHash)
+		transactionCount, err = client.RealtimeGetBlockTransactionCountByHash(ctx, targetBlockHash)
 		require.NoError(t, err)
-
-		require.Equal(t, actualTxCount, transactionCount, fmt.Sprintf("Transaction count by hash should match count by number (%d)", actualTxCount))
-
+		require.Equal(t, uint64(len(txHashes)+1), transactionCount)
 		fmt.Printf("RealtimeGetBlockTransactionCountByHash result: %d (verified against block content) ✓\n", transactionCount)
-
 	})
 
 	t.Run("RealtimeGetBlockInternalTransactions", func(t *testing.T) {
-		txHash := transToken(t, ctx, client, big.NewInt(Gwei), testAddress.String())
+		txHash := transNativeToken(t, ctx, client, big.NewInt(Gwei), testAddress.String())
 
 		var targetBlockNumber uint64
 
@@ -349,17 +334,10 @@ func TestRealtimeRPC(t *testing.T) {
 
 	t.Run("RealtimeGetBlockReceipts", func(t *testing.T) {
 		numberOfTransactions := 10
+		_, targetBlockNumber, targetBlockHash := transErc20TokenBatch(t, context.Background(), client, nil, erc20Address, big.NewInt(Gwei), testAddress.String(), numberOfTransactions)
 
-		// Create the specified number of transactions and wait for them to be mined
-		txHashes := transTokenBatch(t, context.Background(), client, big.NewInt(Gwei), testAddress.String(), numberOfTransactions)
-		lastTxHash := txHashes[len(txHashes)-1]
-
-		// Get the block information from the last transaction's receipt
-		receipt, err := client.RealtimeGetTransactionReceipt(ctx, common.HexToHash(lastTxHash))
-		require.NoError(t, err)
-		require.NotNil(t, receipt, "Transaction receipt should not be nil")
-
-		receiptsByNumber, err := client.BlockReceipts(ctx, rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(receipt.BlockNumber.Uint64())))
+		// Test getting receipts by number
+		receiptsByNumber, err := client.BlockReceipts(ctx, rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(targetBlockNumber)))
 		require.NoError(t, err)
 		require.NotNil(t, receiptsByNumber, "Transaction receipts by number should not be nil")
 		for _, receipt := range receiptsByNumber {
@@ -368,7 +346,8 @@ func TestRealtimeRPC(t *testing.T) {
 			log.Info(fmt.Sprintf("RealtimeGetBlockReceiptsByNumber result type: %T", receipt))
 		}
 
-		receiptsByHash, err := client.BlockReceipts(ctx, rpc.BlockNumberOrHashWithHash(receipt.BlockHash, true))
+		// Test getting receipts by hash
+		receiptsByHash, err := client.BlockReceipts(ctx, rpc.BlockNumberOrHashWithHash(targetBlockHash, true))
 		require.NoError(t, err)
 		require.NotNil(t, receiptsByHash, "Transaction receipts by hash should not be nil")
 		for _, receipt := range receiptsByHash {
@@ -419,15 +398,15 @@ func TestRealtimeRPC(t *testing.T) {
 		block, err := client.RealtimeGetBlockByNumber(ctx, latestBlockNum)
 		require.NoError(t, err)
 		require.NotNil(t, block, "Block should not be nil")
-		require.NotNil(t, block["hash"], "Block hash should not be nil")
+		require.NotNil(t, block.Hash, "Block hash should not be nil")
 
-		blockByHash, err := client.RealtimeGetBlockByHash(ctx, common.HexToHash(block["hash"].(string)), true)
+		blockByHash, err := client.RealtimeGetBlockByHash(ctx, *block.Hash, true)
 		require.NoError(t, err)
 		require.NotNil(t, blockByHash, "Block should not be nil")
-		require.NotNil(t, blockByHash["hash"], "Block hash should not be nil")
+		require.NotNil(t, blockByHash.Hash, "Block hash should not be nil")
 
-		require.Equal(t, block["hash"], blockByHash["hash"], "Block hashes should match")
-		require.Equal(t, block["number"], blockByHash["number"], "Block numbers should match")
+		require.Equal(t, block.Hash, blockByHash.Hash, "Block hashes should match")
+		require.Equal(t, block.Number, blockByHash.Number, "Block numbers should match")
 	})
 
 	t.Run("RealtimeSubscriptionWorking", func(t *testing.T) {

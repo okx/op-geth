@@ -212,71 +212,49 @@ func erc20TransferTx(
 	return signedTx
 }
 
-func transToken(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, amount *big.Int, toAddress string) string {
-	return transTokenWithFrom(t, ctx, client, DefaultL2AdminPrivateKey, amount, toAddress)
-}
-
-// Creates multiple transactions in a batch and waits for them all to be mined
-// If fromPrivateKey is empty, uses the default admin private key
-func transTokenBatch(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, amount *big.Int, toAddress string, batchSize int, fromPrivateKey ...string) []string {
-	privateKey := DefaultL2AdminPrivateKey
-	if len(fromPrivateKey) > 0 && fromPrivateKey[0] != "" {
-		privateKey = fromPrivateKey[0]
-	}
+func transErc20TokenBatch(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, nonRtClient ethClienter, erc20Address common.Address, amount *big.Int, toAddress string, batchSize int) ([]string, uint64, common.Hash) {
 	var txHashes []string
 	var transactions []*types.Transaction
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	require.NoError(t, err)
+	privKey, err := crypto.HexToECDSA(strings.TrimPrefix(DefaultL2AdminPrivateKey, "0x"))
+	require.NoError(t, err)
+	startNonce, err := client.RealtimeGetTransactionCount(ctx, common.HexToAddress(DefaultL2AdminAddress))
+	require.NoError(t, err)
+	to := common.HexToAddress(toAddress)
 
-	// Create all transactions first
-	for i := 0; i < batchSize; i++ {
-		chainID, err := client.ChainID(ctx)
-		require.NoError(t, err)
-		auth, err := GetAuth(privateKey, chainID.Uint64())
-		require.NoError(t, err)
-		nonce, err := client.RealtimeGetTransactionCount(ctx, auth.From)
-		require.NoError(t, err)
-		gasPrice, err := client.SuggestGasPrice(ctx)
-		require.NoError(t, err)
-
-		to := common.HexToAddress(toAddress)
-		gas := uint64(21000)
-
-		tx := types.NewTransaction(
-			nonce,
-			to,
-			amount,
-			gas,
-			gasPrice,
-			nil,
-		)
-
-		privKey, err := crypto.HexToECDSA(strings.TrimPrefix(privateKey, "0x"))
-		require.NoError(t, err)
-
-		signer := types.MakeSigner(GetTestChainConfig(DefaultL2ChainID), big.NewInt(1), 0)
-		signedTx, err := types.SignTx(tx, signer, privKey)
-		require.NoError(t, err)
-
-		err = client.SendTransaction(ctx, signedTx)
-		require.NoError(t, err)
-
-		txHashes = append(txHashes, signedTx.Hash().String())
-		transactions = append(transactions, signedTx)
+	for i := 1; i < batchSize; i++ {
+		tx := erc20TransferTx(t, ctx, privKey, client, amount, gasPrice, to, erc20Address, startNonce+uint64(i))
+		txHashes = append(txHashes, tx.Hash().String())
+		transactions = append(transactions, tx)
 	}
+
+	tx := erc20TransferTx(t, ctx, privKey, client, amount, gasPrice, to, erc20Address, startNonce)
+	txHashes = append(txHashes, tx.Hash().String())
+	transactions = append(transactions, tx)
 
 	// Wait for all transactions to be mined
 	for _, tx := range transactions {
 		err := WaitTxToBeMined(ctx, client, tx, DefaultTimeoutTxToBeMined)
 		require.NoError(t, err)
+		if nonRtClient != nil {
+			err = WaitEthTxToBeMined(ctx, nonRtClient, tx, DefaultTimeoutTxToBeMined)
+			require.NoError(t, err)
+		}
 	}
 
 	log.Info(fmt.Sprintf("All %d transactions have been mined successfully", len(transactions)))
-	return txHashes
+
+	receipt, err := client.RealtimeGetTransactionReceipt(ctx, common.HexToHash(txHashes[len(txHashes)-1]))
+	require.NoError(t, err)
+	require.NotNil(t, receipt, "Transaction receipt should not be nil")
+	return txHashes, receipt.BlockNumber.Uint64(), receipt.BlockHash
 }
 
-func transTokenWithFrom(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, fromPrivateKey string, amount *big.Int, toAddress string) string {
+func transNativeToken(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, amount *big.Int, toAddress string) string {
 	chainID, err := client.ChainID(ctx)
 	require.NoError(t, err)
-	auth, err := GetAuth(fromPrivateKey, chainID.Uint64())
+	auth, err := GetAuth(DefaultL2AdminPrivateKey, chainID.Uint64())
 	require.NoError(t, err)
 	nonce, err := client.RealtimeGetTransactionCount(ctx, auth.From)
 	require.NoError(t, err)
@@ -298,7 +276,7 @@ func transTokenWithFrom(t *testing.T, ctx context.Context, client *rtclient.Real
 		nil,
 	)
 
-	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(fromPrivateKey, "0x"))
+	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(DefaultL2AdminPrivateKey, "0x"))
 	require.NoError(t, err)
 
 	signer := types.MakeSigner(GetTestChainConfig(DefaultL2ChainID), big.NewInt(1), 0)
@@ -646,70 +624,6 @@ func RevertReasonRealtime(
 	return unpackedMsg, nil
 }
 
-// CompareBlockData compares two block data maps and returns true if identical
-func CompareBlock(realtimeBlock, nonRealtimeBlock map[string]interface{}, testName string) error {
-	if realtimeBlock == nil && nonRealtimeBlock == nil {
-		return nil
-	}
-	if realtimeBlock == nil || nonRealtimeBlock == nil {
-		return fmt.Errorf("one response is nil: realtime=%v, non-realtime=%v", realtimeBlock == nil, nonRealtimeBlock == nil)
-	}
-
-	for key, realtimeValue := range realtimeBlock {
-		nonRealtimeValue, exists := nonRealtimeBlock[key]
-		if !exists {
-			return fmt.Errorf("field '%s' missing in non-realtime response", key)
-		}
-
-		if !DeepEqual(realtimeValue, nonRealtimeValue) {
-			return fmt.Errorf("field '%s' differs: realtime=%v, non-realtime=%v", key, realtimeValue, nonRealtimeValue)
-		}
-	}
-
-	// Check for fields that exist in non-realtime but not in realtime
-	for key := range nonRealtimeBlock {
-		if _, exists := realtimeBlock[key]; !exists {
-			return fmt.Errorf("field '%s' missing in realtime response", key)
-		}
-	}
-
-	return nil
-}
-
-// DeepEqual performs deep comparison of two interface{} values
-func DeepEqual(a, b interface{}) bool {
-	switch aVal := a.(type) {
-	case map[string]interface{}:
-		bMap, ok := b.(map[string]interface{})
-		if !ok {
-			return false
-		}
-		if len(aVal) != len(bMap) {
-			return false
-		}
-		for key, aValue := range aVal {
-			bValue, exists := bMap[key]
-			if !exists || !DeepEqual(aValue, bValue) {
-				return false
-			}
-		}
-		return true
-	case []interface{}:
-		bSlice, ok := b.([]interface{})
-		if !ok || len(aVal) != len(bSlice) {
-			return false
-		}
-		for i, aValue := range aVal {
-			if !DeepEqual(aValue, bSlice[i]) {
-				return false
-			}
-		}
-		return true
-	default:
-		return a == b
-	}
-}
-
 // convertBlockParam converts string block parameters to uint64 for realtime client
 func convertBlockParam(ctx context.Context, client *rtclient.RealtimeClient, blockParam string) (uint64, error) {
 	switch blockParam {
@@ -728,26 +642,4 @@ func convertBlockParam(ctx context.Context, client *rtclient.RealtimeClient, blo
 		}
 		return 0, fmt.Errorf("unsupported block parameter: %s", blockParam)
 	}
-}
-
-// extractBlockHash extracts a valid block hash from a block response
-// Returns the hash and a boolean indicating if extraction was successful
-func extractBlockHash(blockByNumber map[string]interface{}, blockParam string) (common.Hash, bool) {
-	// Extract the block hash
-	hashInterface, exists := blockByNumber["hash"]
-	if !exists {
-		return common.Hash{}, false
-	}
-
-	hashStr, ok := hashInterface.(string)
-	if !ok {
-		return common.Hash{}, false
-	}
-
-	if hashStr == "" || hashStr == "0x0000000000000000000000000000000000000000000000000000000000000000" {
-		return common.Hash{}, false
-	}
-
-	blockHash := common.HexToHash(hashStr)
-	return blockHash, true
 }
