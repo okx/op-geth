@@ -2217,6 +2217,7 @@ func (bc *BlockChain) processBlock(parentRoot common.Hash, block *types.Block, s
 	} else {
 		ls.CombinedSummary(nil)
 	}
+	logStatistic(block, statedb, startTime, ptime, vtime, triehash, trieUpdate, xvtime, wstart, proctime)
 
 	return &blockProcessingResult{
 		usedGas:  res.GasUsed,
