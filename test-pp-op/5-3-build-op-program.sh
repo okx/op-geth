@@ -6,12 +6,14 @@ source tools.sh
 
 PWD_DIR=$(pwd)
 
-if [ "$ENV" = "local" ]; then
-    CHAIN_ID=195
-else
-    CHAIN_ID=196
+if [ -z "$CHAIN_ID" ]; then
+  echo "❌ ERROR: CHAIN_ID is not set. Set it explicitly or derive it from intent.toml before proceeding."
+  exit 1
 fi
-
+if ! [[ "$CHAIN_ID" =~ ^[0-9]+$ ]]; then
+  echo "❌ ERROR: CHAIN_ID must be a numeric value, got: '$CHAIN_ID'"
+  exit 1
+fi
 # Function to show usage
 show_usage() {
     echo "Usage: $0 [OPTIONS]"

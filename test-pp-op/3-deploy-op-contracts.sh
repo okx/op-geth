@@ -8,11 +8,18 @@ source utils.sh
 
 ## TODO: get chainId from intent.toml
 if [ "$ENV" = "local" ]; then
-    CHAIN_ID=195
     DOCKER_NETWORK_ARG="$DOCKER_NETWORK"
 else
-    CHAIN_ID=196
     DOCKER_NETWORK_ARG="host"
+fi
+
+if [ -z "$CHAIN_ID" ]; then
+  echo "❌ ERROR: CHAIN_ID is not set. Set it explicitly or derive it from intent.toml before proceeding."
+  exit 1
+fi
+if ! [[ "$CHAIN_ID" =~ ^[0-9]+$ ]]; then
+  echo "❌ ERROR: CHAIN_ID must be a numeric value, got: '$CHAIN_ID'"
+  exit 1
 fi
 
 cd $PWD_DIR

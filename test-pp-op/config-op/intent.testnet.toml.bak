@@ -6,7 +6,7 @@ l1ContractsLocator = "file:///app/packages/contracts-bedrock/forge-artifacts"
 l2ContractsLocator = "file:///app/packages/contracts-bedrock/forge-artifacts"
 
 [[chains]]
-  id = "0x00000000000000000000000000000000000000000000000000000000000000c4"
+  id = "0x00000000000000000000000000000000000000000000000000000000000007A0"
   baseFeeVaultRecipient = "0xE350871784500B8B4c630D84195859FEff810b83"
   l1FeeVaultRecipient = "0xE350871784500B8B4c630D84195859FEff810b83"
   sequencerFeeVaultRecipient = "0xE350871784500B8B4c630D84195859FEff810b83"
