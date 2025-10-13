@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -33,9 +34,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/types/interoptypes"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
-	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
@@ -56,6 +57,9 @@ var (
 	errBlockInterruptedByTimeout  = errors.New("timeout while building block")
 	errBlockInterruptedByResolve  = errors.New("payload resolution while building block")
 
+	// OP-Stack addition
+	errSupervisorInFailsafe = errors.New("supervisor in failsafe")
+
 	txConditionalRejectedCounter = metrics.NewRegisteredCounter("miner/transactionConditional/rejected", nil)
 	txConditionalMinedTimer      = metrics.NewRegisteredTimer("miner/transactionConditional/elapsedtime", nil)
 )
@@ -66,6 +70,7 @@ type environment struct {
 	signer   types.Signer
 	state    *state.StateDB // apply state changes here
 	tcount   int            // tx count in cycle
+	size     uint64         // size of the block we are building
 	gasPool  *core.GasPool  // available gas used to pack transactions
 	coinbase common.Address
 	evm      *vm.EVM
@@ -82,6 +87,11 @@ type environment struct {
 	rpcCtx context.Context // context to control block-building RPC work. No RPC allowed if nil.
 }
 
+// txFits reports whether the transaction fits into the block size limit.
+func (env *environment) txFitsSize(tx *types.Transaction) bool {
+	return env.size+tx.Size() < params.MaxBlockSize-maxBlockSizeBufferZone
+}
+
 const (
 	commitInterruptNone int32 = iota
 	commitInterruptNewHead
@@ -89,6 +99,11 @@ const (
 	commitInterruptTimeout
 	commitInterruptResolve
 )
+
+// Block size is capped by the protocol at params.MaxBlockSize. When producing blocks, we
+// try to say below the size including a buffer zone, this is to avoid going over the
+// maximum size with auxiliary data added into the block.
+const maxBlockSizeBufferZone = 1_000_000
 
 // newPayloadResult is the result of payload generation.
 type newPayloadResult struct {
@@ -118,28 +133,40 @@ type generateParams struct {
 	eip1559Params []byte             // Optional EIP-1559 parameters
 	interrupt     *atomic.Int32      // Optional interruption signal to pass down to worker.generateWork
 	isUpdate      bool               // Optional flag indicating that this is building a discardable update
+	minBaseFee    *uint64            // Optional minimum base fee
 
 	rpcCtx context.Context // context to control block-building RPC work. No RPC allowed if nil.
 }
 
 // generateWork generates a sealing block based on the given parameters.
-func (miner *Miner) generateWork(params *generateParams, witness bool) *newPayloadResult {
+func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPayloadResult {
 	// Use per-call statistics to avoid shared state across concurrent builds
 	proposeStats := metrics.NewLogStatistics()
 
 	startBuildTime := time.Now()
-	work, err := miner.prepareWork(params, witness)
+	work, err := miner.prepareWork(genParam, witness)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
 	proposeStats.CumulativeTiming(metrics.ProposePrepareMs, time.Since(startBuildTime))
+
+	// Check withdrawals fit max block size.
+	// Due to the cap on withdrawal count, this can actually never happen, but we still need to
+	// check to ensure the CL notices there's a problem if the withdrawal cap is ever lifted.
+	maxBlockSize := params.MaxBlockSize - maxBlockSizeBufferZone
+	if genParam.withdrawals.Size() > maxBlockSize {
+		return &newPayloadResult{err: errors.New("withdrawals exceed max block size")}
+	}
+	// Also add size of withdrawals to work block size.
+	work.size += uint64(genParam.withdrawals.Size())
+
 	if work.gasPool == nil {
 		gasLimit := work.header.GasLimit
 
 		// If we're building blocks with mempool transactions, we need to ensure that the
 		// gas limit is not higher than the effective gas limit. We must still accept any
 		// explicitly selected transactions with gas usage up to the block header's limit.
-		if !params.noTxs {
+		if !genParam.noTxs {
 			effectiveGasLimit := miner.config.EffectiveGasCeil
 			if effectiveGasLimit != 0 && effectiveGasLimit < gasLimit {
 				gasLimit = effectiveGasLimit
@@ -150,7 +177,7 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 
 	misc.EnsureCreate2Deployer(miner.chainConfig, work.header.Time, work.state)
 	execStart := time.Now()
-	for _, tx := range params.txs {
+	for _, tx := range genParam.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
 		err = miner.commitTransaction(work, tx)
@@ -158,9 +185,9 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 			return &newPayloadResult{err: fmt.Errorf("failed to force-include tx: %s type: %d sender: %s nonce: %d, err: %w", tx.Hash(), tx.Type(), from, tx.Nonce(), err)}
 		}
 	}
-	if !params.noTxs {
+	if !genParam.noTxs {
 		// use shared interrupt if present
-		interrupt := params.interrupt
+		interrupt := genParam.interrupt
 		if interrupt == nil {
 			interrupt = new(atomic.Int32)
 		}
@@ -177,11 +204,13 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		}
 	}
 	proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
-	if intr := params.interrupt; intr != nil && params.isUpdate && intr.Load() != commitInterruptNone {
+
+	body := types.Body{Transactions: work.txs, Withdrawals: genParam.withdrawals}
+
+	if intr := genParam.interrupt; intr != nil && genParam.isUpdate && intr.Load() != commitInterruptNone {
 		return &newPayloadResult{err: errInterruptedUpdate}
 	}
 
-	body := types.Body{Transactions: work.txs, Withdrawals: params.withdrawals}
 	allLogs := make([]*types.Log, 0)
 	for _, r := range work.receipts {
 		allLogs = append(allLogs, r.Logs...)
@@ -247,6 +276,7 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 		// Store the statistics instance directly; it is local and no longer written after this point
 		metrics.GlobalStatsStore.Put(block.Hash(), proposeStats)
 	}
+
 	return &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),
@@ -314,7 +344,7 @@ func (miner *Miner) prepareWork(genParams *generateParams, witness bool) (*envir
 		// configure the gas limit of pending blocks with the miner gas limit config when using optimism
 		header.GasLimit = miner.config.GasCeil
 	}
-	if miner.chainConfig.IsHolocene(header.Time) {
+	if cfg := miner.chainConfig; cfg.IsHolocene(header.Time) {
 		if err := eip1559.ValidateHolocene1559Params(genParams.eip1559Params); err != nil {
 			return nil, err
 		}
@@ -325,7 +355,7 @@ func (miner *Miner) prepareWork(genParams *generateParams, witness bool) (*envir
 			d = miner.chainConfig.BaseFeeChangeDenominator(header.Time)
 			e = miner.chainConfig.ElasticityMultiplier()
 		}
-		header.Extra = eip1559.EncodeHoloceneExtraData(d, e)
+		header.Extra = eip1559.EncodeOptimismExtraData(cfg, header.Time, d, e, genParams.minBaseFee)
 	} else if genParams.eip1559Params != nil {
 		return nil, errors.New("got eip1559 params, expected none")
 	}
@@ -388,12 +418,13 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 		if err != nil {
 			return nil, err
 		}
-		state.StartPrefetcher("miner", bundle)
+		state.StartPrefetcher("miner", bundle, nil)
 	}
 	// Note the passed coinbase may be different with header.Coinbase.
 	return &environment{
 		signer:   types.MakeSigner(miner.chainConfig, header.Number, header.Time),
 		state:    state,
+		size:     uint64(header.Size()),
 		coinbase: coinbase,
 		header:   header,
 		witness:  state.Witness(),
@@ -416,6 +447,17 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 		int8(tx.Type()),
 		"", "", "", tx.Nonce(),
 	)
+
+	// OP-Stack addition
+	interopAccessList := interoptypes.TxToInteropAccessList(tx)
+	if len(interopAccessList) > 0 {
+		backend, ok := miner.backend.(BackendWithInterop)
+		if ok && backend.GetSupervisorFailsafe() {
+			log.Trace("Supervisor failsafe is enabled, rejecting transaction", "hash", tx.Hash)
+			tx.SetRejected()
+			return errSupervisorInFailsafe
+		}
+	}
 
 	if tx.Type() == types.BlobTxType {
 		err := miner.commitBlobTransaction(env, tx)
@@ -463,14 +505,17 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 			int8(tx.Type()), "failed", err.Error(), 0)
 		return err
 	}
+
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
+	env.size += tx.Size()
 	env.tcount++
 
 	// Log successful execution
 	monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
 		monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
 		int8(tx.Type()), "success", "", receipt.GasUsed)
+
 	return nil
 }
 
@@ -491,10 +536,12 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 	if err != nil {
 		return err
 	}
-	env.txs = append(env.txs, tx.WithoutBlobTxSidecar())
+	txNoBlob := tx.WithoutBlobTxSidecar()
+	env.txs = append(env.txs, txNoBlob)
 	env.receipts = append(env.receipts, receipt)
 	env.sidecars = append(env.sidecars, sc)
 	env.blobs += len(sc.Blobs)
+	env.size += txNoBlob.Size()
 	*env.header.BlobGasUsed += receipt.BlobGasUsed
 	env.tcount++
 	return nil
@@ -515,7 +562,10 @@ func (miner *Miner) applyTransaction(env *environment, tx *types.Transaction) (*
 }
 
 func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *transactionsByPriceAndNonce, interrupt *atomic.Int32) error {
-	gasLimit := env.header.GasLimit
+	var (
+		isCancun = miner.chainConfig.IsCancun(env.header.Number, env.header.Time)
+		gasLimit = env.header.GasLimit
+	)
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
 	}
@@ -572,7 +622,7 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 		// Most of the blob gas logic here is agnostic as to if the chain supports
 		// blobs or not, however the max check panics when called on a chain without
 		// a defined schedule, so we need to verify it's safe to call.
-		if miner.chainConfig.IsCancun(env.header.Number, env.header.Time) {
+		if isCancun {
 			left := eip4844.MaxBlobsPerBlock(miner.chainConfig, env.header.Time) - env.blobs
 			if left < int(ltx.BlobGas/params.BlobTxBlobGasPerBlob) {
 				log.Trace("Not enough blob space left for transaction", "hash", ltx.Hash, "left", left, "needed", ltx.BlobGas/params.BlobTxBlobGasPerBlob)
@@ -607,6 +657,11 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 			continue
 		}
 
+		// if inclusion of the transaction would put the block size over the
+		// maximum we allow, don't add any more txs to the payload.
+		if !env.txFitsSize(tx) {
+			break
+		}
 		// Error may be ignored here. The error has already been checked
 		// during transaction acceptance in the transaction pool.
 		from, _ := types.Sender(env.signer, tx)
@@ -670,17 +725,18 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	miner.confMu.RUnlock()
 
 	// Retrieve the pending transactions pre-filtered by the 1559/4844 dynamic fees
-	// fetchTxStart removed: caller accumulates timings
 	filter := txpool.PendingFilter{
 		MinTip:      uint256.MustFromBig(tip),
 		MaxDATxSize: miner.config.MaxDATxSize,
 	}
-	// Note: fetch timing is accumulated in caller scope (generateWork) only
 	if env.header.BaseFee != nil {
 		filter.BaseFee = uint256.MustFromBig(env.header.BaseFee)
 	}
 	if env.header.ExcessBlobGas != nil {
 		filter.BlobFee = uint256.MustFromBig(eip4844.CalcBlobFee(miner.chainConfig, env.header))
+	}
+	if miner.chainConfig.IsOsaka(env.header.Number, env.header.Time) {
+		filter.GasLimitCap = params.MaxTxGas
 	}
 	filter.OnlyPlainTxs, filter.OnlyBlobTxs = true, false
 	pendingPlainTxs := miner.txpool.Pending(filter)
@@ -756,7 +812,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 		}
 		// Note: execution timing is accumulated in caller scope (generateWork)
 	}
-
+	
 	for _, account := range prio {
 		if txs := normalPlainTxs[account]; len(txs) > 0 {
 			delete(normalPlainTxs, account)
@@ -767,25 +823,22 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 			prioBlobTxs[account] = txs
 		}
 	}
-
-	// Fill the block with remaining available pending transactions.
+	// Fill the block with all available pending transactions.
 	if len(prioPlainTxs) > 0 || len(prioBlobTxs) > 0 {
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, prioPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, prioBlobTxs, env.header.BaseFee)
-		// execStart removed: caller accumulates timings
+
 		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt); err != nil {
 			return err
 		}
-		// Note: execution timing is accumulated in caller scope (generateWork)
 	}
 	if len(normalPlainTxs) > 0 || len(normalBlobTxs) > 0 {
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, normalPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, normalBlobTxs, env.header.BaseFee)
-		// execStart removed: caller accumulates timings
+
 		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt); err != nil {
 			return err
 		}
-		// Note: execution timing is accumulated in caller scope (generateWork)
 	}
 	return nil
 }
@@ -796,7 +849,6 @@ func totalFees(block *types.Block, receipts []*types.Receipt) *big.Int {
 	for i, tx := range block.Transactions() {
 		minerFee, _ := tx.EffectiveGasTip(block.BaseFee())
 		feesWei.Add(feesWei, new(big.Int).Mul(new(big.Int).SetUint64(receipts[i].GasUsed), minerFee))
-		// TODO (MariusVanDerWijden) add blob fees
 	}
 	return feesWei
 }

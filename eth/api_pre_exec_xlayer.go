@@ -531,7 +531,7 @@ func applyMessageWithTracer(ctx context.Context, api *TxPreExecAPI, state *coreS
 	state.SetTxContext(txHash, index)
 
 	var gasUsed uint64
-	receipt, err := core.ApplyTransactionWithEVM(msg, gp, state, evm.Context.BlockNumber, txctx.BlockHash, tx, &gasUsed, evm)
+	receipt, err := core.ApplyTransactionWithEVM(msg, gp, state, evm.Context.BlockNumber, txctx.BlockHash, evm.Context.Time, tx, &gasUsed, evm)
 	if err != nil {
 		return nil, gasUsed, nil, err
 	}
@@ -598,7 +598,7 @@ func processTracerResults(rawRes json.RawMessage, state *coreState.StateDB, txHa
 	}
 
 	// Create the final result
-	preRes := toPreResult(innerTxs, state.GetLogs(txHash, header.Number.Uint64(), header.Hash()), stateDiff, PreError{}, gasUsed, blockNumber)
+	preRes := toPreResult(innerTxs, state.GetLogs(txHash, header.Number.Uint64(), header.Hash(), header.Time), stateDiff, PreError{}, gasUsed, blockNumber)
 
 	// Handle receipt status failures
 	if receipt != nil && receipt.Status == types.ReceiptStatusFailed {

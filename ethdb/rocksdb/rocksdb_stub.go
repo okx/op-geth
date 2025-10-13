@@ -16,6 +16,11 @@ var ErrRocksDBNotSupported = errors.New("rocksdb support is not enabled. Compile
 // Database is a stub for RocksDB when not available
 type Database struct{}
 
+// SyncKeyValue implements ethdb.KeyValueStore.
+func (db *Database) SyncKeyValue() error {
+	panic("unimplemented")
+}
+
 // New returns an error indicating RocksDB is not supported
 func New(file string, cache int, handles int, namespace string, readonly bool) (*Database, error) {
 	return nil, ErrRocksDBNotSupported
@@ -42,6 +47,11 @@ func (db *Database) Path() string                                           { re
 
 // stubBatch implements ethdb.Batch for the stub
 type stubBatch struct{}
+
+// DeleteRange implements ethdb.Batch.
+func (b *stubBatch) DeleteRange(start []byte, end []byte) error {
+	panic("unimplemented")
+}
 
 func (b *stubBatch) Put(key, value []byte) error         { return ErrRocksDBNotSupported }
 func (b *stubBatch) Delete(key []byte) error             { return ErrRocksDBNotSupported }

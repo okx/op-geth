@@ -25,7 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 )
 
-func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (receipt *types.Receipt, innerTXs []*types.InnerTx, err error) {
+func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, blockTime uint64, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (receipt *types.Receipt, innerTXs []*types.InnerTx, err error) {
 	if hooks := evm.Config.Tracer; hooks != nil {
 		if hooks.OnTxStart != nil {
 			hooks.OnTxStart(evm.GetVMContext(), tx, msg.From)
@@ -56,7 +56,7 @@ func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.St
 
 	// Merge the tx-local access event into the "block-local" one, in order to collect
 	// all values, so that the witness can be built.
-	if statedb.GetTrie().IsVerkle() {
+	if statedb.Database().TrieDB().IsVerkle() {
 		statedb.AccessEvents().Merge(evm.AccessEvents)
 	}
 
@@ -66,7 +66,7 @@ func ApplyTransactionWithEVM_XLayer(msg *Message, gp *GasPool, statedb *state.St
 		innerTxs = afterApplyTransaction(evm, result.Failed())
 	}
 
-	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce), innerTxs, nil
+	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, blockTime, tx, *usedGas, root, evm.ChainConfig(), nonce), innerTxs, nil
 }
 
 func afterApplyTransaction(env *vm.EVM, failed bool) []*types.InnerTx {

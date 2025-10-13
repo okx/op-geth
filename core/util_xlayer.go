@@ -42,12 +42,12 @@ func CommitXLayerFirstBlock(chainDb ethdb.Database, chainConfig *params.ChainCon
 	if currentBlockHash == (common.Hash{}) {
 		return errors.New("commitXLayerFirstBlock: current block hash not found")
 	}
-	currentBlockNumber := rawdb.ReadHeaderNumber(chainDb, currentBlockHash)
-	if currentBlockNumber == nil {
+	currentBlockNumber, ok := rawdb.ReadHeaderNumber(chainDb, currentBlockHash)
+	if !ok {
 		return errors.New("commitXLayerFirstBlock: current block number not found")
 	}
 
-	if *currentBlockNumber != 0 {
+	if currentBlockNumber != 0 {
 		return nil
 	}
 

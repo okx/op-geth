@@ -17,6 +17,7 @@
 package pebble
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -47,7 +48,7 @@ func TestPebbleDB(t *testing.T) {
 func TestPebbleDBDisk(t *testing.T) {
 	t.Run("DatabaseSuite", func(t *testing.T) {
 		dbtest.TestDatabaseSuite(t, func() ethdb.KeyValueStore {
-			db, err := New(fmt.Sprintf("/tmp/test-pebble-%d-%d", os.Getpid(), time.Now().UnixNano()), 1024, 16, "", false, false)
+			db, err := New(fmt.Sprintf("/tmp/test-pebble-%d-%d", os.Getpid(), time.Now().UnixNano()), 1024, 16, "", false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -72,10 +73,33 @@ func BenchmarkPebbleDB(b *testing.B) {
 
 func BenchmarkPebbleDBDisk(b *testing.B) {
 	dbtest.BenchDatabaseSuite(b, func() ethdb.KeyValueStore {
-		db, err := New(fmt.Sprintf("/tmp/bench-pebble-%d-%d", os.Getpid(), time.Now().UnixNano()), 1<<30, 16, "", false, false)
+		db, err := New(fmt.Sprintf("/tmp/bench-pebble-%d-%d", os.Getpid(), time.Now().UnixNano()), 1<<30, 16, "", false)
 		if err != nil {
 			b.Fatal(err)
 		}
 		return db
 	})
+}
+
+func TestPebbleLogData(t *testing.T) {
+	db, err := pebble.Open("", &pebble.Options{
+		FS: vfs.NewMem(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = db.Get(nil)
+	if !errors.Is(err, pebble.ErrNotFound) {
+		t.Fatal("Unknown database entry")
+	}
+
+	b := db.NewBatch()
+	b.LogData(nil, nil)
+	db.Apply(b, pebble.Sync)
+
+	_, _, err = db.Get(nil)
+	if !errors.Is(err, pebble.ErrNotFound) {
+		t.Fatal("Unknown database entry")
+	}
 }
