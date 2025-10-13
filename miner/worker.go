@@ -751,6 +751,7 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 // be customized with the plugin in the future.
 func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) error {
 	fillStart := time.Now()
+	log.Info("[XLayer] fillTransactions ENTRY", "blockNumber", env.header.Number, "timestamp", fillStart.Unix())
 
 	miner.confMu.RLock()
 	tip := miner.config.GasPrice
@@ -944,17 +945,17 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 
 	fillDuration := time.Since(fillStart)
 
-	// XLayer: Summary log - always show for high load, debug for normal load
+	// XLayer: Always log completion for debugging
+	log.Info("[XLayer] fillTransactions COMPLETED",
+		"blockNumber", env.header.Number,
+		"totalElapsed", fillDuration,
+		"txsIncluded", env.tcount,
+		"pendingFetched", totalPendingTxs)
+
+	// XLayer: Additional warning for high load scenarios
 	if isHighLoad {
-		log.Warn("[XLayer] Block building completed (high load)",
-			"totalElapsed", fillDuration,
-			"txsIncluded", env.tcount,
-			"pendingRemaining", totalPendingTxs-env.tcount,
-			"blockNumber", env.header.Number)
-	} else {
-		log.Debug("[XLayer] Block building completed",
-			"elapsed", fillDuration,
-			"txsIncluded", env.tcount)
+		log.Warn("[XLayer] High load scenario detected in this block",
+			"pendingRemaining", totalPendingTxs-env.tcount)
 	}
 	return nil
 }
