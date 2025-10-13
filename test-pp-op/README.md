@@ -50,17 +50,13 @@ cp testnet.env .env
 # Update .env ()
 # pause erigon, update .env fork_num.
 Update FORK_BLOCK+1
-# Overwrite .env to replace with inner node sepolia/beacon node
-# Do this before you build op-migrate image.
-https://fullnode-inner.okg.com/sepolia/fork/okbc/rpc
-https://fullnode-inner.okg.com/ethsepoliabeacon/native/layer1/rpc
 
 # LOCAL ENVIRONMENT
 # ----------------------------------------------------------------------------
 # Build the image locally after deploying contracts (rollup.json and genesis.json).
 docker build \
   --platform linux/amd64 \
-  --build-arg CHAIN_ID=196 \
+  --build-arg CHAIN_ID=1952 \
   --build-arg OP_STACK_IMAGE=op-stack:amd64 \
   --progress=plain \
   -t op-migrate:amd64 -f dockerfile/Dockerfile.op-program .
@@ -118,7 +114,9 @@ docker tag golang:1.24.2-alpine3.21-builder golang:1.24.2-alpine3.21
 
 # START REGENESIS (ECS host machine)
 # ----------------------------------------------------------------------------
-docker run op-migrate:amd64 cp -rfv /app/op-geth/test-pp-op/* /app/op-geth/test-pp-op/.* /mnt/ramdisk_op/test-pp-op
+docker run --rm -v /mnt/ramdisk_op:/mnt/ramdisk_op op-migrate:amd64 cp -rfv \
+    /app/op-geth/test-pp-op/{5-all.sh,.env} \
+    /mnt/ramdisk_op/test-pp-op
 
 # All configs (including .env, op-geth-data, cannon-data) should be copied to this location.
 cd /mnt/ramdisk_op/test-pp-op
