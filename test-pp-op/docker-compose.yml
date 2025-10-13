@@ -528,6 +528,7 @@ services:
     volumes:
       - ./data/op-geth-rpc:/datadir
       - ./config-op/jwt.txt:/jwt.txt
+      - ./config-op/test.rpc.config.toml:/config.toml
     ports:
       - "8124:8545"
       - "7547:7546"
