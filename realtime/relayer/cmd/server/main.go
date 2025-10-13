@@ -6,9 +6,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ledgerwatch/erigon/zk/realtime/kafka"
-	"github.com/ledgerwatch/erigon/zk/realtime/relayer/streamer"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/realtime/kafka"
+	"github.com/ethereum/go-ethereum/realtime/relayer/streamer"
 )
 
 func main() {

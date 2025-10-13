@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:1.2
-FROM golang:1.24 AS builder
+FROM golang:1.24-alpine AS builder
 
 # Install build dependencies including C libraries for CGO
 RUN apk add --no-cache git build-base gcc musl-dev
@@ -15,12 +15,11 @@ RUN go mod download
 # Copy the entire project
 COPY . .
 
-# Build the relayer with CGO enabled 
 WORKDIR /app/realtime/relayer/cmd/server
 RUN --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/tmp/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /app/relayer .
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/relayer .
 
 # --- RUNTIME ---
 FROM alpine:3.18

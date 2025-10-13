@@ -7,11 +7,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ledgerwatch/erigon/zk/realtime/kafka"
-	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
-	"github.com/ledgerwatch/erigon/zk/realtime/relayer/streamclient"
-	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/realtime/kafka"
+	kafkaTypes "github.com/ethereum/go-ethereum/realtime/kafka/types"
+	"github.com/ethereum/go-ethereum/realtime/relayer/streamclient"
+	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
 func main() {
