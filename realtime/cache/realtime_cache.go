@@ -279,8 +279,8 @@ func (cache *RealtimeCache) tryApplyBlockTxMsgs(blockContext *PendingBlockContex
 		if err != nil {
 			return fmt.Errorf("failed to get inner txs. Block number: %d, tx index: %d, error: %v", txMsg.BlockNumber, blockContext.nextTxIndex, err)
 		}
-		cache.Stateless.PutTxInfo(blockContext.blockNum, txMsg.Hash, tx, receipt, innerTxs)
 		blockContext.blockStateCache.ApplyChangeset(txMsg.Changeset, txMsg.BlockNumber)
+		cache.Stateless.PutTxInfo(blockContext.blockNum, txMsg.Hash, tx, receipt, innerTxs)
 		blockContext.nextTxIndex++
 		processed++
 
