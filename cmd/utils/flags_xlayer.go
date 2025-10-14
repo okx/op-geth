@@ -324,6 +324,7 @@ var (
 		RealtimeStreamerUseTLS,
 		RealtimeStreamerWriteTimeout,
 		RealtimeStreamerReadTimeout,
+		RealtimeStreamerRetryDelay,
 		RealtimeCacheDumpPath,
 		ApolloEnabledFlag,
 		ApolloAppIDFlag,
