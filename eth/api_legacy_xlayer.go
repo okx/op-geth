@@ -65,6 +65,9 @@ func NewXlayerLegacyRPCService(config *ethconfig.Config) (*XlayerLegacyRPCServic
 
 // Close closes the erigon RPC client
 func (mc *XlayerLegacyRPCService) Close() {
+	if mc.ErigonClient == nil {
+		return
+	}
 	mc.ErigonClient.Close()
 }
 
