@@ -91,10 +91,14 @@ DatabaseHandles = 2048
 import "github.com/ethereum/go-ethereum/ethdb/rocksdb"
 
 // Basic usage
+// New(file, cache_mb, handles, namespace, readonly)
 db, err := rocksdb.New("/path/to/db", 512, 1024, "metrics/", false)
 if err != nil {
     // Handle error - may be ErrRocksDBNotSupported if not built with rocksdb tag
 }
+
+// Read-only mode (disables write buffers)
+db, err := rocksdb.New("/path/to/db", 512, 1024, "metrics/", true)
 
 // Custom configuration
 db, err := rocksdb.NewCustom("/path/to/db", "metrics/", func(opts *grocksdb.Options) {
@@ -113,14 +117,16 @@ db, err := rocksdb.NewCustom("/path/to/db", "metrics/", func(opts *grocksdb.Opti
 - **Batch operations**: Atomic writes with batching
 - **Iterators**: Prefix-based iteration with range support
 - **Database compaction**: Manual compaction for performance
-- **Statistics**: Integration with geth metrics system
+- **Statistics**: Integration with geth metrics system and RocksDB internal stats via `Stat()`
+- **WAL sync**: `SyncKeyValue()` method to ensure durability by flushing write-ahead-log
 - **Resource management**: Proper cleanup and resource handling
 - **Build tag support**: Conditional compilation for optional dependency
 
 ### ⚠️ Limitations
-- **Range deletion**: Implemented as fallback iteration (not native RocksDB DeleteRange)
-- **Batch replay**: Limited support due to grocksdb API constraints
+- **Range deletion**: Database-level uses fallback iteration (limited to 10,000 keys); batch-level uses native RocksDB DeleteRange
+- **Batch replay**: Supports Put, Delete, and DeleteRange operations
 - **Compression**: Default compression only (specific algorithms not exposed)
+- **Iterator thread safety**: Iterators are not thread-safe and should not be used concurrently (Database and Batch are thread-safe)
 
 ### 🔧 Advanced Features
 - **Configurable caching**: Block cache and write buffer tuning
@@ -133,7 +139,7 @@ db, err := rocksdb.NewCustom("/path/to/db", "metrics/", func(opts *grocksdb.Opti
 ### Cache Configuration
 ```go
 db, err := rocksdb.NewCustom(path, namespace, func(opts *grocksdb.Options) {
-    // Set cache to 1GB total (512MB block cache + 256MB write buffer)
+    // Configure caching (512MB block cache + 256MB write buffer = 768MB total)
     blockCache := grocksdb.NewLRUCache(uint64(512 * 1024 * 1024))
     bbto := grocksdb.NewDefaultBlockBasedTableOptions()
     bbto.SetBlockCache(blockCache)
@@ -250,17 +256,39 @@ ethdb/rocksdb/
 
 ### Build Tags
 - **`rocksdb`**: Enables full RocksDB implementation
-- **Default**: Uses stub implementation that returns errors
+- **Default**: Uses stub implementation that returns `ErrRocksDBNotSupported`
+
+### Constants and Defaults
+- **Minimum cache size**: 16 MB (split between block cache and write buffer)
+- **Cache allocation** (when using `New()`): 50% for block cache, 25% for write buffer (75% of cache parameter used)
+- **Minimum file handles**: 16 open files
+- **Write buffer count**: 3 memtables (similar to LevelDB behavior)
+- **Background threads**: 4 compaction threads, 2 flush threads (default)
+- **Bloom filter**: 10 bits per key (default)
+- **Metrics gathering interval**: 3 seconds
+- **Write stall warning interval**: 1 minute
+- **DeleteRange key limit**: 10,000 keys per operation (to prevent blocking)
+
+### Metrics Collected
+The implementation collects comprehensive metrics for monitoring:
+- **Compaction metrics**: Time, input/output data, counts by level
+- **Disk I/O**: Read/write rates and total size
+- **Cache statistics**: Block cache and table cache hit/miss ratios
+- **Memory usage**: MemTable counts (live/zombie) and manual allocations
+- **Filter performance**: Bloom filter hit/miss statistics
+- **Write delays**: Stall counts and durations
+- **Active operations**: Live iterators and in-progress compactions
 
 ## Contributing
 
 To improve RocksDB support:
 
 1. **Performance optimizations**: Benchmark and tune default configurations
-2. **Feature completeness**: Implement native DeleteRange and better batch replay
+2. **Feature completeness**: Implement native DeleteRange at database level (currently uses iteration fallback)
 3. **Error handling**: Improve error messages and recovery mechanisms
-4. **Documentation**: Add more usage examples and troubleshooting guides
-5. **Testing**: Expand test coverage for edge cases and performance scenarios
+4. **Compression configuration**: Expose compression algorithm selection via API
+5. **Documentation**: Add more usage examples and troubleshooting guides
+6. **Testing**: Expand test coverage for edge cases and performance scenarios
 
 ### Development Setup
 ```bash
