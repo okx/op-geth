@@ -179,6 +179,11 @@ var (
 		Usage: "Streamer timeout",
 		Value: 300 * time.Second,
 	}
+	RealtimeStreamerRetryDelay = &cli.DurationFlag{
+		Name:  "realtime.streamer-retry-delay",
+		Usage: "Streamer retry delay",
+		Value: 1 * time.Second,
+	}
 	RealtimeCacheDumpPath = &cli.StringFlag{
 		Name:  "realtime.cache-dump-path",
 		Usage: "Cache dump path",
@@ -509,6 +514,9 @@ func setRealtimeXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 	if ctx.IsSet(RealtimeStreamerReadTimeout.Name) {
 		cfg.XLayer.Realtime.WSConn.RealtimeStreamerReadTimeout = ctx.Duration(RealtimeStreamerReadTimeout.Name)
+	}
+	if ctx.IsSet(RealtimeStreamerRetryDelay.Name) {
+		cfg.XLayer.Realtime.WSConn.RealtimeStreamerRetryDelay = ctx.Duration(RealtimeStreamerRetryDelay.Name)
 	}
 
 }

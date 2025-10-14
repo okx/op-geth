@@ -12,6 +12,8 @@ import (
 )
 
 func main() {
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
+
 	config := DefaultConfig()
 	config.ParseFlags()
 

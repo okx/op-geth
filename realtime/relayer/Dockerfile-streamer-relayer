@@ -36,4 +36,4 @@ RUN chmod +x /home/relayer/relayer \
 
 USER relayer
 EXPOSE 8000
-CMD ["/home/relayer/relayer", "-port=8000", "-kafka=kafka:9095"]
+CMD ["/home/relayer/relayer", "-port=8000", "-kafka=kafka:9092"]
