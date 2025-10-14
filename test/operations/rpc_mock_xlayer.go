@@ -126,3 +126,42 @@ func handleEthChainId(params json.RawMessage) (json.RawMessage, error) {
 	ethChainIdHex := hexutil.EncodeUint64(DefaultL2ChainID)
 	return json.RawMessage(`"` + ethChainIdHex + `"`), nil
 }
+
+func handleEthGetLogs(params json.RawMessage) (json.RawMessage, error) {
+	getLogsResults := []map[string]interface{}{{
+		"address": "0x1111111111111111111111111111111111111111",
+		"topics": []string{
+			"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+			"0x00000000000000000000000056eddb7aa87536c09ccc2793473599fd21a8b17f",
+			"0x000000000000000000000000e291cc3e5b9e0c9b37c9fbdd549abf3b5c0ad342",
+		},
+		"data":             "0x0000000000000000000000000000000000000000000000000000000ba42490a0",
+		"blockNumber":      "0x1",
+		"transactionHash":  "0x9ebd9461d1973d565c0a53c054e3eb058b1b2a14d0982cea11db488b455a7dab",
+		"transactionIndex": "0x0",
+		"blockHash":        "0xaf8913e030cfbcb24b27dc884b6c0eb383f42c824f341e798f0d51e2850c943e",
+		"logIndex":         "0x0",
+		"removed":          false,
+	},
+		{"address": "0x2222222222222222222222222222222222222222",
+			"topics": []string{
+				"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+				"0x00000000000000000000000056eddb7aa87536c09ccc2793473599fd21a8b17f",
+				"0x000000000000000000000000e291cc3e5b9e0c9b37c9fbdd549abf3b5c0ad342",
+			},
+			"data":             "0x0000000000000000000000000000000000000000000000000000000ba42490a0",
+			"blockNumber":      "0x1",
+			"transactionHash":  "0x9ebd9461d1973d565c0a53c054e3eb058b1b2a14d0982cea11db488b455a7dab",
+			"transactionIndex": "0x1",
+			"blockHash":        "0xaf8913e030cfbcb24b27dc884b6c0eb383f42c824f341e798f0d51e2850c943e",
+			"logIndex":         "0x1",
+			"removed":          false,
+		},
+	}
+
+	result, err := json.Marshal([]interface{}{getLogsResults})
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(result), nil
+}

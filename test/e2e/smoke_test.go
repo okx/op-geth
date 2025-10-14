@@ -81,21 +81,29 @@ func TestMockErigonServer(t *testing.T) {
 	log.Info("Mock Erigon server is running at: %s", mockErigonServer.URL)
 
 	ctx := context.Background()
-	client, err := rpc.DialContext(ctx, mockErigonServer.URL)
+	legacyClient, err := rpc.DialContext(ctx, mockErigonServer.URL)
 	require.NoError(t, err)
-	defer client.Close()
+	defer legacyClient.Close()
 
 	// Test eth_chainId method
 	var chainID string
-	err = client.Call(&chainID, "eth_chainId")
+	err = legacyClient.Call(&chainID, "eth_chainId")
 	require.NoError(t, err)
 	ethChainIdHex := hexutil.EncodeUint64(operations.DefaultL2ChainID)
 	require.Equal(t, ethChainIdHex, chainID, "chain ID")
 
-	client2, err1 := ethclient.Dial(operations.DefaultL2NetworkURL)
+	client, err1 := ethclient.Dial(operations.DefaultL2NetworkURL)
 	require.NoError(t, err1)
-	WaitUntilBlock(t, client2, operations.DefaultLegacyBlock)
+	WaitUntilBlock(t, client, operations.DefaultLegacyBlock)
 
+	// Test eth_getLogs method
+	logs, err := client.FilterLogs(ctx, ethereum.FilterQuery{
+		FromBlock: big.NewInt(int64(operations.DefaultLegacyBlock - 1)),
+		ToBlock:   big.NewInt(int64(operations.DefaultLegacyBlock + 1)),
+		Addresses: []common.Address{common.HexToAddress(operations.DefaultL2AdminAddress)},
+	})
+	require.NoError(t, err)
+	require.Equal(t, len(logs), 2, "logs")
 }
 
 func TestClaimTx(t *testing.T) {
