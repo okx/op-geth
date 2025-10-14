@@ -585,3 +585,20 @@ func CheckSuccessfulResult(t *testing.T, result ValidationResult, fromAddress st
 func CheckErrorResult(t *testing.T, result ValidationResult, expectedError string, testName string) {
 	require.Contains(t, result.Error.Msg, expectedError, "Error should mention %s for %s", expectedError, testName)
 }
+
+// WaitUntilBlock waits until a block is found
+func WaitUntilBlock(t *testing.T, client *ethclient.Client, blockNumber uint64) {
+	for {
+		block, err := client.BlockByNumber(context.Background(), nil)
+		require.NoError(t, err)
+		if block != nil {
+			if block.NumberU64() >= blockNumber {
+				break
+			} else {
+				t.Logf("Current: %d, %d is not found, waiting for it", block.NumberU64(), blockNumber)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+		}
+	}
+}

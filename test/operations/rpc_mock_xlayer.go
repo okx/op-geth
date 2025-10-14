@@ -2,8 +2,12 @@ package operations
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 // normal jsonrpc message
@@ -31,14 +35,20 @@ type jsonError struct {
 // 3. Register the mock Erigon RPC service to the mock HTTP server
 // 4. Run the mock HTTP server in a separate goroutine
 
+// CreateMockErigonServer creates a mock Erigon server with a specific port
 func CreateMockErigonServer() *httptest.Server {
+	return createMockErigonServerInternal()
+}
+
+// createMockErigonServerInternal is the internal implementation
+func createMockErigonServerInternal() *httptest.Server {
 	// Create a handler map for extensibility - new methods can be easily added here
 	handlers := map[string]func(params json.RawMessage) (json.RawMessage, error){
 		"eth_chainId": handleEthChainId,
 	}
 
-	// Create and return the mock HTTP server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Create HTTP handler
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		// Parse the JSON-RPC request
@@ -57,7 +67,7 @@ func CreateMockErigonServer() *httptest.Server {
 		}
 
 		// Find the handler for the requested method
-		handler, ok := handlers[req.Method]
+		methodHandler, ok := handlers[req.Method]
 		if !ok {
 			response := jsonrpcMessage{
 				Version: "2.0",
@@ -72,7 +82,7 @@ func CreateMockErigonServer() *httptest.Server {
 		}
 
 		// Execute the handler
-		result, err := handler(req.Params)
+		result, err := methodHandler(req.Params)
 		if err != nil {
 			response := jsonrpcMessage{
 				Version: "2.0",
@@ -93,7 +103,18 @@ func CreateMockErigonServer() *httptest.Server {
 			Result:  result,
 		}
 		json.NewEncoder(w).Encode(response)
-	}))
+	})
+
+	// Create the mock HTTP server
+	var server *httptest.Server
+
+	server = httptest.NewUnstartedServer(handler)
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", DefaultErigonRPCPort))
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create listener on port %d: %v", DefaultErigonRPCPort, err))
+	}
+	server.Listener = listener
+	server.Start()
 
 	return server
 }
@@ -102,5 +123,6 @@ func CreateMockErigonServer() *httptest.Server {
 // Returns chain ID "0x1" (mainnet)
 func handleEthChainId(params json.RawMessage) (json.RawMessage, error) {
 	// Return "0x1" as a JSON string
-	return json.RawMessage(`"0x1"`), nil
+	ethChainIdHex := hexutil.EncodeUint64(DefaultL2ChainID)
+	return json.RawMessage(`"` + ethChainIdHex + `"`), nil
 }

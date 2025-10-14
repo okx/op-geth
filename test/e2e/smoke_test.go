@@ -53,7 +53,9 @@ var mockErigonServer *httptest.Server
 func TestMain(m *testing.M) {
 	// Setup: Initialize the mock Erigon server before running tests
 	log.Info("Setting up mock Erigon server...")
+
 	mockErigonServer = operations.CreateMockErigonServer()
+
 	log.Info("Mock Erigon server started at: %s", mockErigonServer.URL)
 
 	// Run all tests
@@ -65,6 +67,35 @@ func TestMain(m *testing.M) {
 
 	// Exit with the same code as the test run
 	os.Exit(exitCode)
+}
+
+// TestMockErigonServer demonstrates how to use the mock Erigon server
+func TestMockErigonServer(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+
+	// The mock server is already initialized in TestMain
+	// You can access it via mockErigonServer.URL
+
+	log.Info("Mock Erigon server is running at: %s", mockErigonServer.URL)
+
+	ctx := context.Background()
+	client, err := rpc.DialContext(ctx, mockErigonServer.URL)
+	require.NoError(t, err)
+	defer client.Close()
+
+	// Test eth_chainId method
+	var chainID string
+	err = client.Call(&chainID, "eth_chainId")
+	require.NoError(t, err)
+	ethChainIdHex := hexutil.EncodeUint64(operations.DefaultL2ChainID)
+	require.Equal(t, ethChainIdHex, chainID, "chain ID")
+
+	client2, err1 := ethclient.Dial(operations.DefaultL2NetworkURL)
+	require.NoError(t, err1)
+	WaitUntilBlock(t, client2, operations.DefaultLegacyBlock)
+
 }
 
 func TestClaimTx(t *testing.T) {
@@ -103,32 +134,6 @@ func TestChainID(t *testing.T) {
 	chainID, err := operations.EthChainID()
 	require.NoError(t, err)
 	require.Equal(t, chainID, operations.DefaultL2ChainID)
-}
-
-// TestMockErigonServer demonstrates how to use the mock Erigon server
-func TestMockErigonServer(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
-	}
-
-	// The mock server is already initialized in TestMain
-	// You can access it via mockErigonServer.URL
-
-	log.Info("Mock Erigon server is running at: %s", mockErigonServer.URL)
-
-	// Example: Make an RPC call to the mock server
-	ctx := context.Background()
-	client, err := rpc.DialContext(ctx, mockErigonServer.URL)
-	require.NoError(t, err)
-	defer client.Close()
-
-	// Test eth_chainId method
-	var chainID string
-	err = client.Call(&chainID, "eth_chainId")
-	require.NoError(t, err)
-	require.Equal(t, "0x1", chainID, "Expected chain ID to be 0x1")
-
-	log.Info("Successfully called eth_chainId, got: %s", chainID)
 }
 
 func TestEthTransfer(t *testing.T) {
