@@ -611,7 +611,12 @@ func (b *batch) Write() error {
 	if b.db.closed {
 		return errors.New("database closed")
 	}
-	return b.db.db.Write(b.db.writeOptions, b.b)
+	err := b.db.db.Write(b.db.writeOptions, b.b)
+	if err != nil {
+		return err
+	}
+	b.b.Clear()
+	return nil
 }
 
 // Reset resets the batch for reuse.
@@ -623,6 +628,9 @@ func (b *batch) Reset() {
 func (b *batch) Replay(w ethdb.KeyValueWriter) error {
 	it := b.b.NewIterator()
 	for {
+		if !it.Next() {
+			return it.Error()
+		}
 		rec := it.Record()
 		if rec == nil {
 			return it.Error()
@@ -650,9 +658,6 @@ func (b *batch) Replay(w ethdb.KeyValueWriter) error {
 			}
 		default:
 			return fmt.Errorf("unhandled operation, keytype: %v", kind)
-		}
-		if !it.Next() {
-			return it.Error()
 		}
 	}
 }
