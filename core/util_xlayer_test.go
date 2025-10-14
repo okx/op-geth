@@ -176,12 +176,12 @@ func TestCommitXlayerFirstBlock(t *testing.T) {
 				if tt.name == "successful commit" {
 					// Verify the xlayer block was written correctly
 					headHash := rawdb.ReadHeadBlockHash(testDB)
-					headNumber := rawdb.ReadHeaderNumber(testDB, headHash)
-					assert.NotNil(t, headNumber)
-					assert.Equal(t, chainConfig.LegacyXLayerBlock.Uint64(), *headNumber)
+					headNumber, ok := rawdb.ReadHeaderNumber(testDB, headHash)
+					assert.True(t, ok)
+					assert.Equal(t, chainConfig.LegacyXLayerBlock.Uint64(), headNumber)
 
 					// Verify block contents
-					block := rawdb.ReadBlock(testDB, headHash, *headNumber)
+					block := rawdb.ReadBlock(testDB, headHash, headNumber)
 					assert.NotNil(t, block)
 					assert.Equal(t, chainConfig.LegacyXLayerBlock.Uint64(), block.NumberU64())
 
@@ -230,12 +230,12 @@ func TestCommitXlayerFirstBlock_WithGenesisBlock(t *testing.T) {
 
 	// Verify the xlayer block
 	headHash := rawdb.ReadHeadBlockHash(db)
-	headNumber := rawdb.ReadHeaderNumber(db, headHash)
-	assert.NotNil(t, headNumber)
-	assert.Equal(t, chainConfig.LegacyXLayerBlock.Uint64(), *headNumber)
+	headNumber, ok := rawdb.ReadHeaderNumber(db, headHash)
+	assert.True(t, ok)
+	assert.Equal(t, chainConfig.LegacyXLayerBlock.Uint64(), headNumber)
 
 	// Read the written block
-	block := rawdb.ReadBlock(db, headHash, *headNumber)
+	block := rawdb.ReadBlock(db, headHash, headNumber)
 	assert.NotNil(t, block)
 
 	// Verify block header fields were preserved except number

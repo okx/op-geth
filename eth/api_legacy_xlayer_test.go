@@ -18,7 +18,6 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
@@ -212,7 +211,7 @@ func createTestBlockchain(t *testing.T) (*core.BlockChain, *types.Block, *types.
 		engine = beacon.New(ethash.NewFaker())
 	)
 
-	chain, err := core.NewBlockChain(db, nil, gspec, nil, engine, vm.Config{}, nil)
+	chain, err := core.NewBlockChain(db, gspec, engine, nil)
 	if err != nil {
 		t.Fatalf("Failed to create blockchain: %v", err)
 	}
