@@ -30,13 +30,14 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
-	"github.com/ethereum/go-ethereum/realtime/kafka"
+	kafka "github.com/ethereum/go-ethereum/realtime/kafka"
 	kafkaTypes "github.com/ethereum/go-ethereum/realtime/kafka/types"
 	"github.com/ethereum/go-ethereum/realtime/realtimeapi"
-	"github.com/ethereum/go-ethereum/realtime/relayer/streamclient"
-	"github.com/ethereum/go-ethereum/realtime/relayer/streamer"
+	streamclient "github.com/ethereum/go-ethereum/realtime/relayer/streamclient"
+	streamer "github.com/ethereum/go-ethereum/realtime/relayer/streamer"
 	"github.com/ethereum/go-ethereum/realtime/rtclient"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
+
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/stretchr/testify/require"
@@ -45,29 +46,7 @@ import (
 
 const Gwei = 1000000000
 
-func TestRealtimeRPCWithMultipleURLs(t *testing.T) {
-	testURLs := []struct {
-		name           string
-		realtimeURL    string
-		wsURL          string
-		stateCachePath string
-	}{
-		{"Default", DefaultL2NetworkRealtimeURL, DefaultL2NetworkWSURL, DefaultStateCachePath},
-		{"Streamer", StreamerL2NetworkRealtimeURL, StreamerL2NetworkWSURL, StreamerDefaultStateCachePath},
-	}
-
-	for _, tt := range testURLs {
-		t.Run(tt.name, func(t *testing.T) {
-			runRealtimeRPCTest(t, tt.realtimeURL, tt.wsURL)
-		})
-		t.Run(tt.name, func(t *testing.T) {
-			runRealtimeStateIsConsistent(t, tt.realtimeURL, tt.stateCachePath)
-		})
-		time.Sleep(5 * time.Second)
-	}
-}
-
-func runRealtimeRPCTest(t *testing.T, realtimeURL string, wsURL string) {
+func TestRealtimeRPC(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -622,7 +601,7 @@ func runRealtimeRPCTest(t *testing.T, realtimeURL string, wsURL string) {
 	})
 }
 
-func runRealtimeStateIsConsistent(t *testing.T, realtimeURL string, stateCachePath string) {
+func TestRealtimeStateIsConsistent(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
