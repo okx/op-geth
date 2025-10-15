@@ -176,7 +176,7 @@ func (api *EthereumAPI) FeeHistory(ctx context.Context, blockCount math.HexOrDec
 	}
 
 	// For XLayer
-	if api.b.XLayerGpricer() != nil && api.b.XLayerGpricer().GetConfig().XLayer.Type != "" {
+	if api.b.XLayerGpricer() != nil && api.b.XLayerGpricer().GetConfig().XLayer.Type != "" && results.Reward != nil {
 		xlayerMaxPriorityFee, err := api.getXLayerMaxPriorityFee(ctx)
 		if err != nil {
 			return nil, err
