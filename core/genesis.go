@@ -237,8 +237,8 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool)
 }
 
 func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool) (common.Hash, common.Hash, error) {
-	if triedb.IsVerkle() {
-		return common.Hash{}, common.Hash{}, errors.New("not supported yet")
+	if triedb.IsVerkle() || triedb.Scheme() == rawdb.PathScheme {
+		return flushAlloc(ga, triedb, isIsthmus)
 	}
 
 	allocMap := make(map[common.Address]*types.StateAccount, len(*ga))
@@ -335,8 +335,11 @@ func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus b
 		sa := allocMap[addr]
 		sa.Nonce = acc.Nonce
 		var b uint256.Int
-		b.SetFromBig(acc.Balance)
+		if acc.Balance != nil {
+			b.SetFromBig(acc.Balance)
+		}
 		sa.Balance = &b
+
 		if len(acc.Code) == 0 {
 			sa.CodeHash = types.EmptyCodeHash[:]
 		} else {
