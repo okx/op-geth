@@ -396,7 +396,7 @@ func TestEthereumTransactionRPC(t *testing.T) {
 		require.Greater(t, balance.Cmp(big.NewInt(0)), 0, "From address should have balance")
 
 		t.Run("SimpleTransfer", func(t *testing.T) {
-			transferAmount := big.NewInt(1000000000000000) // 0.001 ETH
+			transferAmount := big.NewInt(1000000000000000)
 
 			gas, err := client.EstimateGas(ctx, ethereum.CallMsg{
 				From:  fromAddr,
@@ -411,13 +411,11 @@ func TestEthereumTransactionRPC(t *testing.T) {
 
 		// Test 2: Contract call gas estimation
 		t.Run("ContractCall", func(t *testing.T) {
-			// Prepare contract call data (triggerCall function from ContractA)
 			contractAABI, err := abi.JSON(strings.NewReader(constants.ContractAABIJson))
 			require.NoError(t, err)
 			calldata, err := contractAABI.Pack("triggerCall")
 			require.NoError(t, err)
 
-			// Estimate gas for contract call
 			gas, err := client.EstimateGas(ctx, ethereum.CallMsg{
 				From: fromAddr,
 				To:   &ContractAAddr,
@@ -469,21 +467,14 @@ func TestEthereumTransactionRPC(t *testing.T) {
 		require.True(t, exists, "Transaction should have hash field")
 		require.Equal(t, txhash, txHashStr, "Transaction hash should match")
 
-		txIndexHex, exists := txData["transactionIndex"].(string)
-		require.True(t, exists, "Transaction should have transactionIndex field")
-		require.NotEmpty(t, txIndexHex, "Transaction index should not be empty")
+		txIndexHex := txData["transactionIndex"].(string)
+		txIndex, err := hexutil.DecodeUint64(txIndexHex)
+		require.NoError(t, err, "Transaction index should be valid hex")
+		require.Equal(t, uint64(receipt.TransactionIndex), txIndex, "Transaction index should match between transaction and receipt")
 
-		// Verify block hash exists
-		blockHashStr, exists := txData["blockHash"].(string)
-		require.True(t, exists, "Transaction should have blockHash field")
-		require.NotEmpty(t, blockHashStr, "Block hash should not be empty")
-
-		// Verify from address exists
 		fromAddr, exists := txData["from"].(string)
 		require.True(t, exists, "Transaction should have from field")
-		require.NotEmpty(t, fromAddr, "From address should not be empty")
-
-		fmt.Printf("EthGetTransactionByHash - Hash: %s, BlockHash: %s, TxIndex: %s\n", txHashStr, blockHashStr, txIndexHex)
+		require.Equal(t, strings.ToLower(operations.DefaultL2AdminAddress), strings.ToLower(fromAddr), "From address should match")
 	})
 
 	t.Run("EthGetTransactionReceipt", func(t *testing.T) {
@@ -1254,8 +1245,9 @@ func TestNewTransactionTypes(t *testing.T) {
 	privateKey, err := crypto.HexToECDSA(TmpSenderPrivateKey)
 	require.NoError(t, err)
 	fromAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+	toAddress := common.HexToAddress("0x1111111111111111111111111111111111111111")
 
-	fundingAmount := uint256.NewInt(10000000000000000000) // 10 ETH
+	fundingAmount := uint256.NewInt(10000000000000000000)
 	fundingTxHash := TransToken(t, ctx, client, fundingAmount, fromAddress.String())
 	t.Logf("Funded test address %s with 10 ETH, tx: %s", fromAddress.Hex(), fundingTxHash)
 
@@ -1264,11 +1256,10 @@ func TestNewTransactionTypes(t *testing.T) {
 			nonce, err := client.PendingNonceAt(ctx, fromAddress)
 			require.NoError(t, err)
 
-			toAddress := common.HexToAddress("0x1111111111111111111111111111111111111111")
-			value := big.NewInt(1000000000000000000) // 1 ETH
+			value := big.NewInt(1000000000000000000)
 			gasLimit := uint64(21000)
-			maxFeePerGas := big.NewInt(20000000000)        // 20 Gwei
-			maxPriorityFeePerGas := big.NewInt(1000000000) // 1 Gwei
+			maxFeePerGas := big.NewInt(20000000000)
+			maxPriorityFeePerGas := big.NewInt(1000000000)
 
 			tx := types.NewTx(&types.DynamicFeeTx{
 				ChainID:   chainID,
@@ -1295,15 +1286,14 @@ func TestNewTransactionTypes(t *testing.T) {
 			nonce, err := client.PendingNonceAt(ctx, fromAddress)
 			require.NoError(t, err)
 
-			// Prepare contract call data (triggerCall function)
 			contractAABI, err := abi.JSON(strings.NewReader(constants.ContractAABIJson))
 			require.NoError(t, err)
 			calldata, err := contractAABI.Pack("triggerCall")
 			require.NoError(t, err)
 
 			gasLimit := uint64(200000)
-			maxFeePerGas := big.NewInt(20000000000)        // 20 Gwei
-			maxPriorityFeePerGas := big.NewInt(2000000000) // 2 Gwei
+			maxFeePerGas := big.NewInt(20000000000)
+			maxPriorityFeePerGas := big.NewInt(2000000000)
 
 			// Create EIP-1559 contract call transaction
 			tx := types.NewTx(&types.DynamicFeeTx{
@@ -1331,7 +1321,6 @@ func TestNewTransactionTypes(t *testing.T) {
 		nonce, err := client.PendingNonceAt(ctx, fromAddress)
 		require.NoError(t, err)
 
-		toAddress := common.HexToAddress("0x2222222222222222222222222222222222222222")
 		gasLimit := uint64(26000)
 		gasPrice, err := client.SuggestGasPrice(ctx)
 		require.NoError(t, err)
@@ -1366,35 +1355,27 @@ func TestNewTransactionTypes(t *testing.T) {
 	})
 
 	t.Run("EIP7702Transaction", func(t *testing.T) {
-		// Get nonce for the test account
 		nonce, err := client.PendingNonceAt(ctx, fromAddress)
 		require.NoError(t, err)
 
 		// Create authorization to delegate the fromAddress's code to ContractC
-		// The authorization must be signed by the account that is delegating
 		auth := types.SetCodeAuthorization{
 			ChainID: *uint256.MustFromBig(chainID),
 			Address: ContractCAddr,
 			Nonce:   nonce,
 		}
 
-		// Sign the authorization with the private key of the account delegating
 		signedAuth, err := types.SignSetCode(privateKey, auth)
 		require.NoError(t, err)
 
-		// Verify the authority can be recovered from the signed authorization
 		authority, err := signedAuth.Authority()
 		require.NoError(t, err)
 		require.Equal(t, fromAddress, authority, "Authority should match the signing address")
 
-		// Create a recipient address for the transaction
-		toAddress := common.HexToAddress("0x3333333333333333333333333333333333333333")
-
 		gasLimit := uint64(100000)
-		maxFeePerGas := big.NewInt(20000000000)        // 20 Gwei
-		maxPriorityFeePerGas := big.NewInt(1000000000) // 1 Gwei
+		maxFeePerGas := big.NewInt(20000000000)
+		maxPriorityFeePerGas := big.NewInt(1000000000)
 
-		// Create EIP-7702 SetCode transaction
 		// Set the fromAddress to delegate to ContractC's code
 		tx := types.NewTx(&types.SetCodeTx{
 			ChainID:   uint256.MustFromBig(chainID),
@@ -1443,15 +1424,12 @@ func TestNewTransactionTypes(t *testing.T) {
 		}, "latest")
 		require.NoError(t, err, "BASEFEE opcode should execute without error (EIP-3198 is supported)")
 
-		// Get the latest block to check its base fee
 		latestBlock, err := client.BlockByNumber(ctx, nil)
 		require.NoError(t, err)
 		require.NotNil(t, latestBlock, "Block should not be nil")
-
-		// Assert that base fee field is present (EIP-1559)
 		require.NotNil(t, latestBlock.BaseFee(), "Block should have a base fee field (EIP-3198)")
 
-		t.Logf("  Current block %d base fee: %s wei", latestBlock.Number().Uint64(), latestBlock.BaseFee().String())
+		t.Logf("Current block %d base fee: %s wei", latestBlock.Number().Uint64(), latestBlock.BaseFee().String())
 	})
 
 	t.Run("EIP3529Transaction", func(t *testing.T) {
@@ -1478,7 +1456,7 @@ func TestNewTransactionTypes(t *testing.T) {
 		require.NoError(t, err)
 
 		refundCounter := GetRefundCounterFromTrace(traceResult, "SELFDESTRUCT")
-		t.Logf("  Refund counter after SELFDESTRUCT: %d", refundCounter)
+		t.Logf("Refund counter after SELFDESTRUCT: %d", refundCounter)
 
 		require.Equal(t, uint64(0), refundCounter, "SELFDESTRUCT refund should be 0 with EIP-3529")
 
