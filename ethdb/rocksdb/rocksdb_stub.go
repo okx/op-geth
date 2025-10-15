@@ -18,7 +18,7 @@ type Database struct{}
 
 // SyncKeyValue implements ethdb.KeyValueStore.
 func (db *Database) SyncKeyValue() error {
-	panic("unimplemented")
+	return ErrRocksDBNotSupported
 }
 
 // New returns an error indicating RocksDB is not supported
@@ -50,7 +50,7 @@ type stubBatch struct{}
 
 // DeleteRange implements ethdb.Batch.
 func (b *stubBatch) DeleteRange(start []byte, end []byte) error {
-	panic("unimplemented")
+	return ErrRocksDBNotSupported
 }
 
 func (b *stubBatch) Put(key, value []byte) error         { return ErrRocksDBNotSupported }

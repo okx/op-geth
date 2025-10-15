@@ -568,19 +568,22 @@ func (d *Database) meter(refresh time.Duration, namespace string) {
 // batch is a write-only batch that commits changes to its host database
 // when Write is called. A batch cannot be used concurrently.
 type batch struct {
-	b  *grocksdb.WriteBatch
-	db *Database
+	b    *grocksdb.WriteBatch
+	db   *Database
+	size int
 }
 
 // Put inserts the given value into the batch for later committing.
 func (b *batch) Put(key, value []byte) error {
 	b.b.Put(key, value)
+	b.size += len(key) + len(value)
 	return nil
 }
 
 // Delete inserts the key removal into the batch for later committing.
 func (b *batch) Delete(key []byte) error {
 	b.b.Delete(key)
+	b.size += len(key)
 	return nil
 }
 
@@ -596,12 +599,13 @@ func (b *batch) DeleteRange(start, end []byte) error {
 		end = ethdb.MaximumKey
 	}
 	b.b.DeleteRange(start, end)
+	b.size += len(start) + len(end)
 	return nil
 }
 
 // ValueSize retrieves the amount of data queued up for writing.
 func (b *batch) ValueSize() int {
-	return b.b.Count()
+	return b.size
 }
 
 // Write flushes any accumulated data to disk.
@@ -616,11 +620,13 @@ func (b *batch) Write() error {
 		return err
 	}
 	b.b.Clear()
+	b.size = 0
 	return nil
 }
 
 // Reset resets the batch for reuse.
 func (b *batch) Reset() {
+	b.size = 0
 	b.b.Clear()
 }
 
