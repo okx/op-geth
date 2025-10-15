@@ -673,23 +673,19 @@ func SignAndSendTransaction(
 	tx *types.Transaction,
 	privateKey *ecdsa.PrivateKey,
 ) (common.Hash, *types.Receipt) {
-	// Sign the transaction
 	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
 	signedTx, err := types.SignTx(tx, signer, privateKey)
 	require.NoError(t, err)
 
-	// Send the transaction
 	err = client.SendTransaction(ctx, signedTx)
 	require.NoError(t, err)
 
 	txHash := signedTx.Hash()
 	t.Logf("tx sent: %s", txHash.Hex())
 
-	// Wait for transaction to be mined
 	err = operations.WaitTxToBeMined(ctx, client, signedTx, operations.DefaultTimeoutTxToBeMined)
 	require.NoError(t, err)
 
-	// Get receipt
 	receipt, err := client.TransactionReceipt(ctx, txHash)
 	require.NoError(t, err)
 	require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, ("transaction should succeed"))
