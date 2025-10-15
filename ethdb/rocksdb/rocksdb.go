@@ -334,32 +334,29 @@ func (d *Database) DeleteRange(start, end []byte) error {
 	if d.closed {
 		return errors.New("database closed")
 	}
-	// There is no special flag to represent the end of key range
-	// in rocksdb(nil in leveldb). Use an ugly hack to construct a
-	// large key to represent it.
+
+	if start == nil {
+		it := d.db.NewIterator(grocksdb.NewDefaultReadOptions())
+		defer it.Close()
+		it.SeekToFirst()
+		start = it.Key().Data()
+	}
+
+	// There is no special flag to represent the end of key range.
+	// Last iterator key cannot be used since it should also be deleted.
+	// Use an ugly hack to construct a large key to represent it.
 	if end == nil {
 		end = ethdb.MaximumKey
 	}
 
-	// Use batch for atomic deletion
-	batch := d.NewBatch()
-	it := d.NewIterator(nil, start)
-	defer it.Release()
-
-	var count int
-	for it.Next() && bytes.Compare(end, it.Key()) > 0 {
-		count++
-		if count > 10000 { // should not block for more than a second
-			if err := batch.Write(); err != nil {
-				return err
-			}
-			return ethdb.ErrTooManyKeys
-		}
-		if err := batch.Delete(it.Key()); err != nil {
-			return err
-		}
+	if bytes.Compare(start, end) >= 0 {
+		return nil
 	}
-	return batch.Write()
+
+	wopts := grocksdb.NewDefaultWriteOptions()
+	defer wopts.Destroy()
+	cfh := d.db.GetDefaultColumnFamily()
+	return d.db.DeleteRangeCF(wopts, cfh, start, end)
 }
 
 // NewBatch creates a write-only key-value store that buffers changes to its host
