@@ -214,9 +214,6 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool)
 		}
 		statedb.SetCode(addr, account.Code)
 		statedb.SetNonce(addr, account.Nonce, tracing.NonceChangeGenesis)
-		//for key, value := range account.Storage {
-		//	statedb.SetState(addr, key, value)
-		//}
 	}
 	root, err := statedb.Commit(0, false, false)
 	if err != nil {
@@ -281,12 +278,11 @@ func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus b
 		}()
 
 		batch.Reset()
-		start := time.Now()
 		for {
 			select {
 			case nodes, ok := <-nodesChan:
 				if !ok {
-					start = time.Now()
+					start := time.Now()
 					err := batch.Write()
 					log.Info("internal batch written", "count", batchWriteCount, "elapsed", batchWriteElapsed)
 					log.Info("last batch written", "elapsed", time.Since(start))
@@ -317,7 +313,7 @@ func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus b
 				ownerCount++
 			default:
 				batchWriteCount++
-				start = time.Now()
+				start := time.Now()
 				if err := batch.Write(); err != nil {
 					log.Error("failed to write merged node to disk", "err", err)
 				}
@@ -608,12 +604,10 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 			return nil, common.Hash{}, nil, err
 		}
 
-		start := time.Now()
 		block, err := genesis.Commit(db, triedb)
 		if err != nil {
 			return nil, common.Hash{}, nil, err
 		}
-		log.Info("commit genesis", "elapsed", time.Since(start))
 		return genesis.Config, block.Hash(), nil, nil
 	}
 	log.Info("Genesis hash", "hash", ghash)
@@ -892,23 +886,21 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 			stateRoot = *g.StateHash
 		}
 	} else {
-		start := time.Now()
 		// flush the data to disk and compute the state root
 		stateRoot, storageRootMessagePasser, err = flushAllocFast(&g.Alloc, triedb, g.Config.IsIsthmus(g.Timestamp))
 		if err != nil {
 			return nil, err
 		}
-		log.Info("flush alloc", "elapsed", time.Since(start))
 	}
 	block := g.toBlockWithRoot(stateRoot, storageRootMessagePasser)
 
 	// Marshal the genesis state specification and persist.
-	//blob, err := json.Marshal(g.Alloc)
-	//if err != nil {
-	// return nil, err
-	//}
+	blob, err := json.Marshal(g.Alloc)
+	if err != nil {
+		return nil, err
+	}
 	batch := db.NewBatch()
-	//rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
+	rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
 	rawdb.WriteBlock(batch, block)
 	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), nil)
 	rawdb.WriteCanonicalHash(batch, block.Hash(), block.NumberU64())
@@ -916,9 +908,7 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 	rawdb.WriteHeadFastBlockHash(batch, block.Hash())
 	rawdb.WriteHeadHeaderHash(batch, block.Hash())
 	rawdb.WriteChainConfig(batch, block.Hash(), config)
-	err = batch.Write()
-
-	return block, err
+	return block, batch.Write()
 }
 
 // MustCommit writes the genesis block and state to db, panicking on error.

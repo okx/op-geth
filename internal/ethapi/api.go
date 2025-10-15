@@ -174,6 +174,23 @@ func (api *EthereumAPI) FeeHistory(ctx context.Context, blockCount math.HexOrDec
 			}
 		}
 	}
+
+	// For XLayer
+	if api.b.XLayerGpricer() != nil && api.b.XLayerGpricer().GetConfig().XLayer.Type != "" && results.Reward != nil {
+		xlayerMaxPriorityFee, err := api.getXLayerMaxPriorityFee(ctx)
+		if err != nil {
+			return nil, err
+		}
+		// for each results.Reward[i][j], if lower than xlayerMaxPriorityFee, set it to xlayerMaxPriorityFee
+		for i := range results.Reward {
+			for j := range results.Reward[i] {
+				if results.Reward[i][j].ToInt().Cmp(xlayerMaxPriorityFee.ToInt()) < 0 {
+					results.Reward[i][j] = xlayerMaxPriorityFee
+				}
+			}
+		}
+	}
+
 	if baseFee != nil {
 		results.BaseFee = make([]*hexutil.Big, len(baseFee))
 		for i, v := range baseFee {

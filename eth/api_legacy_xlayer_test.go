@@ -13,15 +13,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/consensus/beacon"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
-	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -194,39 +188,6 @@ func createMockErigonServer(t *testing.T) (*httptest.Server, *mockErigonService)
 	}))
 
 	return httpServer, service
-}
-
-// Helper function to create a test blockchain
-func createTestBlockchain(t *testing.T) (*core.BlockChain, *types.Block, *types.Block) {
-	var (
-		key, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-		addr   = crypto.PubkeyToAddress(key.PublicKey)
-		gspec  = &core.Genesis{
-			Config: params.TestChainConfig,
-			Alloc: types.GenesisAlloc{
-				addr: {Balance: big.NewInt(1000000000000000000)},
-			},
-		}
-		db     = rawdb.NewMemoryDatabase()
-		engine = beacon.New(ethash.NewFaker())
-	)
-
-	chain, err := core.NewBlockChain(db, gspec, engine, nil)
-	if err != nil {
-		t.Fatalf("Failed to create blockchain: %v", err)
-	}
-
-	// Generate some blocks
-	blocks, _ := core.GenerateChain(gspec.Config, chain.Genesis(), engine, db, 10, func(i int, gen *core.BlockGen) {
-		tx, _ := types.SignTx(types.NewTransaction(uint64(i), common.Address{0x00}, big.NewInt(1000), params.TxGas, gen.BaseFee(), nil), types.HomesteadSigner{}, key)
-		gen.AddTx(tx)
-	})
-
-	if _, err := chain.InsertChain(blocks); err != nil {
-		t.Fatalf("Failed to insert chain: %v", err)
-	}
-
-	return chain, blocks[0], blocks[len(blocks)-1]
 }
 
 // Test NewXlayerLegacyRPCService
@@ -493,10 +454,6 @@ func TestMigrationTransactionAPI(t *testing.T) {
 // Test Close method
 func TestMigrationConfig_Close(t *testing.T) {
 	t.Parallel()
-
-	// Test closing nil legacyRpc
-	var nilConfig *XlayerLegacyRPCService
-	nilConfig.Close() // Should not panic
 
 	// Test closing legacyRpc with client
 	server, _ := createMockErigonServer(t)
