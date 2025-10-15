@@ -206,6 +206,7 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool)
 		return common.Hash{}, common.Hash{}, err
 	}
 	for addr, account := range *ga {
+		statedb.SetStorage(addr, account.Storage)
 		if account.Balance != nil {
 			// This is not actually logged via tracer because OnGenesisBlock
 			// already captures the allocations.
@@ -213,9 +214,6 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool)
 		}
 		statedb.SetCode(addr, account.Code)
 		statedb.SetNonce(addr, account.Nonce, tracing.NonceChangeGenesis)
-		for key, value := range account.Storage {
-			statedb.SetState(addr, key, value)
-		}
 	}
 	root, err := statedb.Commit(0, false, false)
 	if err != nil {
