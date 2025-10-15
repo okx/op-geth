@@ -237,8 +237,8 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool)
 }
 
 func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool) (common.Hash, common.Hash, error) {
-	if triedb.IsVerkle() {
-		return common.Hash{}, common.Hash{}, errors.New("not supported yet")
+	if triedb.IsVerkle() || triedb.Scheme() == rawdb.PathScheme {
+		return flushAlloc(ga, triedb, isIsthmus)
 	}
 
 	allocMap := make(map[common.Address]*types.StateAccount, len(*ga))
@@ -335,8 +335,11 @@ func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus b
 		sa := allocMap[addr]
 		sa.Nonce = acc.Nonce
 		var b uint256.Int
-		b.SetFromBig(acc.Balance)
+		if acc.Balance != nil {
+			b.SetFromBig(acc.Balance)
+		}
 		sa.Balance = &b
+
 		if len(acc.Code) == 0 {
 			sa.CodeHash = types.EmptyCodeHash[:]
 		} else {
@@ -401,7 +404,9 @@ func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus b
 	// get the storage root of the L2ToL1MessagePasser contract
 	var storageRootMessagePasser common.Hash
 	if isIsthmus {
-		storageRootMessagePasser = allocMap[params.OptimismL2ToL1MessagePasser].Root
+		if messagePasserAcc, ok := allocMap[params.OptimismL2ToL1MessagePasser]; ok {
+			storageRootMessagePasser = messagePasserAcc.Root
+		}
 	}
 
 	if err = dbWorker.Wait(); err != nil {
@@ -897,14 +902,11 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 	}
 	block := g.toBlockWithRoot(stateRoot, storageRootMessagePasser)
 
-	start := time.Now()
 	// Marshal the genesis state specification and persist.
 	//blob, err := json.Marshal(g.Alloc)
 	//if err != nil {
 	// return nil, err
 	//}
-	log.Info("marshal alloc", "elapsed", time.Since(start))
-	start = time.Now()
 	batch := db.NewBatch()
 	//rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
 	rawdb.WriteBlock(batch, block)
@@ -915,7 +917,6 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 	rawdb.WriteHeadHeaderHash(batch, block.Hash())
 	rawdb.WriteChainConfig(batch, block.Hash(), config)
 	err = batch.Write()
-	log.Info("genesis commit", "hash", block.Hash(), "elapsed", time.Since(start))
 
 	return block, err
 }
