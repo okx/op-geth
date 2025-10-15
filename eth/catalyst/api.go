@@ -359,7 +359,18 @@ func (api *ConsensusAPI) forkchoiceUpdated(update engine.ForkchoiceStateV1, payl
 	// sealed by the beacon client. The payload will be requested later, and we
 	// will replace it arbitrarily many times in between.
 
+	log.Info("[XLayer] ForkchoiceUpdated-1",
+		"headBlockHash", update.HeadBlockHash.Hex()[:10],
+		"hasPayloadAttributes", payloadAttributes != nil,
+		"safeBlockHash", update.SafeBlockHash.Hex()[:10],
+		"finalizedBlockHash", update.FinalizedBlockHash.Hex()[:10])
+
 	if payloadAttributes != nil {
+		log.Info("[XLayer] ForkchoiceUpdated-2: PayloadAttributes received",
+			"timestamp", payloadAttributes.Timestamp,
+			"NoTxPool", payloadAttributes.NoTxPool,
+			"forcedTxs", len(payloadAttributes.Transactions),
+			"gasLimit", payloadAttributes.GasLimit)
 		var eip1559Params []byte
 		if api.eth.BlockChain().Config().IsOptimismHolocene(payloadAttributes.Timestamp) {
 			// Validation performed above in checkOptimismPayloadAttributes
@@ -399,6 +410,7 @@ func (api *ConsensusAPI) forkchoiceUpdated(update engine.ForkchoiceStateV1, payl
 			return valid(nil), engine.InvalidPayloadAttributes.With(err)
 		}
 		api.localBlocks.put(id, payload)
+		log.Info("[XLayer] ForkchoiceUpdated-3: Payload building started", "payloadID", id)
 		return valid(&id), nil
 	}
 	return valid(nil), nil

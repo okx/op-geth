@@ -296,7 +296,16 @@ func (payload *Payload) stopBuilding() {
 
 // buildPayload builds the payload according to the provided parameters.
 func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload, error) {
+	log.Info("[XLayer] buildPayload ENTRY",
+		"parent", args.Parent.Hex()[:10],
+		"timestamp", args.Timestamp,
+		"NoTxPool", args.NoTxPool,
+		"forcedTxs", len(args.Transactions),
+		"gasLimit", args.GasLimit)
+
 	if args.NoTxPool { // don't start the background payload updating job if there is no tx pool to pull from
+		log.Warn("[XLayer] buildPayload: NoTxPool=true, skipping txpool",
+			"forcedTxs", len(args.Transactions))
 		// Build the initial version with no transaction included. It should be fast
 		// enough to run. The empty payload can at least make sure there is something
 		// to deliver for not missing slot.
@@ -330,6 +339,9 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 		payload.cond.Broadcast() // unblocks Resolve
 		return payload, nil
 	}
+
+	log.Info("[XLayer] buildPayload: Building full payload with txpool",
+		"forcedTxs", len(args.Transactions))
 
 	fullParams := &generateParams{
 		timestamp:     args.Timestamp,
