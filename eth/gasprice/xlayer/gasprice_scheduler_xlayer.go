@@ -104,7 +104,7 @@ func (s *XLayerScheduler) runL2GasPriceSuggester() {
 	if l1gp, err := GetL1GasPrice(s.eth.Blockchain()); err == nil {
 		s.gpricer.UpdateGasPriceAvg(l1gp)
 	} else {
-		log.Warn("Failed to get L1 gas price", "err", err)
+		log.Debug("L1 gas price has not been set, please start op-node", "err", err)
 	}
 
 	updateTimer := time.NewTimer(s.gpricer.GetConfig().XLayer.UpdatePeriod)
@@ -131,7 +131,7 @@ func (s *XLayerScheduler) runL2GasPriceSuggester() {
 				s.gpricer.UpdateGasPriceAvg(l1gp)
 				s.gpricer.GetGasCache().SetLatestRawGP(s.gpricer.GetLastRawGP())
 			} else {
-				log.Warn("Failed to get L1 gas price", "err", err)
+				log.Debug("L1 gas price has not been set, please start op-node", "err", err)
 			}
 
 			s.updateDynamicGP(ctx)
