@@ -176,6 +176,24 @@ specify the path to the migration database.
 Use --ignore-addresses to specify addresses to ignore during migration.
 Use --no-verify to skip verification after migration.`,
 	}
+	verifyMigrateCommand = &cli.Command{
+		Action:    verifyMigrateGenesis,
+		Name:      "verifyMigrate",
+		Usage:     "verifyMigrate state is correct",
+		ArgsUsage: "<genesisPath>",
+		Flags: slices.Concat([]cli.Flag{
+			utils.CachePreimagesFlag,
+			utils.OverridePrague,
+			utils.OverrideVerkle,
+			&cli.StringFlag{
+				Name:     "chaindata",
+				Usage:    "Path to mdbx database for state migration",
+				Category: flags.EthCategory,
+			},
+		}, utils.DatabaseFlags),
+		Description: `
+verify the genesis.json is consistency with erigon chaindata`,
+	}
 	dumpGenesisCommand = &cli.Command{
 		Action:    dumpGenesis,
 		Name:      "dumpgenesis",

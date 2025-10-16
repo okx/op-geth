@@ -22,6 +22,11 @@ export ERIGON_SMTDATA_DIR=/data/xlayer_uploads/erigon-data-split/smt/
 nohup ./build/bin/geth --datadir=${OP_DATA_DIR} --gcmode=archive migrate --state.scheme=hash --ignore-addresses=0x000000000000000000000000000000005ca1ab1e --chaindata=${ERIGON_CHAINDATA_DIR} --smt-db-path=${ERIGON_SMTDATA_DIR} ${OP_GENESIS_PATH} > migrate.log 2>&1 &
 ```
 
+## verifyMigration
+```
+geth verifyMigrate --chaindata
+```
+
 ## unit test
 ```
 go test ./core -cover -run TestMigration -coverprofile=coverage.out
