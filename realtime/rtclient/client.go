@@ -129,6 +129,26 @@ func (rc *RealtimeClient) RealtimeGetTransactionByHash(ctx context.Context, txHa
 	return result, nil
 }
 
+// RealtimeGetTransactionByBlockNumberAndIndex returns the information about a transaction requested by block number and transaction index in real-time
+func (rc *RealtimeClient) RealtimeGetTransactionByBlockNumberAndIndex(ctx context.Context, blockNumber uint64, txIndex uint) (RpcTransaction, error) {
+	var result RpcTransaction
+	err := rc.c.CallContext(ctx, &result, "eth_getTransactionByBlockNumberAndIndex", blockNumber, txIndex)
+	if err != nil {
+		return RpcTransaction{}, err
+	}
+	return result, nil
+}
+
+// RealtimeGetTransactionByBlockNumberAndIndex returns the information about a transaction requested by block number and transaction index in real-time
+func (rc *RealtimeClient) RealtimeGetTransactionByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, txIndex uint) (RpcTransaction, error) {
+	var result RpcTransaction
+	err := rc.c.CallContext(ctx, &result, "eth_getTransactionByBlockHashAndIndex", blockHash, txIndex)
+	if err != nil {
+		return RpcTransaction{}, err
+	}
+	return result, nil
+}
+
 // RealtimeGetRawTransactionByHash returns raw information about a transaction requested by transaction hash in real-time
 func (rc *RealtimeClient) RealtimeGetRawTransactionByHash(ctx context.Context, txHash common.Hash) ([]byte, error) {
 	var result hexutil.Bytes

@@ -187,6 +187,34 @@ func TestRealtimeComparison(t *testing.T) {
 			}
 		})
 
+		t.Run("getTransactionByBlockAndIndex", func(t *testing.T) {
+			numberOfTransactions := 5
+			txHashes, _, _ := transErc20TokenBatch(t, context.Background(), client, nonRealtimeRPCClient, erc20Address, big.NewInt(Gwei), testAddress.String(), numberOfTransactions)
+			for _, txHash := range txHashes {
+				receipt, err := client.RealtimeGetTransactionReceipt(ctx, common.HexToHash(txHash))
+				require.NoError(t, err)
+				require.NotNil(t, receipt)
+				realtimeTxByNumber, err := client.RealtimeGetTransactionByBlockNumberAndIndex(ctx, receipt.BlockNumber.Uint64(), receipt.TransactionIndex)
+				require.NoError(t, err)
+				realtimeTxByHash, err := client.RealtimeGetTransactionByBlockHashAndIndex(ctx, receipt.BlockHash, receipt.TransactionIndex)
+				require.NoError(t, err)
+				require.Equal(t, realtimeTxByNumber, realtimeTxByHash)
+
+				var nonRealtimeTxByNumber rtclient.RpcTransaction
+				err = rawNonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTxByNumber, "eth_getTransactionByBlockNumberAndIndex", receipt.BlockNumber.Uint64(), receipt.TransactionIndex)
+				require.NoError(t, err)
+				require.Equal(t, realtimeTxByNumber, nonRealtimeTxByNumber)
+
+				var nonRealtimeTxByHash rtclient.RpcTransaction
+				err = rawNonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTxByHash, "eth_getTransactionByBlockHashAndIndex", receipt.BlockHash, receipt.TransactionIndex)
+				require.NoError(t, err)
+				require.Equal(t, realtimeTxByHash, nonRealtimeTxByHash)
+
+				require.Equal(t, realtimeTxByNumber, nonRealtimeTxByNumber)
+				require.Equal(t, realtimeTxByHash, nonRealtimeTxByHash)
+			}
+		})
+
 		t.Run("getBlockReceipts", func(t *testing.T) {
 			numberOfTransactions := 5
 			_, targetBlockNumber, targetBlockHash := transErc20TokenBatch(t, context.Background(), client, nonRealtimeRPCClient, erc20Address, big.NewInt(Gwei), testAddress.String(), numberOfTransactions)

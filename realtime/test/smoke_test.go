@@ -135,6 +135,21 @@ func TestRealtimeRPC(t *testing.T) {
 		fmt.Printf("RealtimeGetInternalTransactions result type: %T\n", tx)
 	})
 
+	t.Run("RealtimeGetTransactionByBlockAndIndex", func(t *testing.T) {
+		receipt, err := client.RealtimeGetTransactionReceipt(ctx, common.HexToHash(txHash))
+		require.NoError(t, err)
+		require.NotNil(t, receipt)
+
+		txByNumber, err := client.RealtimeGetTransactionByBlockNumberAndIndex(ctx, receipt.BlockNumber.Uint64(), receipt.TransactionIndex)
+		require.NoError(t, err)
+		fmt.Printf("RealtimeGetTransactionByBlockNumberAndIndex result type: %T\n", txByNumber)
+
+		txByHash, err := client.RealtimeGetTransactionByBlockHashAndIndex(ctx, receipt.BlockHash, receipt.TransactionIndex)
+		require.NoError(t, err)
+		fmt.Printf("RealtimeGetTransactionByBlockHashAndIndex result type: %T\n", txByHash)
+		require.Equal(t, txByNumber, txByHash)
+	})
+
 	t.Run("RealtimeGetBalance", func(t *testing.T) {
 		balance, err := client.RealtimeGetBalance(ctx, testAddress)
 		require.NoError(t, err)
