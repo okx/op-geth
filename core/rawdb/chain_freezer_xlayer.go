@@ -42,10 +42,9 @@ type XlayerAncientProxy struct {
 }
 
 // NewXlayerAncientProxy creates a new proxy for legacy header sync.
-// Returns nil if the configuration is invalid or if the freezer has already passed the legacy threshold.
-// Pass currentFrozen = 0 to skip the threshold check (useful when freezer state is unknown at creation time).
+// Returns nil if the configuration is invalid.
 // The headerRateLimit parameter controls the QPS for legacy header sync from PP RPC.
-func NewXlayerAncientProxy(legacyThreshold uint64, ppRPCUrl string, ppRPCTimeout time.Duration, headerRateLimit int, currentFrozen uint64) *XlayerAncientProxy {
+func NewXlayerAncientProxy(legacyThreshold uint64, ppRPCUrl string, ppRPCTimeout time.Duration, headerRateLimit int) *XlayerAncientProxy {
 	// Validate configuration
 	if ppRPCUrl == "" {
 		log.Warn("XLayer PP RPC URL not configured, proxy disabled")
@@ -54,15 +53,6 @@ func NewXlayerAncientProxy(legacyThreshold uint64, ppRPCUrl string, ppRPCTimeout
 
 	if legacyThreshold == 0 {
 		log.Warn("XLayer legacy threshold is 0, proxy disabled")
-		return nil
-	}
-
-	// If freezer has already passed the legacy threshold, no proxy needed
-	// Skip this check if currentFrozen is 0 (unknown state)
-	if currentFrozen > 0 && currentFrozen >= legacyThreshold {
-		log.Info("Freezer already passed legacy threshold, XLayer proxy not needed",
-			"currentFrozen", currentFrozen,
-			"legacyThreshold", legacyThreshold)
 		return nil
 	}
 
@@ -75,7 +65,6 @@ func NewXlayerAncientProxy(legacyThreshold uint64, ppRPCUrl string, ppRPCTimeout
 
 	log.Info("Created XLayer ancient proxy for legacy header sync",
 		"legacyThreshold", legacyThreshold,
-		"currentFrozen", currentFrozen,
 		"ppRPCUrl", ppRPCUrl,
 		"ppRPCTimeout", ppRPCTimeout,
 		"headerRateLimit", headerRateLimit)

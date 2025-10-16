@@ -101,7 +101,6 @@ func TestNewXlayerAncientProxy(t *testing.T) {
 		name            string
 		legacyThreshold uint64
 		ppRPCUrl        string
-		currentFrozen   uint64
 		expectNil       bool
 		description     string
 	}{
@@ -109,7 +108,6 @@ func TestNewXlayerAncientProxy(t *testing.T) {
 			name:            "empty URL",
 			legacyThreshold: 1000,
 			ppRPCUrl:        "",
-			currentFrozen:   0,
 			expectNil:       true,
 			description:     "Empty URL should return nil",
 		},
@@ -117,39 +115,21 @@ func TestNewXlayerAncientProxy(t *testing.T) {
 			name:            "zero threshold",
 			legacyThreshold: 0,
 			ppRPCUrl:        "http://localhost:8545",
-			currentFrozen:   0,
 			expectNil:       true,
 			description:     "Zero threshold should return nil",
 		},
 		{
-			name:            "frozen already past threshold",
+			name:            "valid configuration",
 			legacyThreshold: 1000,
 			ppRPCUrl:        "http://localhost:8545",
-			currentFrozen:   1000,
-			expectNil:       true,
-			description:     "Frozen past threshold should return nil",
-		},
-		{
-			name:            "frozen below threshold with valid URL",
-			legacyThreshold: 1000,
-			ppRPCUrl:        "http://localhost:8545",
-			currentFrozen:   500,
 			expectNil:       false,
 			description:     "Should create proxy even if RPC is not reachable (will fail later)",
-		},
-		{
-			name:            "unknown frozen state with valid URL",
-			legacyThreshold: 1000,
-			ppRPCUrl:        "http://localhost:8545",
-			currentFrozen:   0,
-			expectNil:       false,
-			description:     "Should create proxy with unknown frozen state",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy := NewXlayerAncientProxy(tt.legacyThreshold, tt.ppRPCUrl, 100*time.Millisecond, 80, tt.currentFrozen)
+			proxy := NewXlayerAncientProxy(tt.legacyThreshold, tt.ppRPCUrl, 100*time.Millisecond, 80)
 			if tt.expectNil && proxy != nil {
 				t.Errorf("%s: expected nil proxy, got non-nil", tt.description)
 				proxy.Close()
