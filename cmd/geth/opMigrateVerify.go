@@ -193,7 +193,8 @@ func verifyMigrateGenesis(ctx *cli.Context) error {
 		return fmt.Errorf("migration path is required")
 	}
 
-	kv.InitStandaloneSMT(true)
+	isStandaloneSMT := ctx.Bool("standalone-smt")
+	kv.InitStandaloneSMT(isStandaloneSMT)
 	erigonAlloc, err := core.LoadErigonGenesisData(chainDataPath)
 
 	pass := true

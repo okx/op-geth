@@ -190,6 +190,11 @@ Use --no-verify to skip verification after migration.`,
 				Usage:    "Path to mdbx database for state migration",
 				Category: flags.EthCategory,
 			},
+			&cli.BoolFlag{
+				Name:     "standalone-smt",
+				Usage:    "Use standalone SMT database instead of embedded SMT",
+				Category: flags.EthCategory,
+			},
 		}, utils.DatabaseFlags),
 		Description: `
 verify the genesis.json is consistency with erigon chaindata`,
