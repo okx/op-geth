@@ -13,6 +13,7 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -201,12 +202,12 @@ func TestRealtimeComparison(t *testing.T) {
 				require.Equal(t, realtimeTxByNumber, realtimeTxByHash)
 
 				var nonRealtimeTxByNumber rtclient.RpcTransaction
-				err = rawNonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTxByNumber, "eth_getTransactionByBlockNumberAndIndex", receipt.BlockNumber.Uint64(), receipt.TransactionIndex)
+				err = rawNonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTxByNumber, "eth_getTransactionByBlockNumberAndIndex", receipt.BlockNumber.Uint64(), hexutil.Uint64(receipt.TransactionIndex))
 				require.NoError(t, err)
 				require.Equal(t, realtimeTxByNumber, nonRealtimeTxByNumber)
 
 				var nonRealtimeTxByHash rtclient.RpcTransaction
-				err = rawNonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTxByHash, "eth_getTransactionByBlockHashAndIndex", receipt.BlockHash, receipt.TransactionIndex)
+				err = rawNonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTxByHash, "eth_getTransactionByBlockHashAndIndex", receipt.BlockHash, hexutil.Uint(receipt.TransactionIndex))
 				require.NoError(t, err)
 				require.Equal(t, realtimeTxByHash, nonRealtimeTxByHash)
 
