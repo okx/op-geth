@@ -151,6 +151,69 @@ func (p *XlayerAncientProxy) FetchLegacyBlockData(number uint64, nfdb ethdb.KeyV
 	return hash, headerRLP, emptyList, emptyList, nil
 }
 
+// FreezeRangeWithProxy freezes a range of blocks using the XLayer proxy for legacy blocks.
+// It handles the entire freeze loop including fetching data from proxy or local DB and writing to freezer.
+// Returns the list of block hashes that were successfully frozen.
+func (p *XlayerAncientProxy) FreezeRangeWithProxy(op ethdb.AncientWriteOp, nfdb *nofreezedb, number, limit uint64) ([]common.Hash, error) {
+	hashes := make([]common.Hash, 0, limit-number+1)
+
+	for ; number <= limit; number++ {
+		var hash common.Hash
+		var header, body, receipts []byte
+
+		// XLayer: Check if we should perform legacy header sync
+		if p.ShouldProxy(number) {
+			// Check if we should break early during startup to avoid blocking node initialization
+			if p.isFirstRun() {
+				p.setFirstRun(false)
+				log.Info("Legacy header sync: breaking at startup to allow node to start quickly, will continue in background")
+				break
+			}
+
+			// Perform legacy header sync from PP RPC
+			var proxyErr error
+			hash, header, body, receipts, proxyErr = p.FetchLegacyBlockData(number, nfdb)
+			if proxyErr != nil {
+				break
+			}
+		} else {
+			// Fetch from local database
+			hash = ReadCanonicalHash(nfdb, number)
+			if hash == (common.Hash{}) {
+				return hashes, fmt.Errorf("canonical hash missing, can't freeze block %d", number)
+			}
+			header = ReadHeaderRLP(nfdb, hash, number)
+			if len(header) == 0 {
+				return hashes, fmt.Errorf("block header missing, can't freeze block %d", number)
+			}
+			body = ReadBodyRLP(nfdb, hash, number)
+			if len(body) == 0 {
+				return hashes, fmt.Errorf("block body missing, can't freeze block %d", number)
+			}
+			receipts = ReadReceiptsRLP(nfdb, hash, number)
+			if len(receipts) == 0 {
+				return hashes, fmt.Errorf("block receipts missing, can't freeze block %d", number)
+			}
+		}
+
+		// Write to the batch.
+		if err := op.AppendRaw(ChainFreezerHashTable, number, hash[:]); err != nil {
+			return hashes, fmt.Errorf("can't write hash to Freezer: %v", err)
+		}
+		if err := op.AppendRaw(ChainFreezerHeaderTable, number, header); err != nil {
+			return hashes, fmt.Errorf("can't write header to Freezer: %v", err)
+		}
+		if err := op.AppendRaw(ChainFreezerBodiesTable, number, body); err != nil {
+			return hashes, fmt.Errorf("can't write body to Freezer: %v", err)
+		}
+		if err := op.AppendRaw(ChainFreezerReceiptTable, number, receipts); err != nil {
+			return hashes, fmt.Errorf("can't write receipts to Freezer: %v", err)
+		}
+		hashes = append(hashes, hash)
+	}
+	return hashes, nil
+}
+
 // xlayerRPCClient manages the connection to the legacy PP RPC endpoint for legacy header sync.
 type xlayerRPCClient struct {
 	client  *rpc.Client

@@ -319,44 +319,30 @@ func (f *chainFreezer) freezeRange(nfdb *nofreezedb, number, limit uint64) (hash
 	hashes = make([]common.Hash, 0, limit-number+1)
 
 	_, err = f.ModifyAncients(func(op ethdb.AncientWriteOp) error {
+		// XLayer: Use proxy to handle legacy block freezing if configured
+		if f.xlayerProxy != nil {
+			var proxyErr error
+			hashes, proxyErr = f.xlayerProxy.FreezeRangeWithProxy(op, nfdb, number, limit)
+			return proxyErr
+		}
+
 		for ; number <= limit; number++ {
-			var hash common.Hash
-			var header, body, receipts []byte
-
-			// XLayer: Check if we should perform legacy header sync
-			if f.xlayerProxy != nil && f.xlayerProxy.ShouldProxy(number) {
-				// Check if we should break early during startup to avoid blocking node initialization
-				// Allow syncing startupSyncLimit blocks before breaking on first run
-				if f.xlayerProxy.isFirstRun() {
-					f.xlayerProxy.setFirstRun(false)
-					log.Info("Legacy header sync: breaking at startup to allow node to start quickly, will continue in background")
-					break
-				}
-
-				// Perform legacy header sync from PP RPC
-				var proxyErr error
-				hash, header, body, receipts, proxyErr = f.xlayerProxy.FetchLegacyBlockData(number, nfdb)
-				if proxyErr != nil {
-					break
-				}
-			} else {
-				// Fetch from local database
-				hash = ReadCanonicalHash(nfdb, number)
-				if hash == (common.Hash{}) {
-					return fmt.Errorf("canonical hash missing, can't freeze block %d", number)
-				}
-				header = ReadHeaderRLP(nfdb, hash, number)
-				if len(header) == 0 {
-					return fmt.Errorf("block header missing, can't freeze block %d", number)
-				}
-				body = ReadBodyRLP(nfdb, hash, number)
-				if len(body) == 0 {
-					return fmt.Errorf("block body missing, can't freeze block %d", number)
-				}
-				receipts = ReadReceiptsRLP(nfdb, hash, number)
-				if len(receipts) == 0 {
-					return fmt.Errorf("block receipts missing, can't freeze block %d", number)
-				}
+			// Retrieve all the components of the canonical block.
+			hash := ReadCanonicalHash(nfdb, number)
+			if hash == (common.Hash{}) {
+				return fmt.Errorf("canonical hash missing, can't freeze block %d", number)
+			}
+			header := ReadHeaderRLP(nfdb, hash, number)
+			if len(header) == 0 {
+				return fmt.Errorf("block header missing, can't freeze block %d", number)
+			}
+			body := ReadBodyRLP(nfdb, hash, number)
+			if len(body) == 0 {
+				return fmt.Errorf("block body missing, can't freeze block %d", number)
+			}
+			receipts := ReadReceiptsRLP(nfdb, hash, number)
+			if len(receipts) == 0 {
+				return fmt.Errorf("block receipts missing, can't freeze block %d", number)
 			}
 
 			// Write to the batch.
