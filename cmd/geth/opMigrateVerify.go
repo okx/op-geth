@@ -123,6 +123,8 @@ const (
 	CodeNAmeSpacePrefix = "0xC0D3C0d3C0d3C0D3c0d3C0d3c0D3C0d3c0d30000"
 
 	PreinstallCount = 18
+
+	IgnoredErigonScalableAddress = "0x000000000000000000000000000000005ca1ab1e"
 )
 
 var OP_PREDEPLOY [PredeployCount]common.Address
@@ -198,47 +200,63 @@ func verifyMigrateGenesis(ctx *cli.Context) error {
 	erigonAlloc, err := core.LoadErigonGenesisData(chainDataPath)
 
 	pass := true
-	for address, opAccount := range opGenesis.Alloc {
-		// Skip verification for predeploy and precompile addresses
-		if isOpNative(address) {
-			log.Debug("Skipping verification for predeploy/precompile address", "address", address.Hex())
+	for address, _ := range erigonAlloc {
+		if address == common.HexToAddress(IgnoredErigonScalableAddress) {
 			continue
 		}
-
-		erigonAcct := erigonAlloc[address]
-
-		if !bytes.Equal(opAccount.Code, erigonAcct.Code) {
-			log.Warn("Code mismatch", "address", address.Hex(),
-				"opCode", hex.EncodeToString(opAccount.Code),
-				"erigonCode", hex.EncodeToString(erigonAcct.Code))
+		_, ok := opGenesis.Alloc[address]
+		if !ok {
 			pass = false
+			break
 		}
+	}
 
-		if opAccount.Balance == nil {
-			opAccount.Balance = big.NewInt(0)
+	if pass {
+		for address, opAccount := range opGenesis.Alloc {
+			if isOpNative(address) {
+				log.Debug("Skipping verification for predeploy/precompile address", "address", address.Hex())
+				continue
+			}
+
+			erigonAcct := erigonAlloc[address]
+
+			if !bytes.Equal(opAccount.Code, erigonAcct.Code) {
+				log.Warn("Code mismatch", "address", address.Hex(),
+					"opCode", hex.EncodeToString(opAccount.Code),
+					"erigonCode", hex.EncodeToString(erigonAcct.Code))
+				pass = false
+				break
+			}
+
+			if opAccount.Balance == nil {
+				opAccount.Balance = big.NewInt(0)
+			}
+
+			if erigonAcct.Balance == nil {
+				erigonAcct.Balance = big.NewInt(0)
+			}
+
+			if opAccount.Balance.Cmp(erigonAcct.Balance) != 0 {
+				log.Warn("Balance mismatch", "address", address.Hex(),
+					"opBalance", opAccount.Balance.String(), "erigonBalance", erigonAcct.Balance.String())
+				pass = false
+				break
+			}
+
+			if opAccount.Nonce != erigonAcct.Nonce {
+				log.Warn("Nonce mismatch", "address", address.Hex(),
+					"opNonce", opAccount.Nonce, "erigonNonce", erigonAcct.Nonce)
+				pass = false
+				break
+			}
+
+			if !compareStorageMaps(opAccount.Storage, erigonAcct.Storage) {
+				log.Warn("Storage mismatch", "address", address.Hex())
+				pass = false
+				break
+			}
+
 		}
-
-		if erigonAcct.Balance == nil {
-			erigonAcct.Balance = big.NewInt(0)
-		}
-
-		if opAccount.Balance.Cmp(erigonAcct.Balance) != 0 {
-			log.Warn("Balance mismatch", "address", address.Hex(),
-				"opBalance", opAccount.Balance.String(), "erigonBalance", erigonAcct.Balance.String())
-			pass = false
-		}
-
-		if opAccount.Nonce != erigonAcct.Nonce {
-			log.Warn("Nonce mismatch", "address", address.Hex(),
-				"opNonce", opAccount.Nonce, "erigonNonce", erigonAcct.Nonce)
-			pass = false
-		}
-
-		if !compareStorageMaps(opAccount.Storage, erigonAcct.Storage) {
-			log.Warn("Storage mismatch", "address", address.Hex())
-			pass = false
-		}
-
 	}
 
 	if !pass {
