@@ -899,7 +899,7 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 		}
 	}
 	if totalErigonBalance.Cmp(totalOpBalance) != 0 {
-		return nil, common.Hash{}, nil, nil, fmt.Errorf("migration pre & post balance does not match: pre balance: %d, post balance: %d, delta: %d", totalErigonBalance, totalOpBalance, totalOpBalance.Sub(totalOpBalance, totalErigonBalance))
+		return nil, common.Hash{}, nil, nil, fmt.Errorf("migration pre & post balance does not match: pre balance: %d, post balance: %d, delta: %d", totalErigonBalance, totalOpBalance, new(big.Int).Sub(totalOpBalance, totalErigonBalance))
 	} else {
 		log.Info("migration pre & post balance does not match, totalBalance: %d", totalOpBalance)
 	}
