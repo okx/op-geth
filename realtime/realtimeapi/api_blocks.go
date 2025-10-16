@@ -167,3 +167,46 @@ func (api *RealtimeAPIImpl) GetBlockInternalTransactions(ctx context.Context, bl
 	}
 	return result, nil
 }
+
+func (api *RealtimeAPIImpl) GetTransactionByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, index hexutil.Uint) (*ethapi.RPCTransaction, error) {
+	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
+		backend := ethapi.NewTransactionAPI(api.b, nil)
+		return backend.GetTransactionByBlockNumberAndIndex(ctx, blockNr, index)
+	}
+
+	blockNum, _, _, err := api.getBlockNumber(blockNr)
+	if err != nil {
+		backend := ethapi.NewTransactionAPI(api.b, nil)
+		return backend.GetTransactionByBlockNumberAndIndex(ctx, blockNr, index)
+	}
+	header, _, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
+	if !ok {
+		backend := ethapi.NewTransactionAPI(api.b, nil)
+		return backend.GetTransactionByBlockNumberAndIndex(ctx, blockNr, index)
+	}
+	txHashes, ok := api.cacheDB.Stateless.GetBlockTxs(blockNum)
+	if !ok {
+		backend := ethapi.NewTransactionAPI(api.b, nil)
+		return backend.GetTransactionByBlockNumberAndIndex(ctx, blockNr, index)
+	}
+	txHash := txHashes[index]
+	txn, receipt, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash)
+	if !exists {
+		return nil, nil
+	}
+	return newRPCTransaction_realtime(txn, blockhash, blockNum, header.Time, uint64(receipt.TransactionIndex), header.BaseFee, api.b.ChainConfig(), receipt), nil
+}
+
+func (api *RealtimeAPIImpl) GetTransactionByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, index hexutil.Uint) (*ethapi.RPCTransaction, error) {
+	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
+		backend := ethapi.NewTransactionAPI(api.b, nil)
+		return backend.GetTransactionByBlockHashAndIndex(ctx, blockHash, index)
+	}
+
+	blockNum, found := api.cacheDB.Stateless.GetBlockNumberByHash(blockHash)
+	if !found {
+		backend := ethapi.NewTransactionAPI(api.b, nil)
+		return backend.GetTransactionByBlockHashAndIndex(ctx, blockHash, index)
+	}
+	return api.GetTransactionByBlockNumberAndIndex(ctx, rpc.BlockNumber(blockNum), index)
+}
