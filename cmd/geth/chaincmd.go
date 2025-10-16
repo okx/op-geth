@@ -908,25 +908,45 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	return nil
 }
 
-// migrateGenesis will migrate state data and initialize a new genesis block
+// migrateGenesis migrates state data from cdk-erigon database and initializes a new op-stack genesis block.
+// The first parameter opGenesisPath specifies the path to the OP Stack genesis JSON file.
+// This function performs state migration by:
+//   - Loading account states from a migration database (specified via --chaindata flag)
+//   - verify that the dumped erigon genesis can match the smt root (a erigon primitive concept)
+//   - Merging the migrated state with the provided op-stack genesis (if there is conflict, will select based on the logic as impled in `mergeConflictAccount`
+//   - import merged genesis into chaindata & setting up the new genesis block
+//   - verify tht the loaded erigon total native balance equals to post op migration native balance
+//   - Optionally verifying the migrated state (storage and account is loaded correctly)
+//
+// Required flags:
+//
+//	--chaindata: Path to the mdbx database containing state data to migrate
+//
+// Optional flags:
+//
+//	--ignore-addresses: Comma-separated list of addresses to exclude from migration
+//	--smt-db-path: Path to SMT database for migration (if not specified, will read the smt root from chaindata)
+//	--ignore-smt-verify: Skip SMT verification during migration
+//	--no-verify: Skip state verification after migration
+//	--output: Path to write the resulting genesis.json file
 func migrateGenesis(ctx *cli.Context) error {
 	if ctx.Args().Len() != 1 {
 		utils.Fatalf("need genesis.json file as the only argument")
 	}
 	start := time.Now()
-	genesisPath := ctx.Args().First()
-	if len(genesisPath) == 0 {
+	opGenesisPath := ctx.Args().First()
+	if len(opGenesisPath) == 0 {
 		utils.Fatalf("invalid path to genesis file")
 	}
 
-	file, err := os.Open(genesisPath)
+	opGenesisFile, err := os.Open(opGenesisPath)
 	if err != nil {
 		utils.Fatalf("Failed to read genesis file: %v", err)
 	}
-	defer file.Close()
+	defer opGenesisFile.Close()
 
-	genesis := new(core.Genesis)
-	if err := json.NewDecoder(file).Decode(genesis); err != nil {
+	opGenesis := new(core.Genesis)
+	if err := json.NewDecoder(opGenesisFile).Decode(opGenesis); err != nil {
 		utils.Fatalf("invalid genesis file: %v", err)
 	}
 	log.Info("read file and decode json", "elapsed", time.Since(start))
@@ -940,6 +960,7 @@ func migrateGenesis(ctx *cli.Context) error {
 		v := ctx.Uint64(utils.OverridePrague.Name)
 		overrides.OverridePrague = &v
 	}
+
 	if ctx.IsSet(utils.OverrideVerkle.Name) {
 		v := ctx.Uint64(utils.OverrideVerkle.Name)
 		overrides.OverrideVerkle = &v
@@ -948,7 +969,7 @@ func migrateGenesis(ctx *cli.Context) error {
 	chaindb := utils.MakeChainDatabase(ctx, stack, false)
 	defer chaindb.Close()
 
-	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), false, genesis.IsVerkle())
+	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), false, opGenesis.IsVerkle())
 	defer triedb.Close()
 
 	// Declare variables for genesis setup
@@ -957,7 +978,7 @@ func migrateGenesis(ctx *cli.Context) error {
 	var setupErr error
 
 	// Use SetupGenesisBlockWithMigrationData to handle migration and setup genesis block
-	_, hash, compatErr, setupErr = core.SetupGenesisBlockWithMigrationData(chaindb, triedb, genesis, &overrides, ctx)
+	_, hash, mergedGenesis, compatErr, setupErr := core.SetupGenesisBlockWithMigrationData(chaindb, triedb, opGenesis, &overrides, ctx)
 
 	if setupErr != nil {
 		utils.Fatalf("Failed to write genesis block: %v", setupErr)
@@ -969,7 +990,7 @@ func migrateGenesis(ctx *cli.Context) error {
 
 	// Check if verification is requested
 	if !ctx.Bool("no-verify") {
-		log.Info("Starting genesis verification after migration", "total account:", len(genesis.Alloc))
+		log.Info("Starting genesis verification after migration", "total account:", len(mergedGenesis.Alloc))
 
 		if err := triedb.Close(); err != nil {
 			log.Warn("Failed to close trie database", "error", err)
@@ -981,7 +1002,7 @@ func migrateGenesis(ctx *cli.Context) error {
 			log.Warn("Failed to close node stack", "error", err)
 		}
 		verifyStart := time.Now()
-		if err := verifyGenesisInternal(ctx, genesis); err != nil {
+		if err := verifyGenesisInternal(ctx, mergedGenesis); err != nil {
 			log.Error("Genesis verification failed", "error", err)
 			return err
 		}
