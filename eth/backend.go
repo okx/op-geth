@@ -174,12 +174,27 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 	log.Info("Allocated trie memory caches", "clean", common.StorageSize(config.TrieCleanCache)*1024*1024, "dirty", common.StorageSize(config.TrieDirtyCache)*1024*1024)
 
+	// Create XLayer proxy for legacy header sync if configured
+	var xlayerProxy *rawdb.XlayerAncientProxy
+	if config.XLayer.LegacyPp.PPRPCUrl != "" && config.XLayer.LegacyPp.MigrationBlock != nil {
+		// Pass 0 for currentFrozen since we don't know the freezer state yet
+		// The proxy will naturally stop working once freezer passes the legacy threshold
+		xlayerProxy = rawdb.NewXlayerAncientProxy(
+			*config.XLayer.LegacyPp.MigrationBlock,
+			config.XLayer.LegacyPp.PPRPCUrl,
+			config.XLayer.LegacyPp.PPRPCTimeout,
+			config.XLayer.LegacyPp.PPRPCLegacyHeaderSyncRateLimit,
+			0, // currentFrozen unknown at this point
+		)
+	}
+
 	dbOptions := node.DatabaseOptions{
 		Cache:             config.DatabaseCache,
 		Handles:           config.DatabaseHandles,
 		AncientsDirectory: config.DatabaseFreezer,
 		EraDirectory:      config.DatabaseEra,
 		MetricsNamespace:  "eth/db/chaindata/",
+		XLayerProxy:       xlayerProxy,
 	}
 	chainDb, err := stack.OpenDatabaseWithOptions("chaindata", dbOptions)
 	if err != nil {
