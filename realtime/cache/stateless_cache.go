@@ -62,17 +62,17 @@ func (cache *StatelessCache) GetBlockTxs(blockNum uint64) ([]common.Hash, bool) 
 
 // -------------- Write operations --------------
 func (cache *StatelessCache) PutNewBlockInfo(blockNum uint64, blockInfo *realtimeTypes.BlockInfo) {
-	log.Debug(fmt.Sprintf("Putting new block info for block %d\n", blockNum))
+	log.Debug(fmt.Sprintf("[Realtime] Putting new block info for block %d\n", blockNum))
 	cache.blockInfoMap.PutNewBlockInfo(blockNum, blockInfo)
 }
 
 func (cache *StatelessCache) PutConfirmedBlockInfo(blockNum uint64, blockInfo *realtimeTypes.BlockInfo) {
-	log.Debug(fmt.Sprintf("Putting confirmed block info for block %d\n", blockNum))
+	log.Debug(fmt.Sprintf("[Realtime] Putting confirmed block info for block %d\n", blockNum))
 	cache.blockInfoMap.PutConfirmedBlockInfo(blockNum, blockInfo)
 }
 
 func (cache *StatelessCache) PutTxInfo(blockNum uint64, txHash common.Hash, tx *types.Transaction, receipt *types.Receipt, innerTxs []*types.InnerTx) {
-	log.Debug(fmt.Sprintf("Putting tx info for block %d, tx hash %s\n", blockNum, txHash.Hex()))
+	log.Debug(fmt.Sprintf("[Realtime] Putting tx info for block %d, tx hash %s\n", blockNum, txHash.Hex()))
 	cache.txInfoMap.Put(blockNum, txHash, tx, receipt, innerTxs)
 }
 
