@@ -848,6 +848,11 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 	// Update genesis.Alloc with the merged result
 	genesis.Alloc = migrateAlloc
 
+	// override genesis.Config.Optimism.EIP1559DenominatorCanyon's value with  genesis.Config.Optimism.EIP1559Denominator
+	if genesis.Config.Optimism != nil && genesis.Config.Optimism.EIP1559DenominatorCanyon != nil {
+		*genesis.Config.Optimism.EIP1559DenominatorCanyon = genesis.Config.Optimism.EIP1559Denominator
+	}
+
 	// 3. Dump genesis to file in parallel if needed
 	if ctx.String("output") != "" {
 		wg.Add(1)
