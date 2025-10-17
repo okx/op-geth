@@ -218,6 +218,27 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 		if len(xlayerErigonAcct.Storage) != 0 {
 			logger.Error("mergeAlloc: permit2 has storage", "storage length", len(xlayerErigonAcct.Storage))
 		}
+	// feeReceipient use xlayer balance & nonce, use op code, storage....
+	case common.HexToAddress("0x4200000000000000000000000000000000000011"):
+		log.Warn("details of feeReceipient address", "address", "0x4200000000000000000000000000000000000011")
+		destAccount.Nonce = xlayerErigonAcct.Nonce
+		destAccount.Balance = xlayerErigonAcct.Balance
+		destAccount.Code = opGenesisAcct.Code
+		destAccount.Storage = opGenesisAcct.Storage
+		log.Info("xlayer", "balance", xlayerErigonAcct.Balance, "nonce", xlayerErigonAcct.Nonce, "code",
+			len(xlayerErigonAcct.Code), "storageCount", len(xlayerErigonAcct.Storage))
+		
+		log.Info("op", "balance", opGenesisAcct.Balance, "nonce", opGenesisAcct.Nonce, "code",
+			len(opGenesisAcct.Code), "storageCount", len(opGenesisAcct.Storage))
+
+		for k, v := range xlayerErigonAcct.Storage {
+			log.Warn("xlayer", "storage", k, "value", v)
+		}
+
+		for k, v := range opGenesisAcct.Storage {
+			log.Warn("op", "storage", k, "value", v)
+		}
+
 	// default case should use xlayer data if no code conflct and op has no storage
 	default:
 		destAccount.Balance = xlayerErigonAcct.Balance
