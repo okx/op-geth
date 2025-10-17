@@ -17,6 +17,7 @@
 package rawdb
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -217,6 +218,7 @@ type OpenOptions struct {
 	Era              string // era files directory
 	MetricsNamespace string // prefix added to freezer metric names
 	ReadOnly         bool
+	XLayerProxy      *XlayerAncientProxy // XLayer proxy for legacy header sync
 }
 
 // Open creates a high-level database wrapper for the given key-value store.
@@ -228,7 +230,7 @@ func Open(db ethdb.KeyValueStore, opts OpenOptions) (ethdb.Database, error) {
 	if chainFreezerDir != "" {
 		chainFreezerDir = resolveChainFreezerDir(chainFreezerDir)
 	}
-	frdb, err := newChainFreezer(chainFreezerDir, opts.Era, opts.MetricsNamespace, opts.ReadOnly)
+	frdb, err := newChainFreezer(chainFreezerDir, opts.Era, opts.MetricsNamespace, opts.ReadOnly, opts.XLayerProxy)
 	if err != nil {
 		printChainMetadata(db)
 		return nil, err
@@ -347,7 +349,32 @@ func NewMemoryDatabase() ethdb.Database {
 const (
 	DBPebble  = "pebble"
 	DBLeveldb = "leveldb"
+	DBRocksdb = "rocksdb"
 )
+
+// checkFirstLineContains checks if the first line of a file contains a specific string
+func checkFirstLineContains(filename, searchString string) (bool, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return false, fmt.Errorf("failed to open file %s: %w", filename, err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	// Read the first line
+	if !scanner.Scan() {
+		// Check if there was an error or just empty file
+		if err := scanner.Err(); err != nil {
+			return false, fmt.Errorf("failed to read from file %s: %w", filename, err)
+		}
+		// Empty file
+		return false, nil
+	}
+
+	firstLine := scanner.Text()
+	return strings.Contains(firstLine, searchString), nil
+}
 
 // PreexistingDatabase checks the given data directory whether a database is already
 // instantiated at that location, and if so, returns the type of database (or the
@@ -356,12 +383,23 @@ func PreexistingDatabase(path string) string {
 	if _, err := os.Stat(filepath.Join(path, "CURRENT")); err != nil {
 		return "" // No pre-existing db
 	}
+
+	// Check for RocksDB database (has LOG file with RocksDB in the first line)
+	if _, err := os.Stat(filepath.Join(path, "LOG")); err == nil {
+		if contains, err := checkFirstLineContains(filepath.Join(path, "LOG"), "RocksDB"); err == nil && contains {
+			return DBRocksdb
+		}
+	}
+
+	// Check for Pebble database (has OPTIONS files)
 	if matches, err := filepath.Glob(filepath.Join(path, "OPTIONS*")); len(matches) > 0 || err != nil {
 		if err != nil {
 			panic(err) // only possible if the pattern is malformed
 		}
 		return DBPebble
 	}
+
+	// Default to LevelDB (CURRENT file exists but no OPTIONS or SST files)
 	return DBLeveldb
 }
 

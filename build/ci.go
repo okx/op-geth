@@ -185,6 +185,7 @@ func doInstall(cmdline []string) {
 		arch       = flag.String("arch", "", "Architecture to cross build for")
 		cc         = flag.String("cc", "", "C compiler to cross build with")
 		staticlink = flag.Bool("static", false, "Create statically-linked executable")
+		buildTags  = flag.String("tags", "", "Build tags")
 	)
 	flag.CommandLine.Parse(cmdline)
 	env := build.Env()
@@ -196,15 +197,18 @@ func doInstall(cmdline []string) {
 		tc.Root = build.DownloadGo(csdb)
 	}
 	// Disable CLI markdown doc generation in release builds.
-	buildTags := []string{"urfave_cli_no_docs"}
+	buildTagsArray := []string{"urfave_cli_no_docs"}
+	if *buildTags != "" {
+		buildTagsArray = append(buildTagsArray, strings.Split(*buildTags, ",")...)
+	}
 
 	// Enable linking the CKZG library since we can make it work with additional flags.
 	if env.UbuntuVersion != "trusty" {
-		buildTags = append(buildTags, "ckzg")
+		buildTagsArray = append(buildTagsArray, "ckzg")
 	}
 
 	// Configure the build.
-	gobuild := tc.Go("build", buildFlags(env, *staticlink, buildTags)...)
+	gobuild := tc.Go("build", buildFlags(env, *staticlink, buildTagsArray)...)
 
 	// We use -trimpath to avoid leaking local paths into the built executables.
 	gobuild.Args = append(gobuild.Args, "-trimpath")
@@ -278,14 +282,15 @@ func buildFlags(env build.Environment, staticLinking bool, buildTags []string) (
 
 func doTest(cmdline []string) {
 	var (
-		dlgo     = flag.Bool("dlgo", false, "Download Go and build with it")
-		arch     = flag.String("arch", "", "Run tests for given architecture")
-		cc       = flag.String("cc", "", "Sets C compiler binary")
-		coverage = flag.Bool("coverage", false, "Whether to record code coverage")
-		verbose  = flag.Bool("v", false, "Whether to log verbosely")
-		race     = flag.Bool("race", false, "Execute the race detector")
-		short    = flag.Bool("short", false, "Pass the 'short'-flag to go test")
-		cachedir = flag.String("cachedir", "./build/cache", "directory for caching downloads")
+		dlgo      = flag.Bool("dlgo", false, "Download Go and build with it")
+		arch      = flag.String("arch", "", "Run tests for given architecture")
+		cc        = flag.String("cc", "", "Sets C compiler binary")
+		coverage  = flag.Bool("coverage", false, "Whether to record code coverage")
+		verbose   = flag.Bool("v", false, "Whether to log verbosely")
+		race      = flag.Bool("race", false, "Execute the race detector")
+		short     = flag.Bool("short", false, "Pass the 'short'-flag to go test")
+		cachedir  = flag.String("cachedir", "./build/cache", "directory for caching downloads")
+		buildTags = flag.String("tags", "", "Build tags")
 	)
 	flag.CommandLine.Parse(cmdline)
 
@@ -308,6 +313,10 @@ func doTest(cmdline []string) {
 
 	// Enable integration-tests
 	gotest.Args = append(gotest.Args, "-tags=integrationtests")
+
+	if *buildTags != "" {
+		gotest.Args = append(gotest.Args, "-tags="+*buildTags)
+	}
 
 	// Test a single package at a time. CI builders are slow
 	// and some tests run into timeouts under load.
