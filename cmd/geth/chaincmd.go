@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"runtime/pprof"
 	"slices"
 	"strconv"
 	"sync"
@@ -977,6 +978,7 @@ func migrateGenesis(ctx *cli.Context) error {
 
 	// Check if verification is requested
 	if !ctx.Bool("no-verify") {
+
 		log.Info("Starting genesis verification after migration", "total account:", len(genesis.Alloc))
 
 		if err := triedb.Close(); err != nil {
@@ -988,6 +990,21 @@ func migrateGenesis(ctx *cli.Context) error {
 		if err := stack.Close(); err != nil {
 			log.Warn("Failed to close node stack", "error", err)
 		}
+
+		// Start CPU profiling
+		f, err := os.Create("cpu.perf")
+		if err != nil {
+			log.Error("Failed to create CPU profile file", "error", err)
+			return err
+		}
+		defer f.Close()
+
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Error("Failed to start CPU profile", "error", err)
+			return err
+		}
+		defer pprof.StopCPUProfile()
+
 		verifyStart := time.Now()
 		if err := verifyGenesisInternal(ctx, genesis); err != nil {
 			log.Error("Genesis verification failed", "error", err)
