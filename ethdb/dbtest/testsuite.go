@@ -792,10 +792,10 @@ func BenchDatabaseSuite(b *testing.B, New func() ethdb.KeyValueStore) {
 			}
 			batch.Write()
 		}
-		b.Run("BenchWriteSorted", func(b *testing.B) {
+		b.Run("BatchWriteSorted", func(b *testing.B) {
 			benchBatchWrite(b, sKeys, sVals)
 		})
-		b.Run("BenchWriteRandom", func(b *testing.B) {
+		b.Run("BatchWriteRandom", func(b *testing.B) {
 			benchBatchWrite(b, keys, vals)
 		})
 	})
