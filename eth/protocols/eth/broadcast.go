@@ -80,9 +80,9 @@ func (p *Peer) broadcastTransactions() {
 			}
 			// New batch of transactions to be broadcast, queue them (with cap)
 			queue = append(queue, hashes...)
-			if len(queue) > maxQueuedTxs {
+			if len(queue) > int(p.maxQueuedTxs) {
 				// Fancy copy and resize to ensure buffer doesn't grow indefinitely
-				queue = queue[:copy(queue, queue[len(queue)-maxQueuedTxs:])]
+				queue = queue[:copy(queue, queue[len(queue)-int(p.maxQueuedTxs):])]
 			}
 
 		case <-done:
@@ -151,9 +151,9 @@ func (p *Peer) announceTransactions() {
 			}
 			// New batch of transactions to be broadcast, queue them (with cap)
 			queue = append(queue, hashes...)
-			if len(queue) > maxQueuedTxAnns {
+			if len(queue) > int(p.maxQueuedTxAnns) {
 				// Fancy copy and resize to ensure buffer doesn't grow indefinitely
-				queue = queue[:copy(queue, queue[len(queue)-maxQueuedTxAnns:])]
+				queue = queue[:copy(queue, queue[len(queue)-int(p.maxQueuedTxAnns):])]
 			}
 
 		case <-done:

@@ -11,6 +11,7 @@ type XLayerConfig struct {
 	OkPay    OkPayConfig     `toml:",omitempty"`
 	Apollo   ApolloConfig    `toml:",omitempty"`
 	LegacyPp MigrationConfig `toml:",omitempty"` // The erigon RPC endpoint URL for pre-migration blocks
+	P2P      P2PConfig       `toml:",omitempty"` // P2P configuration for XLayer
 }
 
 type MigrationConfig struct {
@@ -39,4 +40,12 @@ type ApolloConfig struct {
 	Cluster string `toml:",omitempty"`
 	// Apollo namespace
 	NamespaceName string `toml:",omitempty"`
+}
+
+// P2PConfig contains P2P-specific configuration for XLayer
+type P2PConfig struct {
+	// MaxQueuedTxs is the maximum number of transactions to queue up before dropping older broadcasts
+	MaxQueuedTxs uint64 `toml:",omitempty"`
+	// MaxQueuedTxAnns is the maximum number of transaction announcements to queue up before dropping older announcements
+	MaxQueuedTxAnns uint64 `toml:",omitempty"`
 }
