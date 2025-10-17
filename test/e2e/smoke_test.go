@@ -1316,26 +1316,26 @@ func TestNewTransactionTypes(t *testing.T) {
 		})
 
 		t.Run("eth_feeHistory", func(t *testing.T) {
-			blockCount := uint64(100)
+			numberOfTransactions := 10
+			transErc20TokenBatch(t, ctx, client, ERC20Addr, big.NewInt(Gwei), toAddress.String(), numberOfTransactions)
+
+			// Get fee history for last 20 blocks
+			blockCount := uint64(20)
 			history, err := client.FeeHistory(ctx, blockCount, nil, nil)
 			require.NoError(t, err)
 
 			oldestBlockNum := history.OldestBlock.Uint64()
-			t.Logf("Fee history oldest block: %d, blocks returned: %d", oldestBlockNum, len(history.BaseFee))
+			t.Logf("Fee history oldest block: %d, blocks returned: %d", oldestBlockNum, blockCount)
 
-			oldestBlock, err := client.BlockByNumber(ctx, history.OldestBlock)
-			require.NoError(t, err)
-			require.NotNil(t, oldestBlock, "Block should not be nil")
-			require.NotNil(t, oldestBlock.BaseFee(), "Block base fee should not be nil")
+			for i := uint64(0); i < blockCount; i++ {
+				blockNum := big.NewInt(int64(oldestBlockNum) + int64(i))
+				block, err := client.BlockByNumber(ctx, blockNum)
+				require.NoError(t, err, "Failed to get block %d", blockNum.Uint64())
 
-			feeHistoryBaseFee := history.BaseFee[0]
-			blockHeaderBaseFee := oldestBlock.BaseFee()
-
-			require.Equal(t, blockHeaderBaseFee.Uint64(), feeHistoryBaseFee.Uint64(),
-				"Base fee from fee history (%s) should match block header base fee (%s) for block %d",
-				feeHistoryBaseFee.String(), blockHeaderBaseFee.String(), oldestBlockNum)
-
-			t.Logf("Base fee verification passed for block %d: %s wei", oldestBlockNum, blockHeaderBaseFee.String())
+				feeHistoryBaseFee := history.BaseFee[i]
+				blockHeaderBaseFee := block.BaseFee()
+				require.Equal(t, feeHistoryBaseFee, blockHeaderBaseFee, "Base fee should match between fee history and block headers")
+			}
 		})
 
 	})
