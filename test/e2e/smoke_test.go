@@ -42,7 +42,7 @@ const (
 	erc20FreeGasAddressStr             = "0xAD1D01007a56EE0A4FFD0488fb58fC6500Cb1fbE"
 )
 
-func TestClaimTx(t *testing.T) {
+func TestSendTx(t *testing.T) {
 	ctx := context.Background()
 	client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
 	require.NoError(t, err)
@@ -1313,6 +1313,29 @@ func TestNewTransactionTypes(t *testing.T) {
 			require.Greater(t, receipt.GasUsed, uint64(21000), "Contract call should use more than 21000 gas")
 
 			t.Logf("EIP-1559 contract call successful: %s, gas used: %d", txHash.Hex(), receipt.GasUsed)
+		})
+
+		t.Run("eth_feeHistory", func(t *testing.T) {
+			blockCount := uint64(100)
+			history, err := client.FeeHistory(ctx, blockCount, nil, nil)
+			require.NoError(t, err)
+
+			oldestBlockNum := history.OldestBlock.Uint64()
+			t.Logf("Fee history oldest block: %d, blocks returned: %d", oldestBlockNum, len(history.BaseFee))
+
+			oldestBlock, err := client.BlockByNumber(ctx, history.OldestBlock)
+			require.NoError(t, err)
+			require.NotNil(t, oldestBlock, "Block should not be nil")
+			require.NotNil(t, oldestBlock.BaseFee(), "Block base fee should not be nil")
+
+			feeHistoryBaseFee := history.BaseFee[0]
+			blockHeaderBaseFee := oldestBlock.BaseFee()
+
+			require.Equal(t, blockHeaderBaseFee.Uint64(), feeHistoryBaseFee.Uint64(),
+				"Base fee from fee history (%s) should match block header base fee (%s) for block %d",
+				feeHistoryBaseFee.String(), blockHeaderBaseFee.String(), oldestBlockNum)
+
+			t.Logf("Base fee verification passed for block %d: %s wei", oldestBlockNum, blockHeaderBaseFee.String())
 		})
 
 	})
