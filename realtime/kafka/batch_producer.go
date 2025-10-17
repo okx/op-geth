@@ -29,7 +29,8 @@ func NewBatchProducer(ctx context.Context, config KafkaConfig, successChan chan 
 	saramaConfig.Producer.Flush.Messages = 100
 	saramaConfig.Producer.Flush.Frequency = 3 * time.Millisecond
 	saramaConfig.Producer.Flush.MaxMessages = 0
-	saramaConfig.Producer.Compression = sarama.CompressionSnappy
+	// Ensure fastest compression for sending realtime data
+	saramaConfig.Producer.Compression = sarama.CompressionLZ4
 
 	if err := verifyProducerConfig(saramaConfig); err != nil {
 		return nil, err
@@ -43,7 +44,7 @@ func NewBatchProducer(ctx context.Context, config KafkaConfig, successChan chan 
 	bp := &BatchProducer{
 		ctx:      ctx,
 		producer: producer,
-		buffer:   make(chan *sarama.ProducerMessage, 1000),
+		buffer:   make(chan *sarama.ProducerMessage, 10000),
 		wg:       sync.WaitGroup{},
 		done:     make(chan struct{}),
 	}
