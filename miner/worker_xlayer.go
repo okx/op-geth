@@ -16,6 +16,8 @@ import (
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
+const DefaultTxInfosSize = 20000
+
 type RealtimeBackend interface {
 	RealtimeEnabled() bool
 	GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo
@@ -59,6 +61,7 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 	}
 
 	work := payload.baseEnv.snapshot()
+	work.txInfos = make([]state.TxInfo, 0, DefaultTxInfosSize)
 	if witness {
 		work.state.StartPrefetcher("miner-incremental", work.witness, nil)
 		defer work.state.StopPrefetcher()

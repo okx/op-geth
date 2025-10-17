@@ -457,7 +457,7 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 		// For X Layer
 		okPayTxs: 0,
 		// For X Layer, realtime
-		txInfos: make([]state.TxInfo, 0),
+		txInfos: make([]state.TxInfo, 0, DefaultTxInfosSize),
 	}, nil
 }
 
