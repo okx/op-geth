@@ -18,6 +18,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math/big"
@@ -218,17 +219,65 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 		if len(xlayerErigonAcct.Storage) != 0 {
 			logger.Error("mergeAlloc: permit2 has storage", "storage length", len(xlayerErigonAcct.Storage))
 		}
+	// feeReceipient use xlayer balance & nonce, use op code, storage....
+	case common.HexToAddress("0x4200000000000000000000000000000000000011"):
+		log.Warn("details of feeReceipient address", "address", "0x4200000000000000000000000000000000000011")
+		destAccount.Nonce = xlayerErigonAcct.Nonce
+		destAccount.Balance = xlayerErigonAcct.Balance
+		destAccount.Code = opGenesisAcct.Code
+		destAccount.Storage = opGenesisAcct.Storage
+		log.Info("xlayer", "balance", xlayerErigonAcct.Balance, "nonce", xlayerErigonAcct.Nonce, "code",
+			len(xlayerErigonAcct.Code), "storageCount", len(xlayerErigonAcct.Storage))
+
+		log.Info("op", "balance", opGenesisAcct.Balance, "nonce", opGenesisAcct.Nonce, "code",
+			len(opGenesisAcct.Code), "storageCount", len(opGenesisAcct.Storage))
+
+		for k, v := range xlayerErigonAcct.Storage {
+			log.Warn("xlayer", "storage", k, "value", v)
+		}
+
+		for k, v := range opGenesisAcct.Storage {
+			log.Warn("op", "storage", k, "value", v)
+		}
+
 	// default case should use xlayer data if no code conflct and op has no storage
 	default:
+		// TODO: if op and xlayer code or storage diff, warn and exit
 		destAccount.Balance = xlayerErigonAcct.Balance
 		destAccount.Nonce = xlayerErigonAcct.Nonce
+		
 		destAccount.Code = xlayerErigonAcct.Code
 		destAccount.Storage = xlayerErigonAcct.Storage
+
 		if len(xlayerErigonAcct.Code) != len(opGenesisAcct.Code) {
 			logger.Error("mergeAlloc: default case has different code length", "address", addr.Hex(), "xlayer code length", len(xlayerErigonAcct.Code), "op code length", len(opGenesisAcct.Code))
 		}
+
+		if len(xlayerErigonAcct.Code) > 0 && len(opGenesisAcct.Code) > 0 && !bytes.Equal(xlayerErigonAcct.Code, opGenesisAcct.Code) {
+			logger.Error("erigon & op code conflicts")
+		}
+
 		if len(opGenesisAcct.Storage) != 0 {
 			logger.Error("mergeAlloc: default case has storage", "address", addr.Hex(), "storage length", len(opGenesisAcct.Storage))
+		}
+
+		if len(opGenesisAcct.Storage) != 0 && len(xlayerErigonAcct.Storage) != 0 {
+			if len(xlayerErigonAcct.Code) != len(opGenesisAcct.Code) {
+				logger.Error("mergeAlloc: default case has different code length", "address", addr.Hex())
+			} else {
+				for k, erigonVal := range xlayerErigonAcct.Storage {
+					opVal, ok := opGenesisAcct.Storage[k]
+					if !ok {
+						logger.Error("storage value mismatch", "key", k, "value", opVal, "op", erigonVal)
+					} else {
+						if erigonVal.Cmp(opVal) != 0 {
+							logger.Error("storage value mismatch", "key", k, "value", opVal, "op", erigonVal)
+						}
+					}
+
+				}
+			}
+
 		}
 	}
 
