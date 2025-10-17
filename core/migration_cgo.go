@@ -20,6 +20,7 @@ package core
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"math/big"
 	"os"
@@ -39,7 +40,9 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/triedb"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	erigonlog "github.com/ledgerwatch/log/v3"
@@ -62,6 +65,10 @@ type MigrationConfig struct {
 const (
 	PlainStateBucket = "PlainState"
 	CodeBucket       = "Code"
+
+	// Erigon block related tables
+	HeadersBucket         = "Header"
+	HeaderCanonicalBucket = "CanonicalHeader"
 )
 
 var ErigonScalableAddress = common.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
@@ -810,6 +817,169 @@ func verifySMT(chainDataPath string, smtDataPath string, dbAlloc *types.GenesisA
 	return nil
 }
 
+// ErigonBlockNonce is Erigon's block nonce type
+type ErigonBlockNonce [8]byte
+
+// ErigonHeader represents Erigon's block header structure
+type ErigonHeader struct {
+	ParentHash  libcommon.Hash    `json:"parentHash"       gencodec:"required"`
+	UncleHash   libcommon.Hash    `json:"sha3Uncles"       gencodec:"required"`
+	Coinbase    libcommon.Address `json:"miner"`
+	Root        libcommon.Hash    `json:"stateRoot"        gencodec:"required"`
+	TxHash      libcommon.Hash    `json:"transactionsRoot" gencodec:"required"`
+	ReceiptHash libcommon.Hash    `json:"receiptsRoot"     gencodec:"required"`
+	Bloom       types.Bloom       `json:"logsBloom"        gencodec:"required"`
+	Difficulty  *big.Int          `json:"difficulty"       gencodec:"required"`
+	Number      *big.Int          `json:"number"           gencodec:"required"`
+	GasLimit    uint64            `json:"gasLimit"         gencodec:"required"`
+	GasUsed     uint64            `json:"gasUsed"          gencodec:"required"`
+	Time        uint64            `json:"timestamp"        gencodec:"required"`
+	Extra       []byte            `json:"extraData"        gencodec:"required"`
+	MixDigest   libcommon.Hash    `json:"mixHash"`
+	Nonce       ErigonBlockNonce  `json:"nonce"`
+	// AuRa extensions (optional, not all chains have these)
+	AuRaStep uint64 `rlp:"optional"`
+	AuRaSeal []byte `rlp:"optional"`
+
+	// EIP-1559 (London fork)
+	BaseFee *big.Int `json:"baseFeePerGas" rlp:"optional"`
+	// EIP-4895 (Shanghai/Capella)
+	WithdrawalsHash *libcommon.Hash `json:"withdrawalsRoot" rlp:"optional"`
+
+	// EIP-4844 (Cancun/Deneb)
+	BlobGasUsed           *uint64         `json:"blobGasUsed" rlp:"optional"`
+	ExcessBlobGas         *uint64         `json:"excessBlobGas" rlp:"optional"`
+	ParentBeaconBlockRoot *libcommon.Hash `json:"parentBeaconBlockRoot" rlp:"optional"`
+}
+
+// ErigonMaxBlockInfo contains information about the highest block in erigon database
+type ErigonMaxBlockInfo struct {
+	Number    uint64
+	Hash      common.Hash
+	Timestamp uint64
+}
+
+// erigonHeaderKey = num (uint64 big endian) + hash (matches Erigon's HeaderKey format)
+func erigonHeaderKey(number uint64, hash common.Hash) []byte {
+	// Erigon HeaderKey format: 8 bytes (number) + 32 bytes (hash) = 40 bytes total
+	k := make([]byte, 8+32)
+	binary.BigEndian.PutUint64(k, number)
+	copy(k[8:], hash[:])
+	return k
+}
+
+// getErigonMaxBlockInfo reads all information about the highest block from erigon database
+// This is the base function that retrieves block number, hash, and timestamp in one call
+func getErigonMaxBlockInfo(db kv.RoDB) (*ErigonMaxBlockInfo, error) {
+	info := &ErigonMaxBlockInfo{}
+	err := db.View(context.Background(), func(tx kv.Tx) error {
+		// Step 1: Read head header hash from HeadHeaderKey
+		// HeadHeaderKey = "LastHeader" in erigon
+		headHashData, err := tx.GetOne(kv.HeadHeaderKey, []byte(kv.HeadHeaderKey))
+		if err != nil {
+			return fmt.Errorf("failed to read HeadHeaderKey: %w", err)
+		}
+		if len(headHashData) == 0 {
+			return fmt.Errorf("no head header hash found in database")
+		}
+		headHash := libcommon.BytesToHash(headHashData)
+		info.Hash = common.BytesToHash(headHash[:])
+
+		// Step 2: Read header number from HeaderNumber bucket
+		// In erigon, HeaderNumber bucket maps hash -> block number (8 bytes)
+		numberData, err := tx.GetOne(kv.HeaderNumber, headHash.Bytes())
+		if err != nil {
+			return fmt.Errorf("failed to read header number for hash %s: %w", headHash.Hex(), err)
+		}
+		if len(numberData) == 0 {
+			return fmt.Errorf("no header number found for head hash %s", headHash.Hex())
+		}
+		if len(numberData) != 8 {
+			return fmt.Errorf("invalid header number data length: %d", len(numberData))
+		}
+		blockNumber := binary.BigEndian.Uint64(numberData)
+		info.Number = blockNumber
+
+		// Step 3: Read the full header to get timestamp
+		headerKey := erigonHeaderKey(blockNumber, common.BytesToHash(headHash[:]))
+		headerData, err := tx.GetOne(HeadersBucket, headerKey)
+		if err != nil {
+			return fmt.Errorf("failed to read header for block %d: %w", blockNumber, err)
+		}
+		if len(headerData) == 0 {
+			return fmt.Errorf("no header found for block %d", blockNumber)
+		}
+
+		// Step 4: Decode the header to get timestamp
+		var erigonHeader ErigonHeader
+		if err := rlp.DecodeBytes(headerData, &erigonHeader); err != nil {
+			return fmt.Errorf("failed to decode erigon header: %w", err)
+		}
+		info.Timestamp = erigonHeader.Time
+
+		log.Info("getErigonMaxBlockInfo: found max block info",
+			"blockNumber", info.Number,
+			"blockHash", info.Hash.Hex(),
+			"timestamp", info.Timestamp)
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return info, nil
+}
+
+// updateMigrateGenesis updates genesis config with erigon database's max block info
+// It updates: 1) LegacyXLayerBlock to maxBlock+1, 2) Timestamp to maxBlock's timestamp+1, 3) ParentHash to maxBlock's hash
+func updateMigrateGenesis(migrationPath string, genesis *Genesis) error {
+	db, err := setupDB(migrationPath)
+	if err != nil {
+		log.Error("updateMigrateGenesis: failed to setup database", "err", err)
+		return err
+	}
+	defer db.Close()
+
+	// Get max block info from erigon database (number, hash, timestamp)
+	maxBlockInfo, err := getErigonMaxBlockInfo(db)
+	if err != nil {
+		log.Error("updateMigrateGenesis: failed to get max block info from erigon database", "error", err)
+		return fmt.Errorf("failed to get max block info from erigon database: %w", err)
+	}
+
+	// Calculate LegacyXLayerBlock (should be maxBlock + 1)
+	legacyXLayerBlock := maxBlockInfo.Number + 1
+	// Calculate updated timestamp (should be max(maxBlockTimestamp + 1s, genesis.Timestamp))
+	updatedTimestamp := max(maxBlockInfo.Timestamp+1, genesis.Timestamp) // seconds
+
+	// Update genesis config
+	if genesis.Config.LegacyXLayerBlock == nil {
+		genesis.Config.LegacyXLayerBlock = new(big.Int)
+	} else {
+		if genesis.Config.LegacyXLayerBlock.Uint64() != legacyXLayerBlock {
+			log.Error("updateMigrateGenesis: legacy xlayer block mismatch", "expected", legacyXLayerBlock, "actual", genesis.Config.LegacyXLayerBlock.Uint64())
+			return fmt.Errorf("legacy xlayer block mismatch: %d != %d", legacyXLayerBlock, genesis.Config.LegacyXLayerBlock.Uint64())
+		}
+	}
+	genesis.Config.LegacyXLayerBlock.SetUint64(legacyXLayerBlock)
+	genesis.Timestamp = updatedTimestamp
+	genesis.ParentHash = maxBlockInfo.Hash
+
+	log.Info("updateMigrateGenesis: genesis config updated successfully",
+		"status", "✅",
+		"erigonMaxBlock", maxBlockInfo.Number,
+		"erigonMaxBlockHash", maxBlockInfo.Hash.Hex(),
+		"erigonMaxBlockTimestamp", maxBlockInfo.Timestamp,
+		"updatedLegacyXLayerBlock", legacyXLayerBlock,
+		"updatedTimestamp", updatedTimestamp,
+		"updatedParentHash", maxBlockInfo.Hash.Hex(),
+	)
+
+	return nil
+}
+
 func dumpGenesis(genesis *Genesis, outputPath string) {
 	start := time.Now()
 	log.Info("dumpGenesis: starting dump")
@@ -873,6 +1043,12 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 	// isStandaloneDb
 	isStandaloneDb := migrationConfig.SMTDataPath != ""
 	kv.InitStandaloneSMT(isStandaloneDb)
+
+	// Update genesis with erigon database's max block info (always required)
+	if err := updateMigrateGenesis(migrationConfig.ChainDataPath, genesis); err != nil {
+		return nil, common.Hash{}, nil, err
+	}
+
 	dbAlloc, err := LoadErigonGenesisData(migrationConfig.ChainDataPath)
 	if err != nil {
 		log.Error("SetupGenesis: failed to load erigon genesis data", "error", err)
