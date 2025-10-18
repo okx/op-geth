@@ -150,7 +150,6 @@ func ListenRealtimeConsumer(
 				messageCache.NewBlockMsgCache.Add(&blockMsg)
 				log.Debug(fmt.Sprintf("[Realtime] Received new block message. blockNum: %d", blockMsg.Header.Number))
 			}
-			log.Debug(fmt.Sprintf("[Realtime] Received confirmed block message. blockNum: %d", blockMsg.Header.Number))
 		case txMsg := <-txMsgsChan:
 			if err := txMsg.Validate(); err != nil {
 				log.Error(fmt.Sprintf("[Realtime] Failed to consume transaction message from realtime consumer. error: %v", err))
