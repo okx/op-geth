@@ -42,7 +42,7 @@ func TestRealtimeBenchmarkNativeTransferConfirmation(t *testing.T) {
 	testAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
 
 	// Benchmark transfer tx to test address
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 	var totalRealtimeBalanceDuration, totalEthBalanceDuration time.Duration
 	for i := 0; i < Iterations; i++ {
 		ethBalance, err := nonRtClient.BalanceAt(ctx, testAddress, nil)
@@ -124,7 +124,7 @@ func TestRealtimeBenchmarkERC20TransferConfirmation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Benchmark erc20 transfer tx
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 	var totalRealtimeBalanceDuration, totalEthBalanceDuration time.Duration
 	for i := 0; i < Iterations; i++ {
 		ethBalance, err := GetErc20Balance(ctx, nonRtClient, testAddress, erc20Address, nil)
