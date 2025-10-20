@@ -858,8 +858,12 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 
 			log.Info("Worker started", "worker", workerID, "accounts", len(accounts))
 			start := time.Now()
-			chaindb2, err := stack.OpenDatabaseWithFreezer("chaindata", int(cacheSize), 2048, ctx.String(utils.AncientFlag.Name), "", true)
-			triedb2 := utils.MakeTrieDatabase(ctx, chaindb2, false, true, false)
+			chaindb2, err := stack.OpenDatabase("chaindata", int(cacheSize), 2048, "", true)
+			if err != nil {
+				utils.Fatalf("Failed to open chaindb database: %v", err)
+			}
+
+			triedb2 := utils.MakeTrieDatabase(ctx, chaindb2, ctx.Bool(utils.CachePreimagesFlag.Name), true, false)
 			stateDB2 := state.NewDatabase(triedb2, nil)
 			stateDB3, err := state.New(genesisRoot, stateDB2)
 			if err != nil {
