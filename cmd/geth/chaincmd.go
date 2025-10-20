@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/trie"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -57,6 +58,28 @@ type AccountVerificationResult struct {
 	Verified bool
 }
 
+func computeStorageRoot(storage map[common.Hash]common.Hash) common.Hash {
+	if len(storage) == 0 {
+		return common.Hash{}
+	}
+	//config := &triedb.Config{
+	//	Preimages: false,
+	//	IsVerkle:  false,
+	//	HashDB:    hashdb.Defaults,
+	//}
+
+	//triedbWrite := triedb.NewDatabase(rawdb.NewMemoryDatabase(), config)
+	st := trie.NewStackTrie(nil)
+
+	for key, value := range storage {
+		//st.TryUpdate(key.Bytes(), value.Bytes())
+		st.Update(key.Bytes(), value.Bytes())
+	}
+
+	root := st.Hash()
+	return root
+}
+
 // verifyAccount verifies a single account against the expected state
 func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB state.StateDB, resultChan chan<- AccountVerificationResult) {
 	result := AccountVerificationResult{
@@ -90,13 +113,25 @@ func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB s
 	}
 
 	// Verify storage
-	for key, expectedValue := range expectedAccount.Storage {
-		actualValue := stateDB.GetState(addr, key)
-		if actualValue != expectedValue {
-			result.Errors = append(result.Errors, fmt.Sprintf("Storage mismatch at key %v: expected %v, actual %v", key.Hex(), expectedValue.Hex(), actualValue.Hex()))
-			result.Verified = false
-		}
+	//actualValue := stateDB.GetStorageRoot(addr)
+	//if expectedStorageRoot == (common.Hash{}) {
+	// If no storage root, compute it from the expected storage
+	expectedStorageRoot := computeStorageRoot(expectedAccount.Storage)
+	//}
+
+	actualStorageRoot := stateDB.GetStorageRoot(addr)
+	if actualStorageRoot != expectedStorageRoot {
+		result.Errors = append(result.Errors, fmt.Sprintf("Storage root mismatch: expected %v, actual %v", expectedStorageRoot.Hex(), actualStorageRoot.Hex()))
+		result.Verified = false
 	}
+
+	//for key, expectedValue := range expectedAccount.Storage {
+
+	//if actualValue != expectedValue {
+	//	result.Errors = append(result.Errors, fmt.Sprintf("Storage mismatch at key %v: expected %v, actual %v", key.Hex(), expectedValue.Hex(), actualValue.Hex()))
+	//	result.Verified = false
+	//}
+	//}
 
 	resultChan <- result
 }
@@ -858,7 +893,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 
 			log.Info("Worker started", "worker", workerID, "accounts", len(accounts))
 			start := time.Now()
-			
+
 			triedb2 := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, false)
 			defer triedb2.Close()
 			stateDB2 := state.NewDatabase(triedb2, nil)
