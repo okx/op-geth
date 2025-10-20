@@ -95,6 +95,7 @@ var _ BackendWithInterop = (*mockBackend)(nil)
 func (b *mockBackend) RealtimeEnabled() bool                                   { return false }
 func (b *mockBackend) GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo { return nil }
 func (b *mockBackend) GetRealtimeTxInfoChan() chan state.TxInfo                { return nil }
+func (b *mockBackend) SendRealtimeErrorTrigger(height uint64)                  { return }
 
 type testBlockChain struct {
 	root          common.Hash

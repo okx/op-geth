@@ -421,11 +421,7 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 				// getSealingBlock is interrupted by shared interrupt
 				r = miner.generateWork(fullParams, witness)
 			} else {
-				incResult, ok := miner.tryIncrementalUpdate(payload, fullParams, witness)
-				if !ok {
-					log.Debug("Incremental update returned with error, rebuilding", "id", payload.id, "err", incResult.err)
-				}
-				r = incResult
+				r = miner.tryIncrementalUpdate(payload, fullParams, witness)
 			}
 			dur := time.Since(start)
 			// update handles error case
@@ -433,9 +429,12 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 			if r.err == nil {
 				// after first successful pass, we're updating
 				fullParams.isUpdate = true
+			} else {
+				// For X Layer, realtime
+				if fullParams.realtimeEnabled {
+					miner.backend.SendRealtimeErrorTrigger(0)
+				}
 			}
-			// For X Layer, realtime
-			miner.RealtimeSendTxInfos(r.txInfos)
 			timer.Reset(miner.config.Recommit)
 			return dur
 		}

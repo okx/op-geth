@@ -22,6 +22,7 @@ type RealtimeBackend interface {
 	RealtimeEnabled() bool
 	GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo
 	GetRealtimeTxInfoChan() chan state.TxInfo
+	SendRealtimeErrorTrigger(height uint64)
 }
 
 // snapshot creates a lightweight copy of the environment for incremental building.
@@ -49,19 +50,18 @@ func (env *environment) snapshot() *environment {
 	return snap
 }
 
-func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParams, witness bool) (*newPayloadResult, bool) {
+func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParams, witness bool) *newPayloadResult {
 	// Validation cached state
 	if payload.baseEnv == nil {
-		return nil, false // No base to build on
+		return &newPayloadResult{err: errors.New("no cached environment")}
 	}
 	parent := miner.chain.GetBlockByHash(params.parentHash)
 	if parent == nil || parent.Hash() != payload.baseParent {
 		log.Debug("Incremental update skipped: cannot find parent block", "id", payload.id)
-		return nil, false
+		return &newPayloadResult{err: errors.New("missing parent")}
 	}
 
 	work := payload.baseEnv.snapshot()
-	work.txInfos = make([]state.TxInfo, 0, DefaultTxInfosSize)
 	if witness {
 		work.state.StartPrefetcher("miner-incremental", work.witness, nil)
 		defer work.state.StopPrefetcher()
@@ -90,10 +90,6 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 			log.Info("Block building got interrupted by payload resolution")
 		}
 	}
-	if intr := params.interrupt; intr != nil && params.isUpdate && intr.Load() != commitInterruptNone {
-		log.Info("Block building got interrupted from interrupt signal", "id", payload.id)
-		return &newPayloadResult{err: errInterruptedUpdate}, false
-	}
 
 	body := types.Body{Transactions: work.txs, Withdrawals: params.withdrawals}
 	allLogs := make([]*types.Log, 0)
@@ -107,15 +103,15 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 		requests = [][]byte{}
 		// EIP-6110 deposits
 		if err := core.ParseDepositLogs(&requests, allLogs, miner.chainConfig); err != nil {
-			return &newPayloadResult{err: err}, false
+			return &newPayloadResult{err: err}
 		}
 		// EIP-7002
 		if err := core.ProcessWithdrawalQueue(&requests, work.evm); err != nil {
-			return &newPayloadResult{err: err}, false
+			return &newPayloadResult{err: err}
 		}
 		// EIP-7251 consolidations
 		if err := core.ProcessConsolidationQueue(&requests, work.evm); err != nil {
-			return &newPayloadResult{err: err}, false
+			return &newPayloadResult{err: err}
 		}
 	}
 	if isIsthmus {
@@ -128,7 +124,7 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 
 	block, err := miner.engine.FinalizeAndAssemble(miner.chain, work.header, work.state, &body, work.receipts)
 	if err != nil {
-		return &newPayloadResult{err: err}, false
+		return &newPayloadResult{err: err}
 	}
 	return &newPayloadResult{
 		block:                  block,
@@ -139,9 +135,8 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 		requests:               requests,
 		witness:                work.witness,
 		env:                    work,
-		txInfos:                work.txInfos,
 		finalizeBlockChangeset: work.state.GenerateChangeset(),
-	}, true
+	}
 }
 
 func (miner *Miner) applyTransaction_XLayer(env *environment, tx *types.Transaction) (*types.Receipt, []*types.InnerTx, *state.Entries, error) {
@@ -181,28 +176,22 @@ func (miner *Miner) applyTransaction_XLayer(env *environment, tx *types.Transact
 }
 
 func (miner *Miner) RealtimeSendNewPendingBlock(statedb *state.StateDB, header *types.Header) {
-	if miner.backend.RealtimeEnabled() {
-		headerInfoChan := miner.backend.GetRealtimeBlockInfoChan()
-		if headerInfoChan != nil {
-			headerInfoChan <- &realtimeTypes.BlockInfo{
-				Header:      header,
-				Withdrawals: nil,
-				TxCount:     -1,
-				Hash:        common.Hash{},
-				Changeset:   statedb.GenerateChangeset(),
-			}
+	headerInfoChan := miner.backend.GetRealtimeBlockInfoChan()
+	if headerInfoChan != nil {
+		headerInfoChan <- &realtimeTypes.BlockInfo{
+			Header:      header,
+			Withdrawals: nil,
+			TxCount:     -1,
+			Hash:        common.Hash{},
+			Changeset:   statedb.GenerateChangeset(),
 		}
 	}
 }
 
-func (miner *Miner) RealtimeSendTxInfos(txInfos []state.TxInfo) {
-	if miner.backend.RealtimeEnabled() {
-		txInfoChan := miner.backend.GetRealtimeTxInfoChan()
-		if txInfoChan != nil {
-			for _, txInfo := range txInfos {
-				txInfoChan <- txInfo
-			}
-		}
+func (miner *Miner) RealtimeSendTxInfo(txInfo state.TxInfo) {
+	txInfoChan := miner.backend.GetRealtimeTxInfoChan()
+	if txInfoChan != nil {
+		txInfoChan <- txInfo
 	}
 }
 

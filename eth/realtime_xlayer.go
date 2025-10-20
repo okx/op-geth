@@ -21,14 +21,17 @@ func (eth *Ethereum) RealtimeEnabled() bool {
 }
 
 func (eth *Ethereum) GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo {
-	if eth.config.XLayer.Realtime.Enable {
+	if eth.RealtimeEnabled() {
 		return eth.kafkaBlockInfoChan
 	}
 	return nil
 }
 
 func (eth *Ethereum) GetRealtimeTxInfoChan() chan state.TxInfo {
-	return eth.kafkaTxInfoChan
+	if eth.RealtimeEnabled() {
+		return eth.kafkaTxInfoChan
+	}
+	return nil
 }
 
 func (eth *Ethereum) GetFinishChan() chan realtimeTypes.FinishedEntry {
@@ -36,6 +39,14 @@ func (eth *Ethereum) GetFinishChan() chan realtimeTypes.FinishedEntry {
 		return eth.finishChan
 	}
 	return nil
+}
+
+func (eth *Ethereum) SendRealtimeErrorTrigger(height uint64) {
+	if eth.RealtimeEnabled() {
+		if err := eth.kafkaProducer.SendKafkaErrorTrigger(height); err != nil {
+			log.Error(fmt.Sprintf("[Realtime] Failed to send kafka error trigger message. error: %v", err))
+		}
+	}
 }
 
 func (eth *Ethereum) InitRealtime() {

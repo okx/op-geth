@@ -159,6 +159,7 @@ func (b *testWorkerBackend) TxPool() *txpool.TxPool       { return b.txPool }
 func (b *testWorkerBackend) RealtimeEnabled() bool                                   { return false }
 func (b *testWorkerBackend) GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo { return nil }
 func (b *testWorkerBackend) GetRealtimeTxInfoChan() chan state.TxInfo                { return nil }
+func (b *testWorkerBackend) SendRealtimeErrorTrigger(height uint64)                  { return }
 
 func newTestWorker(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, blocks int) (*Miner, *testWorkerBackend) {
 	backend := newTestWorkerBackend(t, chainConfig, engine, db, blocks)
