@@ -114,16 +114,14 @@ func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB s
 
 	// Verify storage
 	//actualValue := stateDB.GetStorageRoot(addr)
-	//if expectedStorageRoot == (common.Hash{}) {
-	// If no storage root, compute it from the expected storage
-	//expectedStorageRoot := computeStorageRoot(expectedAccount.Storage)
-	//}
 
-	//actualStorageRoot := stateDB.GetStorageRoot(addr)
-	//if actualStorageRoot != expectedStorageRoot {
-	//	result.Errors = append(result.Errors, fmt.Sprintf("Storage root mismatch: expected %v, actual %v", expectedStorageRoot.Hex(), actualStorageRoot.Hex()))
-	//	result.Verified = false
-	//}
+	expectedStorageRoot := computeStorageRoot(expectedAccount.Storage)
+
+	actualStorageRoot := stateDB.GetStorageRoot(addr)
+	if actualStorageRoot != expectedStorageRoot {
+		result.Errors = append(result.Errors, fmt.Sprintf("Storage root mismatch: expected %v, actual %v", expectedStorageRoot.Hex(), actualStorageRoot.Hex()))
+		result.Verified = false
+	}
 
 	//for key, expectedValue := range expectedAccount.Storage {
 
