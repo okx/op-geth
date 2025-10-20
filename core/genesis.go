@@ -587,8 +587,6 @@ func SetupGenesisBlock(db ethdb.Database, triedb *triedb.Database, genesis *Gene
 }
 
 func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, genesis *Genesis, overrides *ChainOverrides) (*params.ChainConfig, common.Hash, *params.ConfigCompatError, error) {
-	// Copy the genesis, so we can operate on a copy.
-	genesis = genesis.copy()
 	// Sanitize the supplied genesis, ensuring it has the associated chain
 	// config attached.
 	if genesis != nil && genesis.Config == nil {
