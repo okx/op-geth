@@ -252,7 +252,7 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 		// TODO: if op and xlayer code or storage diff, warn and exit
 		destAccount.Balance = xlayerErigonAcct.Balance
 		destAccount.Nonce = xlayerErigonAcct.Nonce
-		
+
 		destAccount.Code = xlayerErigonAcct.Code
 		destAccount.Storage = xlayerErigonAcct.Storage
 
@@ -1008,11 +1008,11 @@ func printL2Info(hash common.Hash, number uint64) {
 }
 
 // SetupGenesisBlockWithMigrationData sets up the genesis block with migration data
-func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.Database, genesis *Genesis, overrides *ChainOverrides, ctx *cli.Context) (*params.ChainConfig, common.Hash, *params.ConfigCompatError, error) {
+func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.Database, opGenesis *Genesis, overrides *ChainOverrides, ctx *cli.Context) (*params.ChainConfig, common.Hash, *Genesis, *params.ConfigCompatError, error) {
 	// Get migration path from CLI context
 	chainDataPath := ctx.String("chaindata")
 	if chainDataPath == "" {
-		return nil, common.Hash{}, nil, fmt.Errorf("migration path is required")
+		return nil, common.Hash{}, nil, nil, fmt.Errorf("migration path is required")
 	}
 
 	// Parse ignore addresses from command line
@@ -1026,7 +1026,7 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 				if addr := common.HexToAddress(addrStr); addr != (common.Address{}) {
 					ignoreAddresses[addr] = struct{}{}
 				} else {
-					return nil, common.Hash{}, nil, fmt.Errorf("invalid address format: %s", addrStr)
+					return nil, common.Hash{}, nil, nil, fmt.Errorf("invalid address format: %s", addrStr)
 				}
 			}
 		}
@@ -1043,16 +1043,31 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 	// isStandaloneDb
 	isStandaloneDb := migrationConfig.SMTDataPath != ""
 	kv.InitStandaloneSMT(isStandaloneDb)
+	erigonAlloc, err := LoadErigonGenesisData(migrationConfig.ChainDataPath)
 
 	// Update genesis with erigon database's max block info (always required)
-	if err := updateMigrateGenesis(migrationConfig.ChainDataPath, genesis); err != nil {
-		return nil, common.Hash{}, nil, err
+	if err := updateMigrateGenesis(migrationConfig.ChainDataPath, opGenesis); err != nil {
+		return nil, common.Hash{}, nil, nil, err
 	}
 
-	dbAlloc, err := LoadErigonGenesisData(migrationConfig.ChainDataPath)
 	if err != nil {
 		log.Error("SetupGenesis: failed to load erigon genesis data", "error", err)
-		return nil, common.Hash{}, nil, err
+		return nil, common.Hash{}, nil, nil, err
+	}
+
+	totalPreOpBalance := big.NewInt(0)
+	for _, account := range opGenesis.Alloc {
+		if account.Balance != nil {
+			totalPreOpBalance.Add(totalPreOpBalance, account.Balance)
+		}
+	}
+	log.Info("SetupGenesis: totalPreOpBalance", "totalPreOpBalance", totalPreOpBalance)
+
+	totalErigonBalance := big.NewInt(0)
+	for _, account := range erigonAlloc {
+		if account.Balance != nil {
+			totalErigonBalance.Add(totalErigonBalance, account.Balance)
+		}
 	}
 
 	// Start parallel processes
@@ -1064,26 +1079,25 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			smtErr = verifySMT(migrationConfig.ChainDataPath, migrationConfig.SMTDataPath, &dbAlloc)
+			smtErr = verifySMT(migrationConfig.ChainDataPath, migrationConfig.SMTDataPath, &erigonAlloc)
 		}()
 	}
 
-	// 2. Generate migrateAlloc by filtering out ignored addresses and merging with genesis.Alloc
-	migrateAlloc := generateMigrateAlloc(dbAlloc, ignoreAddresses, &genesis.Alloc)
-	// Update genesis.Alloc with the merged result
-	genesis.Alloc = migrateAlloc
-
 	// override genesis.Config.Optimism.EIP1559DenominatorCanyon's value with  genesis.Config.Optimism.EIP1559Denominator
-	if genesis.Config.Optimism != nil && genesis.Config.Optimism.EIP1559DenominatorCanyon != nil {
-		*genesis.Config.Optimism.EIP1559DenominatorCanyon = genesis.Config.Optimism.EIP1559Denominator
+	if opGenesis.Config.Optimism != nil && opGenesis.Config.Optimism.EIP1559DenominatorCanyon != nil {
+		*opGenesis.Config.Optimism.EIP1559DenominatorCanyon = opGenesis.Config.Optimism.EIP1559Denominator
 	}
+
+	// 2. Generate migrateAlloc by filtering out ignored addresses and merging with genesis.Alloc
+	mergedGenesis := opGenesis.copy()
+	mergedGenesis.Alloc = generateMigrateAlloc(erigonAlloc, ignoreAddresses, &opGenesis.Alloc)
 
 	// 3. Dump genesis to file in parallel if needed
 	if ctx.String("output") != "" {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			dumpGenesis(genesis, ctx.String("output"))
+			dumpGenesis(mergedGenesis, ctx.String("output"))
 		}()
 	}
 
@@ -1096,7 +1110,7 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 	go func() {
 		defer wg.Done()
 		start := time.Now()
-		cfg, hash, compatErr, setupErr = SetupGenesisBlockWithOverride(chaindb, triedb, genesis, overrides)
+		cfg, hash, compatErr, setupErr = SetupGenesisBlockWithOverride(chaindb, triedb, mergedGenesis, overrides)
 		if smtErr == nil && setupErr == nil {
 			xlayerFirstBlock, err := GenerateFirstXLayerBlock(chaindb, cfg)
 			if err != nil {
@@ -1108,17 +1122,29 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 		}
 	}()
 
+	totalOpBalance := big.NewInt(0)
+	for _, account := range mergedGenesis.Alloc {
+		if account.Balance != nil {
+			totalOpBalance.Add(totalOpBalance, account.Balance)
+		}
+	}
+	if totalErigonBalance.Cmp(totalOpBalance) != 0 {
+		return nil, common.Hash{}, nil, nil, fmt.Errorf("migration pre & post balance does not match: pre balance: %d, post balance: %d, delta: %d", totalErigonBalance, totalOpBalance, new(big.Int).Sub(totalOpBalance, totalErigonBalance))
+	} else {
+		log.Info("migration pre & post balance does not match, totalBalance: %d", totalOpBalance)
+	}
+
 	// Wait for both goroutines to complete
 	wg.Wait()
 	// Check for errors
 	if smtErr != nil {
-		return nil, common.Hash{}, nil, fmt.Errorf("SMT verification failed: %w", smtErr)
+		return nil, common.Hash{}, nil, nil, fmt.Errorf("SMT verification failed: %w", smtErr)
 	}
 	if setupErr != nil {
-		return nil, common.Hash{}, nil, fmt.Errorf("failed to setup genesis block: %w", setupErr)
+		return nil, common.Hash{}, nil, nil, fmt.Errorf("failed to setup genesis block: %w", setupErr)
 	}
 
-	log.Info("Updated genesis alloc with migration data", "total_accounts", len(dbAlloc), "migrate_accounts", len(migrateAlloc), "updated_accounts", len(genesis.Alloc))
+	log.Info("Updated genesis alloc with migration data", "total_accounts", len(erigonAlloc), "migrate_accounts", len(mergedGenesis.Alloc), "updated_accounts", len(opGenesis.Alloc))
 
-	return cfg, hash, compatErr, setupErr
+	return cfg, hash, mergedGenesis, compatErr, setupErr
 }
