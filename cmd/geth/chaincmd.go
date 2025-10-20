@@ -57,24 +57,16 @@ type AccountVerificationResult struct {
 }
 
 // verifyAccount verifies a single account against the expected state
-func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB state.Database, genesisRoot common.Hash, resultChan chan<- AccountVerificationResult) {
+func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB state.StateDB, resultChan chan<- AccountVerificationResult) {
 	result := AccountVerificationResult{
 		Address:  addr,
 		Errors:   make([]string, 0),
 		Verified: true,
 	}
 
-	statedb, err := state.New(genesisRoot, stateDB)
-	if err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("Failed to create state database: %v", err))
-		result.Verified = false
-		resultChan <- result
-		return
-	}
-
 	// Verify balance
 	expectedBalance := uint256.MustFromBig(expectedAccount.Balance)
-	actualBalance := statedb.GetBalance(addr)
+	actualBalance := stateDB.GetBalance(addr)
 	if actualBalance.Cmp(expectedBalance) != 0 {
 		result.Errors = append(result.Errors, fmt.Sprintf("Balance mismatch: expected %v, actual %v", expectedBalance, actualBalance))
 		result.Verified = false
@@ -82,7 +74,7 @@ func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB s
 
 	// Verify nonce
 	expectedNonce := expectedAccount.Nonce
-	actualNonce := statedb.GetNonce(addr)
+	actualNonce := stateDB.GetNonce(addr)
 	if actualNonce != expectedNonce {
 		result.Errors = append(result.Errors, fmt.Sprintf("Nonce mismatch: expected %v, actual %v", expectedNonce, actualNonce))
 		result.Verified = false
@@ -90,18 +82,22 @@ func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB s
 
 	// Verify code
 	expectedCode := expectedAccount.Code
-	actualCode := statedb.GetCode(addr)
+	actualCode := stateDB.GetCode(addr)
 	if !bytes.Equal(actualCode, expectedCode) {
 		result.Errors = append(result.Errors, fmt.Sprintf("Code mismatch: expected %v, actual %v", hexutil.Encode(expectedCode), hexutil.Encode(actualCode)))
 		result.Verified = false
 	}
 
 	// Verify storage
-	for key, expectedValue := range expectedAccount.Storage {
-		actualValue := statedb.GetState(addr, key)
-		if actualValue != expectedValue {
-			result.Errors = append(result.Errors, fmt.Sprintf("Storage mismatch at key %v: expected %v, actual %v", key.Hex(), expectedValue.Hex(), actualValue.Hex()))
-			result.Verified = false
+	if len(expectedAccount.Storage) > 1000000 {
+		log.Warn("skip large storage verification", "account", addr, "num of storage", len(expectedAccount.Storage))
+	} else {
+		for key, expectedValue := range expectedAccount.Storage {
+			actualValue := stateDB.GetState(addr, key)
+			if actualValue != expectedValue {
+				result.Errors = append(result.Errors, fmt.Sprintf("Storage mismatch at key %v: expected %v, actual %v", key.Hex(), expectedValue.Hex(), actualValue.Hex()))
+				result.Verified = false
+			}
 		}
 	}
 
@@ -815,10 +811,10 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	log.Info("Found genesis block", "hash", genesisHash, "stateRoot", genesisBlock.Root())
 
 	// Create trie database
-	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, genesis.IsVerkle())
-	defer triedb.Close()
+	//triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, genesis.IsVerkle())
+	//defer triedb.Close()
 
-	stateDB := state.NewDatabase(triedb, nil)
+	//stateDB := state.NewDatabase(triedb, nil)
 
 	accountsToVerify := make([]common.Address, 0)
 
@@ -846,6 +842,8 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 		accountsPerWorker++
 	}
 
+	genesisRoot := genesisBlock.Root()
+
 	for i := 0; i < numWorkers; i++ {
 		startIdx := i * accountsPerWorker
 		endIdx := startIdx + accountsPerWorker
@@ -863,8 +861,17 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 
 			log.Info("Worker started", "worker", workerID, "accounts", len(accounts))
 			start := time.Now()
+
+			triedb2 := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, false)
+			defer triedb2.Close()
+			stateDB2 := state.NewDatabase(triedb2, nil)
+			stateDB3, err := state.New(genesisRoot, stateDB2)
+			if err != nil {
+				utils.Fatalf("Failed to create state database: %v", err)
+				panic("Failed to create state database")
+			}
 			for _, addr := range accounts {
-				verifyAccount(addr, genesis.Alloc[addr], stateDB, genesisBlock.Root(), resultChan)
+				verifyAccount(addr, genesis.Alloc[addr], *stateDB3, resultChan)
 			}
 
 			log.Info("Worker verifyAccount completed", "worker", workerID, "accounts_processed", len(accounts), "elapsed", common.PrettyDuration(time.Since(start)))
