@@ -44,7 +44,7 @@ func NewBatchProducer(ctx context.Context, config KafkaConfig, successChan chan 
 	bp := &BatchProducer{
 		ctx:      ctx,
 		producer: producer,
-		buffer:   make(chan *sarama.ProducerMessage, 10000),
+		buffer:   make(chan *sarama.ProducerMessage, 30000),
 		wg:       sync.WaitGroup{},
 		done:     make(chan struct{}),
 	}
