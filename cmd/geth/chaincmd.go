@@ -56,20 +56,6 @@ type AccountVerificationResult struct {
 	Verified bool
 }
 
-//func computeStorageRoot(storage map[common.Hash]common.Hash) common.Hash {
-//	if len(storage) == 0 {
-//		return common.Hash{}
-//	}
-//	st := trie.NewStackTrie(nil)
-//
-//	for key, value := range storage {
-//		st.Update(key.Bytes(), value.Bytes())
-//	}
-//
-//	root := st.Hash()
-//	return root
-//}
-
 // verifyAccount verifies a single account against the expected state
 func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB state.StateDB, resultChan chan<- AccountVerificationResult) {
 	result := AccountVerificationResult{
@@ -1010,20 +996,6 @@ func migrateGenesis(ctx *cli.Context) error {
 		if err := stack.Close(); err != nil {
 			log.Warn("Failed to close node stack", "error", err)
 		}
-
-		//// Start CPU profiling
-		//f, err := os.Create("cpu.perf")
-		//if err != nil {
-		//	log.Error("Failed to create CPU profile file", "error", err)
-		//	return err
-		//}
-		//defer f.Close()
-
-		//if err := pprof.StartCPUProfile(f); err != nil {
-		//	log.Error("Failed to start CPU profile", "error", err)
-		//	return err
-		//}
-		//defer pprof.StopCPUProfile()
 
 		verifyStart := time.Now()
 		if err := verifyGenesisInternal(ctx, genesis); err != nil {
