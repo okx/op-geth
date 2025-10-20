@@ -164,6 +164,12 @@ It expects the genesis file as argument.`,
 				Usage:    "Ignore SMT verification during migration",
 				Category: flags.EthCategory,
 			},
+			&cli.UintFlag{
+				Name:     "cache-size",
+				Usage:    "Cache size for database operations (default: 4096)",
+				Value:    4096,
+				Category: flags.EthCategory,
+			},
 		}, utils.DatabaseFlags),
 		Description: `
 The migrate command migrates state data from a migration database and initializes 
@@ -787,7 +793,9 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	stack, _ := makeConfigNode(ctx)
 	defer stack.Close()
 
-	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", 2048, 1024, ctx.String(utils.AncientFlag.Name), "", true)
+	cacheSize := ctx.Uint("cache-size")
+	log.Info("post migrate verify pebble config", "cacheSize", cacheSize)
+	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", int(cacheSize), 2048, ctx.String(utils.AncientFlag.Name), "", true)
 	if err != nil {
 		utils.Fatalf("Failed to open database: %v", err)
 	}
