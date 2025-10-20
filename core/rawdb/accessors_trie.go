@@ -309,7 +309,7 @@ func ParseStateScheme(provided string, disk ethdb.Database) (string, error) {
 	// If state scheme is specified, ensure it's compatible with
 	// persistent state.
 	if stored == "" || provided == stored {
-		log.Info("State scheme set by user", "scheme", provided)
+		//log.Info("State scheme set by user", "scheme", provided)
 		return provided, nil
 	}
 	return "", fmt.Errorf("incompatible state scheme, stored: %s, provided: %s", stored, provided)
