@@ -24,7 +24,6 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 	"os"
 	"runtime"
-	"runtime/pprof"
 	"slices"
 	"strconv"
 	"sync"
@@ -111,18 +110,6 @@ func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB s
 		result.Errors = append(result.Errors, fmt.Sprintf("Code mismatch: expected %v, actual %v", hexutil.Encode(expectedCode), hexutil.Encode(actualCode)))
 		result.Verified = false
 	}
-
-	// Verify storage
-	//actualValue := stateDB.GetStorageRoot(addr)
-
-	//expectedStorageRoot := computeStorageRoot(expectedAccount.Storage)
-
-	//actualStorageRoot := stateDB.GetStorageRoot(addr)
-	//log.Info("storage root", "address", addr.Hex(), "root", actualStorageRoot.Hex())
-	//if actualStorageRoot != expectedStorageRoot {
-	//	result.Errors = append(result.Errors, fmt.Sprintf("Storage root mismatch: expected %v, actual %v", expectedStorageRoot.Hex(), actualStorageRoot.Hex()))
-	//	result.Verified = false
-	//}
 
 	// Verify storage
 	if len(expectedAccount.Storage) > 1000000 {
@@ -905,12 +892,6 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 			if err != nil {
 				utils.Fatalf("Failed to create state database: %v", err)
 				panic("Failed to create state database")
-				//if err != nil {
-				//	result.Errors = append(result.Errors, fmt.Sprintf("Failed to create state database: %v", err))
-				//	result.Verified = false
-				//	resultChan <- result
-				//	return
-				//}
 			}
 			for _, addr := range accounts {
 				verifyAccount(addr, genesis.Alloc[addr], *stateDB3, resultChan)
@@ -1039,19 +1020,19 @@ func migrateGenesis(ctx *cli.Context) error {
 			log.Warn("Failed to close node stack", "error", err)
 		}
 
-		// Start CPU profiling
-		f, err := os.Create("cpu.perf")
-		if err != nil {
-			log.Error("Failed to create CPU profile file", "error", err)
-			return err
-		}
-		defer f.Close()
+		//// Start CPU profiling
+		//f, err := os.Create("cpu.perf")
+		//if err != nil {
+		//	log.Error("Failed to create CPU profile file", "error", err)
+		//	return err
+		//}
+		//defer f.Close()
 
-		if err := pprof.StartCPUProfile(f); err != nil {
-			log.Error("Failed to start CPU profile", "error", err)
-			return err
-		}
-		defer pprof.StopCPUProfile()
+		//if err := pprof.StartCPUProfile(f); err != nil {
+		//	log.Error("Failed to start CPU profile", "error", err)
+		//	return err
+		//}
+		//defer pprof.StopCPUProfile()
 
 		verifyStart := time.Now()
 		if err := verifyGenesisInternal(ctx, genesis); err != nil {
