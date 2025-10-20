@@ -117,20 +117,25 @@ func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB s
 
 	//expectedStorageRoot := computeStorageRoot(expectedAccount.Storage)
 
-	actualStorageRoot := stateDB.GetStorageRoot(addr)
-	log.Info("storage root", "address", addr.Hex(), "root", actualStorageRoot.Hex())
+	//actualStorageRoot := stateDB.GetStorageRoot(addr)
+	//log.Info("storage root", "address", addr.Hex(), "root", actualStorageRoot.Hex())
 	//if actualStorageRoot != expectedStorageRoot {
 	//	result.Errors = append(result.Errors, fmt.Sprintf("Storage root mismatch: expected %v, actual %v", expectedStorageRoot.Hex(), actualStorageRoot.Hex()))
 	//	result.Verified = false
 	//}
 
-	//for key, expectedValue := range expectedAccount.Storage {
-
-	//if actualValue != expectedValue {
-	//	result.Errors = append(result.Errors, fmt.Sprintf("Storage mismatch at key %v: expected %v, actual %v", key.Hex(), expectedValue.Hex(), actualValue.Hex()))
-	//	result.Verified = false
-	//}
-	//}
+	// Verify storage
+	if len(expectedAccount.Storage) > 1000000 {
+		log.Warn("skip large storage verification", "account", addr, "num of storage", len(expectedAccount.Storage))
+	} else {
+		for key, expectedValue := range expectedAccount.Storage {
+			actualValue := stateDB.GetState(addr, key)
+			if actualValue != expectedValue {
+				result.Errors = append(result.Errors, fmt.Sprintf("Storage mismatch at key %v: expected %v, actual %v", key.Hex(), expectedValue.Hex(), actualValue.Hex()))
+				result.Verified = false
+			}
+		}
+	}
 
 	resultChan <- result
 }
