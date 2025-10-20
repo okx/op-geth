@@ -57,7 +57,7 @@ type AccountVerificationResult struct {
 }
 
 // verifyAccount verifies a single account against the expected state
-func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB state.StateDB, resultChan chan<- AccountVerificationResult) {
+func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB state.StateDB, largeStorage chan<- common.Address, resultChan chan<- AccountVerificationResult) {
 	result := AccountVerificationResult{
 		Address:  addr,
 		Errors:   make([]string, 0),
@@ -89,8 +89,9 @@ func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB s
 	}
 
 	// Verify storage
-	if len(expectedAccount.Storage) > 1000000 {
+	if len(expectedAccount.Storage) > 10 {
 		log.Warn("skip large storage verification", "account", addr, "num of storage", len(expectedAccount.Storage))
+		largeStorage <- addr
 	} else {
 		for key, expectedValue := range expectedAccount.Storage {
 			actualValue := stateDB.GetState(addr, key)
@@ -782,6 +783,89 @@ func pruneHistory(ctx *cli.Context) error {
 	return nil
 }
 
+type StorageItem struct {
+	Key           common.Hash
+	ExpectedValue common.Hash
+}
+
+func verifyStorageConcurrently(ctx *cli.Context, addr common.Address, storage map[common.Hash]common.Hash, genesisNumber uint64) {
+	log.Info("start verify account with large storage", "addr", addr, "storageCount", len(storage))
+	start := time.Now()
+
+	// Open the database
+	stack, _ := makeConfigNode(ctx)
+	defer stack.Close()
+
+	cacheSize := ctx.Uint("cache-size")
+	log.Info("post migrate verify pebble config", "cacheSize", cacheSize)
+	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", int(cacheSize), 2048, ctx.String(utils.AncientFlag.Name), "", true)
+	if err != nil {
+		utils.Fatalf("Failed to open database: %v", err)
+	}
+	defer chaindb.Close()
+
+	// Get the genesis block from the database
+	genesisHash := rawdb.ReadCanonicalHash(chaindb, genesisNumber)
+	if genesisHash == (common.Hash{}) {
+		utils.Fatalf("No genesis block found in database")
+	}
+
+	genesisBlock := rawdb.ReadBlock(chaindb, genesisHash, genesisNumber)
+	if genesisBlock == nil {
+		utils.Fatalf("Failed to read genesis block from database")
+	}
+
+	log.Info("Found genesis block", "hash", genesisHash, "stateRoot", genesisBlock.Root())
+
+	// Create trie database
+	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, false)
+	defer triedb.Close()
+
+	stateDB := state.NewDatabase(triedb, nil)
+	stateDB2, err := state.New(genesisBlock.Root(), stateDB)
+	storageItems := make([]StorageItem, 0, len(storage))
+	for key, value := range storage {
+		storageItems = append(storageItems, StorageItem{
+			Key:           key,
+			ExpectedValue: value,
+		})
+	}
+
+	workerCount := runtime.NumCPU() * 2 // 2x CPU cores for I/O bound work
+	itemChan := make(chan StorageItem, len(storageItems))
+	var wg sync.WaitGroup
+
+	// Start workers
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+
+			for item := range itemChan {
+				// Get actual value from stateDB
+				actualValue := stateDB2.GetState(addr, item.Key)
+				if actualValue != item.ExpectedValue {
+					log.Error("storage does not match")
+					panic("storage does not match")
+				}
+			}
+		}(i)
+	}
+
+	go func() {
+		defer close(itemChan)
+		for _, item := range storageItems {
+			itemChan <- item
+		}
+	}()
+
+	// Wait for all workers to complete
+	wg.Wait()
+	elapsed := time.Since(start)
+	log.Info("Storage complete", "address", addr, "num storage", len(storage), "elapsed", common.PrettyDuration(elapsed))
+
+}
+
 func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	start := time.Now()
 
@@ -835,6 +919,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	log.Info("Using concurrent workers", "workers", numWorkers)
 
 	resultChan := make(chan AccountVerificationResult, len(accountsToVerify))
+	largeAcctChan := make(chan common.Address)
 	var wg sync.WaitGroup
 
 	accountsPerWorker := len(accountsToVerify) / numWorkers
@@ -871,7 +956,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 				panic("Failed to create state database")
 			}
 			for _, addr := range accounts {
-				verifyAccount(addr, genesis.Alloc[addr], *stateDB3, resultChan)
+				verifyAccount(addr, genesis.Alloc[addr], *stateDB3, largeAcctChan, resultChan)
 			}
 
 			log.Info("Worker verifyAccount completed", "worker", workerID, "accounts_processed", len(accounts), "elapsed", common.PrettyDuration(time.Since(start)))
@@ -904,6 +989,23 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 		if verifiedCount%100000 == 0 {
 			log.Info("Verification progress", "verified", verifiedCount, "errors", errorCount)
 		}
+	}
+
+	itemCount := len(largeAcctChan)
+	if itemCount > 0 {
+		log.Info("Items in channel", "count", itemCount)
+
+		for {
+			select {
+			case addr := <-largeAcctChan:
+				expectedStorage := genesis.Alloc[addr].Storage
+				verifyStorageConcurrently(ctx, addr, expectedStorage, genesis.Number)
+			default:
+				// Channel is empty or we've counted all items
+				break
+			}
+		}
+
 	}
 
 	// Summary
