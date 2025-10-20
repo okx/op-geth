@@ -1046,11 +1046,10 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 	erigonAlloc, err := LoadErigonGenesisData(migrationConfig.ChainDataPath)
 
 	// Update genesis with erigon database's max block info (always required)
-	if err := updateMigrateGenesis(migrationConfig.ChainDataPath, genesis); err != nil {
-		return nil, common.Hash{}, nil, err
+	if err := updateMigrateGenesis(migrationConfig.ChainDataPath, opGenesis); err != nil {
+		return nil, common.Hash{}, nil, nil, err
 	}
 
-	dbAlloc, err := LoadErigonGenesisData(migrationConfig.ChainDataPath)
 	if err != nil {
 		log.Error("SetupGenesis: failed to load erigon genesis data", "error", err)
 		return nil, common.Hash{}, nil, nil, err
@@ -1084,14 +1083,14 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 		}()
 	}
 
+	// override genesis.Config.Optimism.EIP1559DenominatorCanyon's value with  genesis.Config.Optimism.EIP1559Denominator
+	if opGenesis.Config.Optimism != nil && opGenesis.Config.Optimism.EIP1559DenominatorCanyon != nil {
+		*opGenesis.Config.Optimism.EIP1559DenominatorCanyon = opGenesis.Config.Optimism.EIP1559Denominator
+	}
+
 	// 2. Generate migrateAlloc by filtering out ignored addresses and merging with genesis.Alloc
 	mergedGenesis := opGenesis.copy()
 	mergedGenesis.Alloc = generateMigrateAlloc(erigonAlloc, ignoreAddresses, &opGenesis.Alloc)
-
-	// override genesis.Config.Optimism.EIP1559DenominatorCanyon's value with  genesis.Config.Optimism.EIP1559Denominator
-	if genesis.Config.Optimism != nil && genesis.Config.Optimism.EIP1559DenominatorCanyon != nil {
-		*genesis.Config.Optimism.EIP1559DenominatorCanyon = genesis.Config.Optimism.EIP1559Denominator
-	}
 
 	// 3. Dump genesis to file in parallel if needed
 	if ctx.String("output") != "" {
