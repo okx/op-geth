@@ -990,20 +990,21 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 			log.Info("Verification progress", "verified", verifiedCount, "errors", errorCount)
 		}
 	}
+	close(largeAcctChan)
 
 	itemCount := len(largeAcctChan)
 	if itemCount > 0 {
 		log.Info("Items in channel", "count", itemCount)
 
 		for {
-			select {
-			case addr := <-largeAcctChan:
+			addr, ok := <-largeAcctChan
+			if !ok {
+				break
+			} else {
 				expectedStorage := genesis.Alloc[addr].Storage
 				verifyStorageConcurrently(ctx, addr, expectedStorage, genesis.Number)
-			default:
-				// Channel is empty or we've counted all items
-				break
 			}
+
 		}
 
 	}
