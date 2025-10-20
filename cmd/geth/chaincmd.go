@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/trie"
 	"os"
 	"runtime"
 	"slices"
@@ -57,27 +56,19 @@ type AccountVerificationResult struct {
 	Verified bool
 }
 
-func computeStorageRoot(storage map[common.Hash]common.Hash) common.Hash {
-	if len(storage) == 0 {
-		return common.Hash{}
-	}
-	//config := &triedb.Config{
-	//	Preimages: false,
-	//	IsVerkle:  false,
-	//	HashDB:    hashdb.Defaults,
-	//}
-
-	//triedbWrite := triedb.NewDatabase(rawdb.NewMemoryDatabase(), config)
-	st := trie.NewStackTrie(nil)
-
-	for key, value := range storage {
-		//st.TryUpdate(key.Bytes(), value.Bytes())
-		st.Update(key.Bytes(), value.Bytes())
-	}
-
-	root := st.Hash()
-	return root
-}
+//func computeStorageRoot(storage map[common.Hash]common.Hash) common.Hash {
+//	if len(storage) == 0 {
+//		return common.Hash{}
+//	}
+//	st := trie.NewStackTrie(nil)
+//
+//	for key, value := range storage {
+//		st.Update(key.Bytes(), value.Bytes())
+//	}
+//
+//	root := st.Hash()
+//	return root
+//}
 
 // verifyAccount verifies a single account against the expected state
 func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB state.StateDB, resultChan chan<- AccountVerificationResult) {
