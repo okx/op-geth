@@ -808,10 +808,10 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	log.Info("Found genesis block", "hash", genesisHash, "stateRoot", genesisBlock.Root())
 
 	// Create trie database
-	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, genesis.IsVerkle())
-	defer triedb.Close()
+	//triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, genesis.IsVerkle())
+	//defer triedb.Close()
 
-	stateDB := state.NewDatabase(triedb, nil)
+	//stateDB := state.NewDatabase(triedb, nil)
 
 	accountsToVerify := make([]common.Address, 0)
 
@@ -839,6 +839,8 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 		accountsPerWorker++
 	}
 
+	genesisRoot := genesisBlock.Root()
+
 	for i := 0; i < numWorkers; i++ {
 		startIdx := i * accountsPerWorker
 		endIdx := startIdx + accountsPerWorker
@@ -856,7 +858,12 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 
 			log.Info("Worker started", "worker", workerID, "accounts", len(accounts))
 			start := time.Now()
-			stateDB2, err := state.New(genesisBlock.Root(), stateDB)
+			chaindb2, err := stack.OpenDatabaseWithFreezer("chaindata", int(cacheSize), 2048, ctx.String(utils.AncientFlag.Name), "", true)
+			defer chaindb2.Close()
+			triedb2 := utils.MakeTrieDatabase(ctx, chaindb2, false, true, false)
+			defer triedb2.Close()
+			stateDB2 := state.NewDatabase(triedb2, nil)
+			stateDB3, err := state.New(genesisRoot, stateDB2)
 			if err != nil {
 				utils.Fatalf("Failed to create state database: %v", err)
 				panic("Failed to create state database")
@@ -868,7 +875,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 				//}
 			}
 			for _, addr := range accounts {
-				verifyAccount(addr, genesis.Alloc[addr], *stateDB2, resultChan)
+				verifyAccount(addr, genesis.Alloc[addr], *stateDB3, resultChan)
 			}
 
 			log.Info("Worker verifyAccount completed", "worker", workerID, "accounts_processed", len(accounts), "elapsed", common.PrettyDuration(time.Since(start)))
