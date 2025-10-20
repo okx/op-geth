@@ -89,7 +89,7 @@ func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB s
 	}
 
 	// Verify storage
-	if len(expectedAccount.Storage) > 10 {
+	if len(expectedAccount.Storage) > 1000000 {
 		log.Warn("skip large storage verification", "account", addr, "num of storage", len(expectedAccount.Storage))
 		largeStorage <- addr
 	} else {
