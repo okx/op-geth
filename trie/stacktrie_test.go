@@ -20,13 +20,86 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math/big"
+	"math/rand"
+	"sort"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/trie/trienode"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/stretchr/testify/assert"
 )
+
+func generateRandomSortedMap(n int) ([]string, []string) {
+	// Generate random key-value pairs
+	keys := make([]string, n)
+	values := make([]string, n)
+
+	for i := 0; i < n; i++ {
+		// Generate random key (32 bytes)
+		keyBytes := make([]byte, 32)
+		rand.Read(keyBytes)
+		keys[i] = common.Bytes2Hex(keyBytes)
+
+		// Generate random value (32 bytes)
+		valueBytes := make([]byte, 32)
+		rand.Read(valueBytes)
+		values[i] = common.Bytes2Hex(valueBytes)
+	}
+
+	// Sort keys and corresponding values
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i] < keys[j]
+	})
+
+	// Re-sort values to match sorted keys
+	// Note: This creates new random values for sorted keys
+	for i := 0; i < n; i++ {
+		valueBytes := make([]byte, 32)
+		rand.Read(valueBytes)
+		values[i] = common.Bytes2Hex(valueBytes)
+	}
+
+	return keys, values
+}
+
+func TestStackTrie(t *testing.T) {
+
+	keys, vals := generateRandomSortedMap(1000)
+	dummyOwner := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")
+
+	nodeSet := trienode.NewNodeSet(dummyOwner)
+
+	onTrieNode := func(path []byte, hash common.Hash, blob []byte) {
+		blobCopy := make([]byte, len(blob))
+		copy(blobCopy, blob)
+		nodeSet.AddNode(path, trienode.New(hash, blobCopy))
+	}
+
+	st := NewStackTrie(onTrieNode)
+
+	for index, key := range keys {
+		st.Update([]byte(key), []byte(vals[index]))
+	}
+
+	rootHash := st.Hash()
+
+	trie := NewEmpty(newTestDatabase(rawdb.NewMemoryDatabase(), rawdb.HashScheme))
+	for index, key := range keys {
+		trie.MustUpdate([]byte(key), []byte(vals[index]))
+	}
+	trieRootHash, trieNodeSet := trie.Commit(true)
+	assert.Equal(t, rootHash, trieRootHash)
+	assert.Equal(t, len(nodeSet.Nodes), len(trieNodeSet.Nodes))
+
+	for k, node := range nodeSet.Nodes {
+		assert.Equal(t, node.Hash, trieNodeSet.Nodes[k].Hash)
+		assert.Equal(t, node.Blob, trieNodeSet.Nodes[k].Blob)
+	}
+
+}
 
 func TestStackTrieInsertAndHash(t *testing.T) {
 	type KeyValueHash struct {

@@ -235,6 +235,21 @@ func (db *CachingDB) OpenStorageTrie(stateRoot common.Hash, address common.Addre
 	return tr, nil
 }
 
+// OpenStorageTrie opens the storage trie of an account.
+func (db *CachingDB) OpenStorageStackTrie(stateRoot common.Hash, address common.Address, root common.Hash, self Trie) (*trie.StateStackTrie, error) {
+	// In the verkle case, there is only one tree. But the two-tree structure
+	// is hardcoded in the codebase. So we need to return the same trie in this
+	// case.
+	//if db.triedb.IsVerkle() {
+	//	return self, nil
+	//}
+	tr, err := trie.NewStateStackTrie(trie.StorageTrieID(stateRoot, crypto.Keccak256Hash(address.Bytes()), root), db.triedb)
+	if err != nil {
+		return nil, err
+	}
+	return tr, nil
+}
+
 // ContractCode retrieves a particular contract's code. Returns nil if not found.
 // OP-Stack diff: used to serve snap-sync from legacy DB code storage scheme.
 func (db *CachingDB) ContractCode(address common.Address, codeHash common.Hash) []byte {
