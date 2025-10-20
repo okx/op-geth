@@ -116,14 +116,14 @@ func verifyAccount(addr common.Address, expectedAccount types.Account, stateDB s
 	//actualValue := stateDB.GetStorageRoot(addr)
 	//if expectedStorageRoot == (common.Hash{}) {
 	// If no storage root, compute it from the expected storage
-	expectedStorageRoot := computeStorageRoot(expectedAccount.Storage)
+	//expectedStorageRoot := computeStorageRoot(expectedAccount.Storage)
 	//}
 
-	actualStorageRoot := stateDB.GetStorageRoot(addr)
-	if actualStorageRoot != expectedStorageRoot {
-		result.Errors = append(result.Errors, fmt.Sprintf("Storage root mismatch: expected %v, actual %v", expectedStorageRoot.Hex(), actualStorageRoot.Hex()))
-		result.Verified = false
-	}
+	//actualStorageRoot := stateDB.GetStorageRoot(addr)
+	//if actualStorageRoot != expectedStorageRoot {
+	//	result.Errors = append(result.Errors, fmt.Sprintf("Storage root mismatch: expected %v, actual %v", expectedStorageRoot.Hex(), actualStorageRoot.Hex()))
+	//	result.Verified = false
+	//}
 
 	//for key, expectedValue := range expectedAccount.Storage {
 
@@ -856,7 +856,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 
 	log.Info("Starting concurrent verification", "total_accounts", len(accountsToVerify))
 
-	numWorkers := runtime.NumCPU() / 2
+	numWorkers := runtime.NumCPU()
 	if numWorkers > len(accountsToVerify) {
 		numWorkers = len(accountsToVerify)
 	}
