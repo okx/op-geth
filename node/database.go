@@ -40,6 +40,9 @@ type DatabaseOptions struct {
 	Cache            int    // the capacity(in megabytes) of the data caching
 	Handles          int    // number of files to be open simultaneously
 	ReadOnly         bool   // if true, no writes can be performed
+
+	// XLayer proxy for legacy header sync (optional)
+	XLayerProxy *rawdb.XlayerAncientProxy
 }
 
 type internalOpenOptions struct {
@@ -63,6 +66,7 @@ func openDatabase(o internalOpenOptions) (ethdb.Database, error) {
 		Era:              o.EraDirectory,
 		MetricsNamespace: o.MetricsNamespace,
 		ReadOnly:         o.ReadOnly,
+		XLayerProxy:      o.XLayerProxy,
 	}
 	frdb, err := rawdb.Open(kvdb, opts)
 	if err != nil {
