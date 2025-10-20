@@ -984,7 +984,6 @@ func migrateGenesis(ctx *cli.Context) error {
 
 	// Check if verification is requested
 	if !ctx.Bool("no-verify") {
-
 		log.Info("Starting genesis verification after migration", "total account:", len(genesis.Alloc))
 
 		if err := triedb.Close(); err != nil {
@@ -996,7 +995,6 @@ func migrateGenesis(ctx *cli.Context) error {
 		if err := stack.Close(); err != nil {
 			log.Warn("Failed to close node stack", "error", err)
 		}
-
 		verifyStart := time.Now()
 		if err := verifyGenesisInternal(ctx, genesis); err != nil {
 			log.Error("Genesis verification failed", "error", err)
