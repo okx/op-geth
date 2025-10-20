@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	DefaultChannelSize = 20000
+	DefaultChannelSize = 30000
 	// Limit the number of subscriptions on the node
 	MaxSubscriptionsCount = 100
 )
