@@ -947,19 +947,14 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 			log.Info("Verification progress", "verified", verifiedCount, "errors", errorCount)
 		}
 	}
-
-	itemCount := len(largeAcctChan)
-	if itemCount > 0 {
-		log.Info("Items in channel", "count", itemCount)
-
-		for {
-			addr, ok := <-largeAcctChan
-			if !ok {
-				break
-			} else {
-				expectedStorage := genesis.Alloc[addr].Storage
-				_ = verifyStorageConcurrently(stateDB, addr, expectedStorage, genesisRoot)
-			}
+	
+	for {
+		addr, ok := <-largeAcctChan
+		if !ok {
+			break
+		} else {
+			expectedStorage := genesis.Alloc[addr].Storage
+			_ = verifyStorageConcurrently(stateDB, addr, expectedStorage, genesisRoot)
 		}
 	}
 
