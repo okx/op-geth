@@ -98,10 +98,28 @@ func (api *XlayerHybridBlockChainAPI) Call(ctx context.Context, args ethapi.Tran
 		bNrOrHash = *blockNrOrHash
 	}
 
+	callRequest := map[string]interface{}{
+		"from":                 args.From,
+		"to":                   args.To,
+		"value":                args.Value,
+		"gas":                  args.Gas,
+		"gasPrice":             args.GasPrice,
+		"data":                 args.Data,
+		"nonce":                args.Nonce,
+		"input":                args.Input,
+		"maxFeePerGas":         args.MaxFeePerGas,
+		"maxPriorityFeePerGas": args.MaxPriorityFeePerGas,
+		"maxFeePerBlobGas":     args.BlobFeeCap,
+		"accessList":           args.AccessList,
+		"blobVersionedHashes":  args.BlobHashes,
+		"blobs":                args.Blobs,
+		"chainId":              args.ChainID,
+	}
+
 	if blockNr, ok := bNrOrHash.Number(); ok && blockNr >= 0 {
 		if api.legacyRpc.shouldProxy(uint64(blockNr)) {
 			var result hexutil.Bytes
-			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_call", args, &bNrOrHash, overrides, blockOverrides)
+			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_call", callRequest, &bNrOrHash)
 			return result, err
 		} else {
 			return api.BlockChainAPI.Call(ctx, args, &bNrOrHash, overrides, blockOverrides)
@@ -114,7 +132,7 @@ func (api *XlayerHybridBlockChainAPI) Call(ctx context.Context, args ethapi.Tran
 	}
 
 	var result hexutil.Bytes
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_call", args, &bNrOrHash, overrides, blockOverrides)
+	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_call", callRequest, &bNrOrHash)
 	return result, err
 }
 
@@ -125,11 +143,28 @@ func (api *XlayerHybridBlockChainAPI) EstimateGas(ctx context.Context, args etha
 	if blockNrOrHash != nil {
 		bNrOrHash = *blockNrOrHash
 	}
-
+	estimateGasRequest := map[string]interface{}{
+		"from":                 args.From,
+		"to":                   args.To,
+		"value":                args.Value,
+		"gas":                  args.Gas,
+		"gasPrice":             args.GasPrice,
+		"data":                 args.Data,
+		"nonce":                args.Nonce,
+		"input":                args.Input,
+		"maxFeePerGas":         args.MaxFeePerGas,
+		"maxPriorityFeePerGas": args.MaxPriorityFeePerGas,
+		"maxFeePerBlobGas":     args.BlobFeeCap,
+		"accessList":           args.AccessList,
+		"blobVersionedHashes":  args.BlobHashes,
+		"blobs":                args.Blobs,
+		"chainId":              args.ChainID,
+	}
 	if blockNr, ok := bNrOrHash.Number(); ok && blockNr >= 0 {
 		if api.legacyRpc.shouldProxy(uint64(blockNr)) {
 			var result hexutil.Uint64
-			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_estimateGas", args, bNrOrHash, overrides)
+
+			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_estimateGas", estimateGasRequest, &bNrOrHash)
 			return result, err
 		} else {
 			return api.BlockChainAPI.EstimateGas(ctx, args, &bNrOrHash, overrides, blockOverrides)
@@ -142,7 +177,7 @@ func (api *XlayerHybridBlockChainAPI) EstimateGas(ctx context.Context, args etha
 	}
 
 	var result hexutil.Uint64
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_estimateGas", args, &bNrOrHash, overrides)
+	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_estimateGas", estimateGasRequest, &bNrOrHash)
 	return result, err
 }
 
@@ -160,10 +195,27 @@ func (api *XlayerHybridBlockChainAPI) CreateAccessList(ctx context.Context, args
 		bNrOrHash = *blockNrOrHash
 	}
 
+	createAccessListRequest := map[string]interface{}{
+		"from":                 args.From,
+		"to":                   args.To,
+		"value":                args.Value,
+		"gas":                  args.Gas,
+		"gasPrice":             args.GasPrice,
+		"data":                 args.Data,
+		"nonce":                args.Nonce,
+		"input":                args.Input,
+		"maxFeePerGas":         args.MaxFeePerGas,
+		"maxPriorityFeePerGas": args.MaxPriorityFeePerGas,
+		"maxFeePerBlobGas":     args.BlobFeeCap,
+		"accessList":           args.AccessList,
+		"blobVersionedHashes":  args.BlobHashes,
+		"blobs":                args.Blobs,
+		"chainId":              args.ChainID,
+	}
 	if blockNr, ok := bNrOrHash.Number(); ok && blockNr >= 0 {
 		if api.legacyRpc.shouldProxy(uint64(blockNr)) {
 			var result *accessListResult
-			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_createAccessList", args, &bNrOrHash, stateOverrides)
+			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_createAccessList", createAccessListRequest, &bNrOrHash)
 			return result, err
 		} else {
 			accessList, err := api.BlockChainAPI.CreateAccessList(ctx, args, &bNrOrHash, stateOverrides)
@@ -177,7 +229,7 @@ func (api *XlayerHybridBlockChainAPI) CreateAccessList(ctx context.Context, args
 	}
 
 	var result *accessListResult
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_createAccessList", args, &bNrOrHash, stateOverrides)
+	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_createAccessList", createAccessListRequest, &bNrOrHash)
 	return result, err
 }
 
