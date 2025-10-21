@@ -424,11 +424,11 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 				// getSealingBlock is interrupted by shared interrupt
 				r = miner.generateWork(fullParams, witness)
 			} else {
-				// For X Layer, realtime. Incremental building
+				// For X Layer, realtime
 				if !payload.incrementalFlag {
-					// getSealingBlock is interrupted by shared interrupt
 					r = miner.generateWork(fullParams, witness)
 				} else {
+					// Incremental building
 					r = miner.tryIncrementalUpdate(payload, fullParams, witness)
 				}
 			}

@@ -299,6 +299,7 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 	}
 	// For X Layer, realtime
 	if genParam.realtimeEnabled {
+		payload.realtimeEnabled = true
 		payload.env = work
 		payload.finalizeBlockChangeset = work.state.GenerateChangeset()
 	}

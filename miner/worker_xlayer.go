@@ -50,12 +50,12 @@ func (env *environment) snapshot() *environment {
 	return snap
 }
 
-func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParams, witness bool) *newPayloadResult {
+func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generateParams, witness bool) *newPayloadResult {
 	// Validation cached state
 	if payload.baseEnv == nil {
 		return &newPayloadResult{err: errors.New("no cached environment")}
 	}
-	parent := miner.chain.GetBlockByHash(params.parentHash)
+	parent := miner.chain.GetBlockByHash(genParam.parentHash)
 	if parent == nil || parent.Hash() != payload.baseParent {
 		log.Debug("Incremental update skipped: cannot find parent block", "id", payload.id)
 		return &newPayloadResult{err: errors.New("missing parent")}
@@ -67,14 +67,15 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 		defer work.state.StopPrefetcher()
 	}
 	work.evm = vm.NewEVM(core.NewEVMBlockContext(work.header, miner.chain, &work.coinbase, miner.chainConfig, work.state), work.state, miner.chainConfig, vm.Config{EnableInnerTxs: miner.backend.RealtimeEnabled()})
+	// Handle included transactions in current payload
 	existingTxHashes := make(map[common.Hash]struct{}, len(work.txs))
 	for _, tx := range work.txs {
 		existingTxHashes[tx.Hash()] = struct{}{}
 	}
 
-	if !params.noTxs {
+	if !genParam.noTxs {
 		// use shared interrupt if present
-		interrupt := params.interrupt
+		interrupt := genParam.interrupt
 		if interrupt == nil {
 			interrupt = new(atomic.Int32)
 		}
@@ -82,7 +83,7 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 			interrupt.Store(commitInterruptTimeout)
 		})
 
-		err := miner.fillTransactions(interrupt, work, existingTxHashes, params.realtimeEnabled)
+		err := miner.fillTransactions(interrupt, work, existingTxHashes, genParam.realtimeEnabled)
 		timer.Stop() // don't need timeout interruption any more
 		if errors.Is(err, errBlockInterruptedByTimeout) {
 			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(miner.config.Recommit))
@@ -91,7 +92,10 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 		}
 	}
 
-	body := types.Body{Transactions: work.txs, Withdrawals: params.withdrawals}
+	// Note that we do not handle interrupts on incremental updates since block is building incrementally
+	// and we need to compute state root and finalize the block to ensure the incremental update is updated
+	// to the payload.
+	body := types.Body{Transactions: work.txs, Withdrawals: genParam.withdrawals}
 	allLogs := make([]*types.Log, 0)
 	for _, r := range work.receipts {
 		allLogs = append(allLogs, r.Logs...)
@@ -126,17 +130,21 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, params *generateParam
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
-	return &newPayloadResult{
-		block:                  block,
-		fees:                   totalFees(block, work.receipts),
-		sidecars:               work.sidecars,
-		stateDB:                work.state,
-		receipts:               work.receipts,
-		requests:               requests,
-		witness:                work.witness,
-		env:                    work,
-		finalizeBlockChangeset: work.state.GenerateChangeset(),
+	newPayload := &newPayloadResult{
+		block:    block,
+		fees:     totalFees(block, work.receipts),
+		sidecars: work.sidecars,
+		stateDB:  work.state,
+		receipts: work.receipts,
+		requests: requests,
+		witness:  work.witness,
 	}
+	if genParam.realtimeEnabled {
+		newPayload.realtimeEnabled = true
+		newPayload.env = work
+		newPayload.finalizeBlockChangeset = work.state.GenerateChangeset()
+	}
+	return newPayload
 }
 
 func (miner *Miner) applyTransaction_XLayer(env *environment, tx *types.Transaction) (*types.Receipt, []*types.InnerTx, *state.Entries, error) {
