@@ -215,7 +215,7 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 			logger.Error("mergeAlloc: create2Deployer has storage", "storage length", len(xlayerErigonAcct.Storage))
 		}
 	// Permit2 use code and storage from xlayer
-	case common.HexToAddress("000000000022d473030f116ddee9f6b43ac78ba3"):
+	case common.HexToAddress("0x000000000022d473030f116ddee9f6b43ac78ba3"):
 		destAccount.Nonce = xlayerErigonAcct.Nonce
 		destAccount.Balance = xlayerErigonAcct.Balance
 		destAccount.Code = xlayerErigonAcct.Code
@@ -1131,6 +1131,29 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 
 	if !ctx.Bool("no-balance-check") {
 		if totalErigonBalance.Cmp(totalOpBalance) != 0 {
+			for addr, erigonAcct := range erigonAlloc {
+				if migratedAcct, ok := mergedGenesis.Alloc[addr]; !ok {
+					if _, ignored := ignoreAddresses[addr]; !ignored {
+						panic(fmt.Sprintf("failed to find merged account for erigon: %s", addr.Hex()))
+					}
+
+				} else {
+					if migratedAcct.Balance.Cmp(erigonAcct.Balance) != 0 {
+						log.Warn("merged acct balance does not equal to erigon balance", "add", addr, "erigonBalance", erigonAcct.Balance, "migratedBalance", migratedAcct.Balance)
+					}
+				}
+			}
+
+			for addr, _ := range opGenesis.Alloc {
+				if migratedAcct, ok := mergedGenesis.Alloc[addr]; !ok {
+					panic(fmt.Sprintf("failed to find merged account for erigon: %s", addr.Hex()))
+				} else {
+					if _, erigonExist := erigonAlloc[addr]; !erigonExist && migratedAcct.Balance != nil && migratedAcct.Balance.Sign() != 0 {
+						log.Warn("imported new account for erigon", "addr", addr.Hex(), "balance", migratedAcct.Balance)
+					}
+
+				}
+			}
 			return nil, common.Hash{}, nil, nil, fmt.Errorf("migration pre & post balance does not match: pre balance: %d, post balance: %d, delta: %d", totalErigonBalance, totalOpBalance, new(big.Int).Sub(totalOpBalance, totalErigonBalance))
 		} else {
 			log.Info("migration pre & post balance match, totalBalance: %d", totalOpBalance)
