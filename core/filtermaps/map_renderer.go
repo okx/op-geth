@@ -26,6 +26,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -160,14 +161,18 @@ func (f *FilterMaps) lastCanonicalSnapshotOfMap(mapIndex uint32) *renderedMap {
 // Along with the next map index where the rendering can be started, the number
 // and starting log value pointer of the last block is also returned.
 func (f *FilterMaps) lastCanonicalMapBoundaryBefore(renderBefore uint32) (nextMap uint32, startBlock, startLvPtr uint64, err error) {
+	genesisNumber := rawdb.ReadGenesisNumber(f.db)
 	if !f.indexedRange.initialized {
-		return 0, 0, 0, nil
+		log.Info("lastCanonicalMapBoundaryBefore not initialized")
+		// When not initialized, start from genesis block instead of block 0
+		return 0, genesisNumber, 0, nil
 	}
 	mapIndex := renderBefore
 	for {
 		var ok bool
 		if mapIndex, ok = f.lastMapBoundaryBefore(mapIndex); !ok {
-			return 0, 0, 0, nil
+			// No previous map boundary available, fall back to genesis
+			return 0, genesisNumber, 0, nil
 		}
 		lastBlock, lastBlockId, err := f.getLastBlockOfMap(mapIndex)
 		if err != nil {
@@ -468,7 +473,7 @@ func (r *mapRenderer) writeFinishedMaps(pauseCb func() bool) error {
 			r.f.filterMapCache.Remove(mapIndex)
 		}
 	}
-	var blockNumber uint64
+	var blockNumber = rawdb.ReadGenesisNumber(r.f.db)
 	if r.finished.First() > 0 {
 		// in order to always ensure continuous block pointers, initialize
 		// blockNumber based on the last block of the previous map, then verify

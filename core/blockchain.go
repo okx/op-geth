@@ -395,7 +395,7 @@ func NewBlockChain(db ethdb.Database, genesis *Genesis, engine consensus.Engine,
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc.hc)
 	bc.processor = NewStateProcessor(chainConfig, bc.hc)
 
-	genesisHeader := bc.GetHeaderByNumber(0)
+	genesisHeader := bc.GetHeaderByNumber(rawdb.ReadGenesisNumber(bc.db))
 	if genesisHeader == nil {
 		return nil, ErrNoGenesis
 	}
@@ -423,7 +423,7 @@ func NewBlockChain(db ethdb.Database, genesis *Genesis, engine consensus.Engine,
 	// if there is no available state, waiting for state sync.
 	head := bc.CurrentBlock()
 	if !bc.HasState(head.Root) {
-		if head.Number.Uint64() == 0 {
+		if head.Number.Uint64() == bc.genesisBlock.NumberU64() {
 			// The genesis state is missing, which is only possible in the path-based
 			// scheme. This situation occurs when the initial state sync is not finished
 			// yet, or the chain head is rewound below the pivot point. In both scenarios,
@@ -496,7 +496,7 @@ func NewBlockChain(db ethdb.Database, genesis *Genesis, engine consensus.Engine,
 		bc.logger.OnBlockchainInit(chainConfig)
 	}
 	if bc.logger != nil && bc.logger.OnGenesisBlock != nil {
-		if block := bc.CurrentBlock(); block.Number.Uint64() == 0 {
+		if block := bc.CurrentBlock(); block.Number.Uint64() == bc.genesisBlock.NumberU64() {
 			alloc, err := getGenesisState(bc.db, block.Hash())
 			if err != nil {
 				return nil, fmt.Errorf("failed to get genesis state: %w", err)
@@ -846,7 +846,7 @@ func (bc *BlockChain) rewindHashHead(head *types.Header, root common.Hash) (*typ
 			head = parent
 
 			// If the genesis block is reached, stop searching.
-			if head.Number.Uint64() == 0 {
+			if head.Number.Uint64() == bc.genesisBlock.NumberU64() {
 				log.Info("Genesis block reached", "number", head.Number, "hash", head.Hash())
 				return head, rootNumber
 			}
@@ -854,7 +854,7 @@ func (bc *BlockChain) rewindHashHead(head *types.Header, root common.Hash) (*typ
 		}
 		// Once the available state is found, ensure that the requested root
 		// has already been crossed. If not, continue rewinding.
-		if beyondRoot || head.Number.Uint64() == 0 {
+		if beyondRoot || head.Number.Uint64() == bc.genesisBlock.NumberU64() {
 			log.Info("Rewound to block with state", "number", head.Number, "hash", head.Hash())
 			return head, rootNumber
 		}
@@ -923,7 +923,7 @@ func (bc *BlockChain) rewindPathHead(head *types.Header, root common.Hash) (*typ
 		head = parent
 
 		// If the genesis block is reached, stop searching.
-		if head.Number.Uint64() == 0 {
+		if head.Number.Uint64() == bc.genesisBlock.NumberU64() {
 			log.Info("Genesis block reached", "number", head.Number, "hash", head.Hash())
 			return head, rootNumber
 		}

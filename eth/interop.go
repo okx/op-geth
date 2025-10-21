@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/types/interoptypes"
 	"github.com/ethereum/go-ethereum/miner"
@@ -53,7 +54,8 @@ func (s *Ethereum) QueryFailsafe(ctx context.Context) (bool, error) {
 }
 
 func (s *Ethereum) inferBlockTime(current *types.Header) (uint64, error) {
-	if current.Number.Uint64() == 0 {
+	genesisNumber := rawdb.ReadGenesisNumber(s.chainDb)
+	if current.Number.Uint64() == genesisNumber {
 		return 0, errors.New("current head is at genesis: penultimate header is nil")
 	}
 	penultimate := s.BlockChain().GetHeaderByHash(current.ParentHash)

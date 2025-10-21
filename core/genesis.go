@@ -96,7 +96,11 @@ func (g *Genesis) copy() *Genesis {
 
 func ReadGenesis(db ethdb.Database) (*Genesis, error) {
 	var genesis Genesis
-	stored := rawdb.ReadCanonicalHash(db, 0)
+
+	// Get the genesis block number dynamically
+	genesisNumber := rawdb.ReadGenesisNumber(db)
+
+	stored := rawdb.ReadCanonicalHash(db, genesisNumber)
 	if (stored == common.Hash{}) {
 		return nil, fmt.Errorf("invalid genesis hash in database: %x", stored)
 	}
@@ -113,7 +117,7 @@ func ReadGenesis(db ethdb.Database) (*Genesis, error) {
 	if genesis.Config == nil {
 		return nil, errors.New("genesis config missing from db")
 	}
-	genesisBlock := rawdb.ReadBlock(db, stored, 0)
+	genesisBlock := rawdb.ReadBlock(db, stored, genesisNumber)
 	if genesisBlock == nil {
 		return nil, errors.New("genesis block missing from db")
 	}
@@ -411,7 +415,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 		return nil, common.Hash{}, nil, errGenesisNoConfig
 	}
 	// Commit the genesis if the database is empty
-	ghash := rawdb.ReadCanonicalHash(db, 0)
+	// Get the genesis block number dynamically
+	genesisNumber := rawdb.ReadGenesisNumber(db)
+	ghash := rawdb.ReadCanonicalHash(db, genesisNumber)
 	if (ghash == common.Hash{}) {
 		if genesis == nil {
 			log.Info("Writing default main-net genesis block")
@@ -534,10 +540,16 @@ func LoadChainConfig(db ethdb.Database, genesis *Genesis) (cfg *params.ChainConf
 	// Load the stored chain config from the database. It can be nil
 	// in case the database is empty. Notably, we only care about the
 	// chain config corresponds to the canonical chain.
-	stored := rawdb.ReadCanonicalHash(db, 0)
+
+	// Get the genesis block number dynamically
+	genesisNumber := rawdb.ReadGenesisNumber(db)
+
+	stored := rawdb.ReadCanonicalHash(db, genesisNumber)
+	log.Info("LoadChainConfig", "genesis_number", genesisNumber, "stored_hash", stored.Hex())
 	if stored != (common.Hash{}) {
 		storedcfg := rawdb.ReadChainConfig(db, stored)
 		if storedcfg != nil {
+			log.Info("Found stored chain config", "chain_id", storedcfg.ChainID)
 			return storedcfg, stored, nil
 		}
 	}
@@ -683,9 +695,10 @@ func (g *Genesis) toBlockWithRoot(stateRoot, storageRootMessagePasser common.Has
 // Commit writes the block and state of a genesis specification to the database.
 // The block is committed as the canonical head block.
 func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Block, error) {
-	if g.Number != 0 {
-		return nil, errors.New("can't commit genesis block with number > 0")
-	}
+	//if g.Number != 0 {
+	//	return nil, errors.New("can't commit genesis block with number > 0")
+	//}
+	log.Info("Committing genesis", "chain_id", g.Config.ChainID, "number", g.Number)
 	config := g.Config
 	if config == nil {
 		return nil, errors.New("invalid genesis without chain config")
@@ -727,6 +740,7 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 	rawdb.WriteHeadFastBlockHash(batch, block.Hash())
 	rawdb.WriteHeadHeaderHash(batch, block.Hash())
 	rawdb.WriteChainConfig(batch, block.Hash(), config)
+	rawdb.WriteGenesisNumber(batch, block.NumberU64())
 	return block, batch.Write()
 }
 
@@ -754,12 +768,15 @@ func EnableVerkleAtGenesis(db ethdb.Database, genesis *Genesis) (bool, error) {
 		}
 		return genesis.Config.EnableVerkleAtGenesis, nil
 	}
-	if ghash := rawdb.ReadCanonicalHash(db, 0); ghash != (common.Hash{}) {
+	// Get the genesis block number dynamically
+	genesisNumber := rawdb.ReadGenesisNumber(db)
+	if ghash := rawdb.ReadCanonicalHash(db, genesisNumber); ghash != (common.Hash{}) {
 		chainCfg := rawdb.ReadChainConfig(db, ghash)
 		if chainCfg != nil {
 			return chainCfg.EnableVerkleAtGenesis, nil
 		}
 	}
+
 	return false, nil
 }
 

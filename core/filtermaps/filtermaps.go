@@ -393,7 +393,7 @@ func (f *FilterMaps) init() error {
 			bestIdx, bestLen = idx, max
 		}
 	}
-	var initBlockNumber uint64
+	var initBlockNumber = rawdb.ReadGenesisNumber(f.db)
 	if bestLen > 0 {
 		initBlockNumber = checkpoints[bestIdx][bestLen-1].BlockNumber
 	}
@@ -408,6 +408,7 @@ func (f *FilterMaps) init() error {
 	}
 	fmr := filterMapsRange{
 		initialized: true,
+		blocks:      common.NewRange(initBlockNumber+1, 0),
 	}
 	if bestLen > 0 {
 		cp := checkpoints[bestIdx][bestLen-1]
@@ -503,7 +504,7 @@ func (f *FilterMaps) getLogByLvIndex(lvIndex uint64) (*types.Log, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve last block of map %d containing searched log value index %d: %v", mapIndex, lvIndex, err)
 	}
-	var firstBlockNumber uint64
+	var firstBlockNumber = rawdb.ReadGenesisNumber(f.db)
 	if mapIndex > 0 {
 		firstBlockNumber, _, err = f.getLastBlockOfMap(mapIndex - 1)
 		if err != nil {

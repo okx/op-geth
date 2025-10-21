@@ -80,7 +80,9 @@ func NewHeaderChain(chainDb ethdb.Database, config *params.ChainConfig, engine c
 		procInterrupt: procInterrupt,
 		engine:        engine,
 	}
-	hc.genesisHeader = hc.GetHeaderByNumber(0)
+	// Get genesis block number dynamically
+	genesisNumber := rawdb.ReadGenesisNumber(chainDb)
+	hc.genesisHeader = hc.GetHeaderByNumber(genesisNumber)
 	if hc.genesisHeader == nil {
 		return nil, ErrNoGenesis
 	}

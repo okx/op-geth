@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -46,7 +47,9 @@ func (f *FilterMaps) indexerLoop() {
 		// Note: acquiring the indexLock read lock is unnecessary here,
 		// as the `indexedRange` is accessed within the indexerLoop.
 		if !f.indexedRange.initialized {
-			if f.targetView.HeadNumber() == 0 {
+			// Get genesis block number dynamically
+			genesisNumber := rawdb.ReadGenesisNumber(f.db)
+			if f.targetView.HeadNumber() == genesisNumber {
 				// initialize when chain head is available
 				f.processSingleEvent(true)
 				continue

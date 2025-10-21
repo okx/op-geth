@@ -175,7 +175,8 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		//   time. But we don't have any recent state for full sync.
 		// In these cases however it's safe to reenable snap sync.
 		fullBlock, snapBlock := h.chain.CurrentBlock(), h.chain.CurrentSnapBlock()
-		if fullBlock.Number.Uint64() == 0 && snapBlock.Number.Uint64() > 0 {
+		genesisNumber := rawdb.ReadGenesisNumber(h.database)
+		if fullBlock.Number.Uint64() == genesisNumber && snapBlock.Number.Uint64() > genesisNumber {
 			h.snapSync.Store(true)
 			log.Warn("Switch sync mode from full sync to snap sync", "reason", "snap sync incomplete")
 		} else if !h.chain.HasState(fullBlock.Root) {

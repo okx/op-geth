@@ -105,6 +105,8 @@ func newTxIndexer(limit uint64, chain *BlockChain) *txIndexer {
 func (indexer *txIndexer) run(head uint64, stop chan struct{}, done chan struct{}) {
 	defer func() { close(done) }()
 
+	genesisNumber := rawdb.ReadGenesisNumber(indexer.db)
+
 	// Short circuit if the chain is either empty, or entirely below the
 	// cutoff point.
 	if head == 0 || head < indexer.cutoff {
@@ -117,7 +119,7 @@ func (indexer *txIndexer) run(head uint64, stop chan struct{}, done chan struct{
 	if tail == nil {
 		// Determine the first block for transaction indexing, taking the
 		// configured cutoff point into account.
-		from := uint64(0)
+		from := genesisNumber
 		if indexer.limit != 0 && head >= indexer.limit {
 			from = head - indexer.limit + 1
 		}
@@ -129,7 +131,7 @@ func (indexer *txIndexer) run(head uint64, stop chan struct{}, done chan struct{
 	// present), while the whole chain are requested for indexing.
 	if indexer.limit == 0 || head < indexer.limit {
 		if *tail > 0 {
-			from := max(uint64(0), indexer.cutoff)
+			from := max(genesisNumber, indexer.cutoff)
 			rawdb.IndexTransactions(indexer.db, from, *tail, stop, true)
 		}
 		return

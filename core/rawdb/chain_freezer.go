@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 const (
@@ -194,13 +195,15 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore) {
 			continue
 		}
 		frozen, _ := f.Ancients() // no error will occur, safe to ignore
+		genesis := ReadGenesisNumber(db)
 
 		// Short circuit if the blocks below threshold are already frozen.
 		if frozen != 0 && frozen-1 >= threshold {
 			backoff = true
-			log.Debug("Ancient blocks frozen already", "threshold", threshold, "frozen", frozen)
+			log.Warn("Ancient blocks frozen already", "threshold", threshold, "frozen", frozen)
 			continue
 		}
+
 		// Seems we have data ready to be frozen, process in usable batches
 		var (
 			start = time.Now()
@@ -224,7 +227,7 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore) {
 		batch := db.NewBatch()
 		for i := 0; i < len(ancients); i++ {
 			// Always keep the genesis block in active database
-			if first+uint64(i) != 0 {
+			if first+uint64(i) > genesis {
 				DeleteBlockWithoutNumber(batch, ancients[i], first+uint64(i))
 				DeleteCanonicalHash(batch, first+uint64(i))
 			}
@@ -239,7 +242,7 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore) {
 		frozen, _ = f.Ancients() // Needs reload after during freezeRange
 		for number := first; number < frozen; number++ {
 			// Always keep the genesis block in active database
-			if number != 0 {
+			if number > genesis {
 				dangling = ReadAllHashes(db, number)
 				for _, hash := range dangling {
 					log.Trace("Deleting side chain", "number", number, "hash", hash)
@@ -253,7 +256,7 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore) {
 		batch.Reset()
 
 		// Step into the future and delete any dangling side chains
-		if frozen > 0 {
+		if frozen > genesis {
 			tip := frozen
 			for len(dangling) > 0 {
 				drop := make(map[common.Hash]struct{})
@@ -309,24 +312,35 @@ func (f *chainFreezer) freezeRange(nfdb *nofreezedb, number, limit uint64) (hash
 	hashes = make([]common.Hash, 0, limit-number+1)
 
 	_, err = f.ModifyAncients(func(op ethdb.AncientWriteOp) error {
+		genesis := ReadGenesisNumber(nfdb)
 		for ; number <= limit; number++ {
-			// Retrieve all the components of the canonical block.
-			hash := ReadCanonicalHash(nfdb, number)
-			if hash == (common.Hash{}) {
-				return fmt.Errorf("canonical hash missing, can't freeze block %d", number)
+			var (
+				hash     common.Hash
+				header   rlp.RawValue
+				body     rlp.RawValue
+				receipts rlp.RawValue
+			)
+
+			if number >= genesis {
+				// Retrieve all the components of the canonical block.
+				hash = ReadCanonicalHash(nfdb, number)
+				if hash == (common.Hash{}) {
+					return fmt.Errorf("canonical hash missing, can't freeze block %d", number)
+				}
+				header = ReadHeaderRLP(nfdb, hash, number)
+				if len(header) == 0 {
+					return fmt.Errorf("block header missing, can't freeze block %d", number)
+				}
+				body = ReadBodyRLP(nfdb, hash, number)
+				if len(body) == 0 {
+					return fmt.Errorf("block body missing, can't freeze block %d", number)
+				}
+				receipts = ReadReceiptsRLP(nfdb, hash, number)
+				if len(receipts) == 0 {
+					return fmt.Errorf("block receipts missing, can't freeze block %d", number)
+				}
 			}
-			header := ReadHeaderRLP(nfdb, hash, number)
-			if len(header) == 0 {
-				return fmt.Errorf("block header missing, can't freeze block %d", number)
-			}
-			body := ReadBodyRLP(nfdb, hash, number)
-			if len(body) == 0 {
-				return fmt.Errorf("block body missing, can't freeze block %d", number)
-			}
-			receipts := ReadReceiptsRLP(nfdb, hash, number)
-			if len(receipts) == 0 {
-				return fmt.Errorf("block receipts missing, can't freeze block %d", number)
-			}
+
 			// Write to the batch.
 			if err := op.AppendRaw(ChainFreezerHashTable, number, hash[:]); err != nil {
 				return fmt.Errorf("can't write hash to Freezer: %v", err)
