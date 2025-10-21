@@ -120,7 +120,6 @@ type newPayloadResult struct {
 	requests [][]byte               // Consensus layer requests collected during block construction
 	witness  *stateless.Witness     // Witness is an optional stateless proof
 	// For X Layer, realtime
-	realtimeEnabled        bool
 	env                    *environment // env snapshot for incremental building
 	finalizeBlockChangeset *realtimeTypes.Changeset
 }
@@ -299,7 +298,6 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 	}
 	// For X Layer, realtime
 	if genParam.realtimeEnabled {
-		payload.realtimeEnabled = true
 		payload.env = work
 		payload.finalizeBlockChangeset = work.state.GenerateChangeset()
 	}

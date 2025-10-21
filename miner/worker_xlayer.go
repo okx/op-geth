@@ -140,7 +140,6 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 		witness:  work.witness,
 	}
 	if genParam.realtimeEnabled {
-		newPayload.realtimeEnabled = true
 		newPayload.env = work
 		newPayload.finalizeBlockChangeset = work.state.GenerateChangeset()
 	}

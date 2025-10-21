@@ -9,8 +9,8 @@ const (
 	DefaultL2NetworkWSURL                 = "ws://localhost:7547"
 	DefaultL2ChainID               uint64 = 196
 
-	DefaultL2AdminAddress    = "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"
-	DefaultL2AdminPrivateKey = "0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2"
+	DefaultL2AdminAddress    = "0x14dC79964da2C08b23698B3D3cc7Ca32193d9955"
+	DefaultL2AdminPrivateKey = "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356"
 
 	DefaultTimeoutTxToBeMined = 1 * time.Minute
 

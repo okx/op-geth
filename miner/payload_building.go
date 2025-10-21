@@ -121,6 +121,7 @@ type Payload struct {
 	rpcCancel context.CancelFunc
 
 	// For X Layer, realtime. Incremental building
+	realtimeEnabled        atomic.Bool
 	incrementalFlag        bool
 	baseEnv                *environment
 	baseParent             common.Hash
@@ -128,7 +129,7 @@ type Payload struct {
 }
 
 // newPayload initializes the payload object.
-func newPayload(lifeCtx context.Context, empty *types.Block, emptyRequests [][]byte, witness *stateless.Witness, id engine.PayloadID) *Payload {
+func newPayload(lifeCtx context.Context, empty *types.Block, emptyRequests [][]byte, witness *stateless.Witness, id engine.PayloadID, realtimeEnabled bool) *Payload {
 	rpcCtx, rpcCancel := context.WithCancel(lifeCtx)
 	payload := &Payload{
 		id:            id,
@@ -143,9 +144,13 @@ func newPayload(lifeCtx context.Context, empty *types.Block, emptyRequests [][]b
 		rpcCancel: rpcCancel,
 
 		// For X Layer, realtime
+		realtimeEnabled: atomic.Bool{},
 		incrementalFlag: false,
 		baseEnv:         nil,
 	}
+	// For X Layer, realtime
+	payload.realtimeEnabled.Store(realtimeEnabled)
+
 	log.Info("Starting work on payload", "id", payload.id)
 	payload.cond = sync.NewCond(&payload.lock)
 	return payload
@@ -187,7 +192,7 @@ func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration, backe
 		payload.fullWitness = r.witness
 
 		// For X Layer, realtime
-		if r.realtimeEnabled {
+		if payload.realtimeEnabled.Load() {
 			if r.env == nil {
 				// Something went wrong here, should not happen. Trigger error
 				backend.SendRealtimeErrorTrigger(r.block.NumberU64())
@@ -218,6 +223,10 @@ func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration, backe
 // Resolve returns the latest built payload and also terminates the background
 // thread for updating payload. It's safe to be called multiple times.
 func (payload *Payload) Resolve() *engine.ExecutionPayloadEnvelope {
+	// For X Layer, realtime
+	if payload.realtimeEnabled.Load() {
+		return payload.resolveRealtime()
+	}
 	return payload.resolve(false)
 }
 
@@ -352,7 +361,7 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 		if empty.err != nil {
 			return nil, empty.err
 		}
-		payload := newPayload(miner.lifeCtx, empty.block, empty.requests, empty.witness, args.Id())
+		payload := newPayload(miner.lifeCtx, empty.block, empty.requests, empty.witness, args.Id(), args.RealtimeEnabled)
 		// make sure to make it appear as full, otherwise it will wait indefinitely for payload building to complete.
 		payload.full = empty.block
 		payload.fullFees = empty.fees
@@ -388,7 +397,7 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 		return nil, err
 	}
 
-	payload := newPayload(miner.lifeCtx, nil, nil, nil, args.Id())
+	payload := newPayload(miner.lifeCtx, nil, nil, nil, args.Id(), args.RealtimeEnabled)
 	// set shared interrupt
 	fullParams.interrupt = payload.interrupt
 	fullParams.rpcCtx = payload.rpcCtx
