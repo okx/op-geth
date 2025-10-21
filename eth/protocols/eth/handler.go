@@ -24,6 +24,8 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -98,7 +100,7 @@ type TxPool interface {
 }
 
 // MakeProtocols constructs the P2P protocol definitions for `eth`.
-func MakeProtocols(backend Backend, network uint64, disc enode.Iterator) []p2p.Protocol {
+func MakeProtocols(backend Backend, network uint64, disc enode.Iterator, config *ethconfig.Config) []p2p.Protocol {
 	protocols := make([]p2p.Protocol, 0, len(ProtocolVersions))
 	for _, version := range ProtocolVersions {
 		protocols = append(protocols, p2p.Protocol{
@@ -106,7 +108,14 @@ func MakeProtocols(backend Backend, network uint64, disc enode.Iterator) []p2p.P
 			Version: version,
 			Length:  protocolLengths[version],
 			Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
-				peer := NewPeer(version, p, rw, backend.TxPool())
+				// For XLayer, Get P2P configuration from passed config, fallback to constants if config unavailable
+				maxQueuedTxs, maxQueuedTxAnns := uint64(maxQueuedTxs), uint64(maxQueuedTxAnns) // Use constants as default
+				if config != nil {
+					maxQueuedTxs = config.XLayer.P2P.MaxQueuedTxs
+					maxQueuedTxAnns = config.XLayer.P2P.MaxQueuedTxAnns
+				}
+				log.Info("XLayer P2P configuration", "maxQueuedTxs", maxQueuedTxs, "maxQueuedTxAnns", maxQueuedTxAnns)
+				peer := NewPeerWithConfig(version, p, rw, backend.TxPool(), maxQueuedTxs, maxQueuedTxAnns)
 				defer peer.Close()
 
 				return backend.RunPeer(peer, func(peer *Peer) error {

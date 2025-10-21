@@ -209,6 +209,20 @@ var (
 		Value: "100000000",
 	}
 
+	// P2P Queue Configuration
+	P2PMaxQueuedTxsFlag = &cli.Uint64Flag{
+		Name:     "p2p.maxqueuedtxs",
+		Usage:    "Maximum number of transactions to queue up before dropping older broadcasts",
+		Value:    4096,
+		Category: flags.XLayerCategory,
+	}
+	P2PMaxQueuedTxAnnsFlag = &cli.Uint64Flag{
+		Name:     "p2p.maxqueuedtxanns",
+		Usage:    "Maximum number of transaction announcements to queue up before dropping older announcements",
+		Value:    4096,
+		Category: flags.XLayerCategory,
+	}
+
 	// XLayerFlags are the default flags for X Layer features
 	XLayerFlags = []cli.Flag{
 		OkPayPriorityEnableFlag,
@@ -242,6 +256,8 @@ var (
 		GpoGasPriceUsdt,
 		GpoCongestionThreshold,
 		GpoFactor,
+		P2PMaxQueuedTxsFlag,
+		P2PMaxQueuedTxAnnsFlag,
 	}
 )
 
@@ -333,6 +349,7 @@ func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setMonitor(ctx, &cfg.Monitor)
 	setApolloXLayer(ctx, cfg)
 	setGPOXLayer(ctx, cfg)
+	setP2PXLayer(ctx, cfg)
 }
 
 // RegisterXlayerHybridFilterAPI adds the eth log filtering RPC API to the node.
@@ -362,6 +379,16 @@ func setMonitor(ctx *cli.Context, cfg *ethconfig.MonitorConfig) {
 		cfg.TraceLogPath = ctx.String(TraceLogPath.Name)
 	}
 
+}
+
+func setP2PXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
+	// Override with command line flags if explicitly set
+	if ctx.IsSet(P2PMaxQueuedTxsFlag.Name) {
+		cfg.XLayer.P2P.MaxQueuedTxs = ctx.Uint64(P2PMaxQueuedTxsFlag.Name)
+	}
+	if ctx.IsSet(P2PMaxQueuedTxAnnsFlag.Name) {
+		cfg.XLayer.P2P.MaxQueuedTxAnns = ctx.Uint64(P2PMaxQueuedTxAnnsFlag.Name)
+	}
 }
 
 func setGPOXLayer(ctx *cli.Context, cfg *ethconfig.Config) {

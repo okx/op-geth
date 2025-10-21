@@ -60,11 +60,20 @@ type Peer struct {
 	resDispatch chan *response // Dispatch channel to fulfil pending requests and untrack them
 
 	term chan struct{} // Termination channel to stop the broadcasters
+
+	// For XLayer, P2P configuration
+	maxQueuedTxs    uint64 // Maximum number of transactions to queue up before dropping older broadcasts
+	maxQueuedTxAnns uint64 // Maximum number of transaction announcements to queue up before dropping older announcements
 }
 
 // NewPeer creates a wrapper for a network connection and negotiated  protocol
 // version.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Peer {
+	return NewPeerWithConfig(version, p, rw, txpool, maxQueuedTxs, maxQueuedTxAnns)
+}
+
+// NewPeerWithConfig creates a wrapper for a network connection with custom P2P configuration
+func NewPeerWithConfig(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool, maxQueuedTxs, maxQueuedTxAnns uint64) *Peer {
 	peer := &Peer{
 		id:          p.ID().String(),
 		Peer:        p,
@@ -78,6 +87,9 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 		resDispatch: make(chan *response),
 		txpool:      txpool,
 		term:        make(chan struct{}),
+		// For XLayer, P2P configuration
+		maxQueuedTxs:    maxQueuedTxs,
+		maxQueuedTxAnns: maxQueuedTxAnns,
 	}
 	// Start up all the broadcasters
 	go peer.broadcastTransactions()
