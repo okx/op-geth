@@ -120,7 +120,8 @@ type newPayloadResult struct {
 	requests [][]byte               // Consensus layer requests collected during block construction
 	witness  *stateless.Witness     // Witness is an optional stateless proof
 	// For X Layer, realtime
-	env                    *environment // Environment snapshot for incremental building
+	realtimeEnabled        bool
+	env                    *environment // env snapshot for incremental building
 	finalizeBlockChangeset *realtimeTypes.Changeset
 }
 
@@ -287,7 +288,7 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 		metrics.GlobalStatsStore.Put(block.Hash(), proposeStats)
 	}
 
-	return &newPayloadResult{
+	payload := &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),
 		sidecars: work.sidecars,
@@ -295,10 +296,13 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 		receipts: work.receipts,
 		requests: requests,
 		witness:  work.witness,
-		// For X Layer, realtime
-		env:                    work,
-		finalizeBlockChangeset: work.state.GenerateChangeset(),
 	}
+	// For X Layer, realtime
+	if genParam.realtimeEnabled {
+		payload.env = work
+		payload.finalizeBlockChangeset = work.state.GenerateChangeset()
+	}
+	return payload
 }
 
 // prepareWork constructs the sealing task according to the given parameters,

@@ -120,11 +120,10 @@ type Payload struct {
 	rpcCtx    context.Context // context to limit RPC-coupled payload checks
 	rpcCancel context.CancelFunc
 
-	// For X Layer, incremental building
-	incrementalFlag bool
-	baseEnv         *environment
-	baseParent      common.Hash
-	// For X Layer, realtime
+	// For X Layer, realtime. Incremental building
+	incrementalFlag        bool
+	baseEnv                *environment
+	baseParent             common.Hash
 	finalizeBlockChangeset *realtimeTypes.Changeset
 }
 
@@ -143,7 +142,7 @@ func newPayload(lifeCtx context.Context, empty *types.Block, emptyRequests [][]b
 		rpcCtx:    rpcCtx,
 		rpcCancel: rpcCancel,
 
-		// For X Layer
+		// For X Layer, realtime
 		incrementalFlag: false,
 		baseEnv:         nil,
 	}
@@ -155,7 +154,7 @@ func newPayload(lifeCtx context.Context, empty *types.Block, emptyRequests [][]b
 var errInterruptedUpdate = errors.New("interrupted payload update")
 
 // update updates the full-block with latest built version.
-func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration) {
+func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration, backend RealtimeBackend) {
 	payload.lock.Lock()
 	defer payload.lock.Unlock()
 
@@ -186,14 +185,19 @@ func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration) {
 		payload.sidecars = r.sidecars
 		payload.requests = r.requests
 		payload.fullWitness = r.witness
-		// For X Layer, realtime
-		payload.finalizeBlockChangeset = r.finalizeBlockChangeset
 
-		// For X Layer, cache successful env for incremental updates
-		if r.env != nil {
-			payload.incrementalFlag = true
-			payload.baseEnv = r.env.snapshot()
-			payload.baseParent = r.block.ParentHash()
+		// For X Layer, realtime
+		if r.realtimeEnabled {
+			if r.env == nil {
+				// Something went wrong here, should not happen. Trigger error
+				backend.SendRealtimeErrorTrigger(r.block.NumberU64())
+			} else {
+				// Cache successful env for incremental updates
+				payload.incrementalFlag = true
+				payload.baseEnv = r.env.snapshot()
+				payload.baseParent = r.block.ParentHash()
+			}
+			payload.finalizeBlockChangeset = r.finalizeBlockChangeset
 		}
 
 		feesInEther := new(big.Float).Quo(new(big.Float).SetInt(r.fees), big.NewFloat(params.Ether))
@@ -416,16 +420,21 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 		updatePayload := func() time.Duration {
 			start := time.Now()
 			var r *newPayloadResult
-			// For X Layer, incremental building
-			if !payload.incrementalFlag {
+			if !fullParams.realtimeEnabled {
 				// getSealingBlock is interrupted by shared interrupt
 				r = miner.generateWork(fullParams, witness)
 			} else {
-				r = miner.tryIncrementalUpdate(payload, fullParams, witness)
+				// For X Layer, realtime. Incremental building
+				if !payload.incrementalFlag {
+					// getSealingBlock is interrupted by shared interrupt
+					r = miner.generateWork(fullParams, witness)
+				} else {
+					r = miner.tryIncrementalUpdate(payload, fullParams, witness)
+				}
 			}
 			dur := time.Since(start)
 			// update handles error case
-			payload.update(r, dur)
+			payload.update(r, dur, miner.backend)
 			if r.err == nil {
 				// after first successful pass, we're updating
 				fullParams.isUpdate = true
