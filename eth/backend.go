@@ -176,7 +176,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	// Create XLayer proxy for legacy header sync if configured
 	var xlayerProxy *rawdb.XlayerAncientProxy
-	if config.XLayer.LegacyPp.PPRPCUrl != "" && config.XLayer.LegacyPp.MigrationBlock != nil {
+	if config.XLayer.LegacyPp.PPRPCUrl != "" && config.XLayer.LegacyPp.MigrationBlock != nil && config.XLayer.LegacyPp.PPRPCLegacyHeaderSyncRateLimit > 0 {
 		xlayerProxy = rawdb.NewXlayerAncientProxy(
 			*config.XLayer.LegacyPp.MigrationBlock,
 			config.XLayer.LegacyPp.PPRPCUrl,

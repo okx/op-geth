@@ -74,6 +74,7 @@ var (
 	ContractBAddr     common.Address
 	ContractCAddr     common.Address
 	FactoryAddr       common.Address
+	ERC20Addr         common.Address
 	DeploymentAddress common.Address
 	ContractsDeployed bool
 )
@@ -225,10 +226,87 @@ func TransTokenWithFromImpl(t *testing.T, ctx context.Context, client *ethclient
 	return signedTx.Hash().String()
 }
 
+func erc20TransferTx(
+	t *testing.T,
+	ctx context.Context,
+	privateKey *ecdsa.PrivateKey,
+	client *ethclient.Client,
+	amount *big.Int,
+	gasPrice *big.Int,
+	toAddress common.Address,
+	erc20Address common.Address,
+	nonce uint64,
+) *types.Transaction {
+	erc20ABI, _ := abi.JSON(strings.NewReader(constants.Erc20ABIJson))
+
+	// Prepare transfer data
+	data, err := erc20ABI.Pack("transfer", toAddress, amount)
+	require.NoError(t, err)
+
+	if gasPrice == nil {
+		gasPrice, err = client.SuggestGasPrice(ctx)
+		require.NoError(t, err)
+	}
+
+	transferERC20TokenTx := types.NewTransaction(
+		nonce,
+		erc20Address,
+		big.NewInt(0),
+		60000,
+		gasPrice,
+		data,
+	)
+
+	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
+	signedTx, err := types.SignTx(transferERC20TokenTx, signer, privateKey)
+	require.NoError(t, err)
+
+	err = client.SendTransaction(ctx, signedTx)
+	require.NoError(t, err)
+
+	return signedTx
+}
+
+func transErc20TokenBatch(t *testing.T, ctx context.Context, client *ethclient.Client, erc20Address common.Address, amount *big.Int, toAddress string, batchSize int) ([]string, uint64, common.Hash) {
+	var txHashes []string
+	var transactions []*types.Transaction
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	require.NoError(t, err)
+	privKey, err := crypto.HexToECDSA(TmpSenderPrivateKey)
+	require.NoError(t, err)
+	startNonce, err := client.PendingNonceAt(ctx, DeploymentAddress)
+	require.NoError(t, err)
+	to := common.HexToAddress(toAddress)
+
+	for i := 1; i < batchSize; i++ {
+		tx := erc20TransferTx(t, ctx, privKey, client, amount, gasPrice, to, erc20Address, startNonce+uint64(i))
+		txHashes = append(txHashes, tx.Hash().String())
+		transactions = append(transactions, tx)
+	}
+
+	tx := erc20TransferTx(t, ctx, privKey, client, amount, gasPrice, to, erc20Address, startNonce)
+	txHashes = append(txHashes, tx.Hash().String())
+	transactions = append(transactions, tx)
+
+	// Wait for all transactions to be mined
+	for _, tx := range transactions {
+		err := operations.WaitTxToBeMined(ctx, client, tx, operations.DefaultTimeoutTxToBeMined)
+		require.NoError(t, err)
+	}
+
+	fmt.Printf("All %d transactions have been mined successfully\n", len(transactions))
+
+	receipt, err := client.TransactionReceipt(ctx, common.HexToHash(txHashes[len(txHashes)-1]))
+	require.NoError(t, err)
+	require.NotNil(t, receipt, "Transaction receipt should not be nil")
+	return txHashes, receipt.BlockNumber.Uint64(), receipt.BlockHash
+}
+
 func generateSignedTokenTransferTx(t *testing.T, ctx context.Context, client *ethclient.Client, fromPrivateKey string, amount *uint256.Int, toAddress string, nonce uint64) *types.Transaction {
 	chainID, err := client.ChainID(ctx)
 	require.NoError(t, err)
 	auth, err := operations.GetAuth(fromPrivateKey, chainID.Uint64())
+	require.NoError(t, err)
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	require.NoError(t, err)
 
@@ -417,6 +495,7 @@ func EnsureContractsDeployed(t *testing.T) {
 	ContractAAddr = DeployContract(t, ctx, client, privateKey, "ContractA", constants.ContractAABIJson, constants.ContractABytecodeStr, ContractBAddr)
 	FactoryAddr = DeployContract(t, ctx, client, privateKey, "ContractFactory", constants.ContractFactoryABIJson, constants.ContractFactoryBytecodeStr)
 	ContractCAddr = DeployContract(t, ctx, client, privateKey, "ContractC", constants.ContractCABIJson, constants.ContractCBytecodeStr)
+	ERC20Addr = DeployContract(t, ctx, client, privateKey, "ERC20", constants.Erc20ABIJson, constants.Erc20BytecodeStr)
 	ContractsDeployed = true
 	fmt.Println("ContractAAddr:", ContractAAddr.Hex())
 	fmt.Println("ContractBAddr:", ContractBAddr.Hex())
@@ -584,4 +663,59 @@ func CheckSuccessfulResult(t *testing.T, result ValidationResult, fromAddress st
 // CheckErrorResult validates that a result contains a specific error (typed version)
 func CheckErrorResult(t *testing.T, result ValidationResult, expectedError string, testName string) {
 	require.Contains(t, result.Error.Msg, expectedError, "Error should mention %s for %s", expectedError, testName)
+}
+
+// SignAndSendTransaction is a helper function to sign, send, and wait for a transaction to be mined
+func SignAndSendTransaction(
+	ctx context.Context,
+	t *testing.T,
+	client *ethclient.Client,
+	tx *types.Transaction,
+	privateKey *ecdsa.PrivateKey,
+) (common.Hash, *types.Receipt) {
+	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
+	signedTx, err := types.SignTx(tx, signer, privateKey)
+	require.NoError(t, err)
+
+	err = client.SendTransaction(ctx, signedTx)
+	require.NoError(t, err)
+
+	txHash := signedTx.Hash()
+	t.Logf("tx sent: %s", txHash.Hex())
+
+	err = operations.WaitTxToBeMined(ctx, client, signedTx, operations.DefaultTimeoutTxToBeMined)
+	require.NoError(t, err)
+
+	receipt, err := client.TransactionReceipt(ctx, txHash)
+	require.NoError(t, err)
+	require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, ("transaction should succeed"))
+
+	t.Logf("tx mined in block %d, gas used: %d", receipt.BlockNumber.Uint64(), receipt.GasUsed)
+
+	return txHash, receipt
+}
+
+// GetRefundCounterFromTrace extracts the refund counter for a specific opcode from a debug trace result
+func GetRefundCounterFromTrace(traceResult map[string]interface{}, opcode string) uint64 {
+	refundCounter := uint64(0)
+	structLogs, ok := traceResult["structLogs"].([]interface{})
+	if !ok {
+		return refundCounter
+	}
+
+	for _, entry := range structLogs {
+		log, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		if op, ok := log["op"].(string); ok && op == opcode {
+			if refund, ok := log["refund"].(float64); ok {
+				refundCounter = uint64(refund)
+				break
+			}
+		}
+	}
+
+	return refundCounter
 }
