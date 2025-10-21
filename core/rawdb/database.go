@@ -823,19 +823,3 @@ func SafeDeleteRange(db ethdb.KeyValueStore, start, end []byte, hashScheme bool,
 	}
 	return batch.Write()
 }
-
-// getFirstBlockNumber returns the actual genesis block number from the database.
-// This is needed for custom genesis logic where the genesis block might not be at block 0.
-func getFirstBlockNumber(db ethdb.KeyValueStore) uint64 {
-	// First check if there's a genesis block at block 0
-	if genesisHashData, _ := db.Get(headerHashKey(0)); len(genesisHashData) > 0 {
-		genesisHash := common.BytesToHash(genesisHashData)
-		// Try to read chain config to get LegacyXLayerBlock
-		if config := ReadChainConfig(db, genesisHash); config != nil && config.LegacyXLayerBlock != nil {
-			return config.LegacyXLayerBlock.Uint64()
-		}
-	}
-
-	// If no custom number found, return 0 as default
-	return 0
-}
