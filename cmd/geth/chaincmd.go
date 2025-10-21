@@ -136,6 +136,10 @@ It expects the genesis file as argument.`,
 				Name:  "no-verify",
 				Usage: "do not perform state verification post migration",
 			},
+			&cli.BoolFlag{
+				Name:  "no-balance-check",
+				Usage: "do not perform pre & post native balance check",
+			},
 			&cli.StringFlag{
 				Name:     "chaindata",
 				Usage:    "Path to mdbx database for state migration",
@@ -947,7 +951,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 			log.Info("Verification progress", "verified", verifiedCount, "errors", errorCount)
 		}
 	}
-	
+
 	for {
 		addr, ok := <-largeAcctChan
 		if !ok {
