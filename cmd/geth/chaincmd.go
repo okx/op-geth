@@ -788,7 +788,7 @@ type StorageItem struct {
 	ExpectedValue common.Hash
 }
 
-func verifyStorageConcurrently(ctx *cli.Context, stateDB *state.CachingDB, addr common.Address, storage map[common.Hash]common.Hash, genesisRoot common.Hash) error {
+func verifyStorageConcurrently(stateDB *state.CachingDB, addr common.Address, storage map[common.Hash]common.Hash, genesisRoot common.Hash) error {
 	log.Info("start verify account with large storage", "addr", addr, "storageCount", len(storage))
 	start := time.Now()
 
@@ -970,11 +970,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 				break
 			} else {
 				expectedStorage := genesis.Alloc[addr].Storage
-
-				if err != nil {
-					utils.Fatalf("Failed to create state database: %v", err)
-				}
-				verifyStorageConcurrently(ctx, stateDB, addr, expectedStorage, genesisRoot)
+				_ = verifyStorageConcurrently(stateDB, addr, expectedStorage, genesisRoot)
 			}
 		}
 	}
