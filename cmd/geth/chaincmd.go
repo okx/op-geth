@@ -783,24 +783,12 @@ func pruneHistory(ctx *cli.Context) error {
 	return nil
 }
 
-type StorageItem struct {
-	Key           common.Hash
-	ExpectedValue common.Hash
-}
-
 func verifyStorageConcurrently(stateDB *state.CachingDB, addr common.Address, storage map[common.Hash]common.Hash, genesisRoot common.Hash) error {
 	log.Info("start verify account with large storage", "addr", addr, "storageCount", len(storage))
 	start := time.Now()
 
-	storageItems := make([]StorageItem, 0, len(storage))
-	for key, value := range storage {
-		storageItems = append(storageItems, StorageItem{
-			Key:           key,
-			ExpectedValue: value,
-		})
-	}
 	workerCount := runtime.NumCPU()
-	itemChan := make(chan StorageItem, len(storageItems))
+	keyChan := make(chan common.Hash, len(storage))
 	var wg sync.WaitGroup
 
 	for i := 0; i < workerCount; i++ {
@@ -811,9 +799,9 @@ func verifyStorageConcurrently(stateDB *state.CachingDB, addr common.Address, st
 			if err != nil {
 				utils.Fatalf("failed to init state database: %v", err)
 			}
-			for item := range itemChan {
-				actualValue := stateDB3.GetState(addr, item.Key)
-				if actualValue != item.ExpectedValue {
+			for key := range keyChan {
+				actualValue := stateDB3.GetState(addr, key)
+				if actualValue != storage[key] {
 					log.Error("storage does not match")
 					panic("storage does not match")
 				}
@@ -822,9 +810,9 @@ func verifyStorageConcurrently(stateDB *state.CachingDB, addr common.Address, st
 	}
 
 	go func() {
-		defer close(itemChan)
-		for _, item := range storageItems {
-			itemChan <- item
+		defer close(keyChan)
+		for key, _ := range storage {
+			keyChan <- key
 		}
 	}()
 
