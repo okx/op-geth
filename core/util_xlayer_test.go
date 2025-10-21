@@ -67,7 +67,7 @@ func TestGenerateFirstXlayerBlock(t *testing.T) {
 			tt.setupDB(testDB)
 
 			// Execute test
-			block, err := GenerateFirstXlayerBlock(testDB, chainConfig)
+			block, err := GenerateFirstXLayerBlock(testDB, chainConfig)
 
 			// Verify results
 			if tt.expectedError == "" {
@@ -168,7 +168,7 @@ func TestCommitXlayerFirstBlock(t *testing.T) {
 			tt.setupDB(testDB)
 
 			// Execute test
-			err := CommitXlayerFirstBlock(testDB, chainConfig)
+			err := CommitXLayerFirstBlock(testDB, chainConfig)
 
 			// Verify results
 			if tt.expectedError == "" {
@@ -225,7 +225,7 @@ func TestCommitXlayerFirstBlock_WithGenesisBlock(t *testing.T) {
 	rawdb.WriteHeaderNumber(db, genesisBlock.Hash(), 0)
 
 	// Execute test
-	err := CommitXlayerFirstBlock(db, chainConfig)
+	err := CommitXLayerFirstBlock(db, chainConfig)
 	assert.NoError(t, err)
 
 	// Verify the xlayer block
