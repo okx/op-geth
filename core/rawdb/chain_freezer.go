@@ -232,8 +232,7 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore) {
 		batch := db.NewBatch()
 		for i := 0; i < len(ancients); i++ {
 			// Always keep the genesis block in active database
-			firstBlockNumber := getFirstBlockNumber(db)
-			if first+uint64(i) != firstBlockNumber {
+			if first+uint64(i) != 0 {
 				DeleteBlockWithoutNumber(batch, ancients[i], first+uint64(i))
 				DeleteCanonicalHash(batch, first+uint64(i))
 			}
@@ -246,10 +245,9 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore) {
 		// Wipe out side chains also and track dangling side chains
 		var dangling []common.Hash
 		frozen, _ = f.Ancients() // Needs reload after during freezeRange
-		firstBlockNumber := getFirstBlockNumber(db)
 		for number := first; number < frozen; number++ {
 			// Always keep the genesis block in active database
-			if number != firstBlockNumber {
+			if number != 0 {
 				dangling = ReadAllHashes(db, number)
 				for _, hash := range dangling {
 					log.Trace("Deleting side chain", "number", number, "hash", hash)
@@ -319,14 +317,27 @@ func (f *chainFreezer) freezeRange(nfdb *nofreezedb, number, limit uint64) (hash
 	hashes = make([]common.Hash, 0, limit-number+1)
 
 	_, err = f.ModifyAncients(func(op ethdb.AncientWriteOp) error {
-		// XLayer: Use proxy to handle legacy block freezing if configured
-		if f.xlayerProxy != nil {
-			var proxyErr error
-			hashes, proxyErr = f.xlayerProxy.FreezeRangeWithProxy(op, nfdb, number, limit)
-			return proxyErr
-		}
+
+		config := ReadChainConfig(nfdb, ReadCanonicalHash(nfdb, 0))
 
 		for ; number <= limit; number++ {
+			// save empty data for legacy blocks
+			if number < config.LegacyXLayerBlock.Uint64() && number != 0 {
+				if err := op.AppendRaw(ChainFreezerHashTable, number, []byte{}); err != nil {
+					return fmt.Errorf("can't write hash to Freezer: %v", err)
+				}
+				if err := op.AppendRaw(ChainFreezerHeaderTable, number, []byte{}); err != nil {
+					return fmt.Errorf("can't write header to Freezer: %v", err)
+				}
+				if err := op.AppendRaw(ChainFreezerBodiesTable, number, []byte{}); err != nil {
+					return fmt.Errorf("can't write body to Freezer: %v", err)
+				}
+				if err := op.AppendRaw(ChainFreezerReceiptTable, number, []byte{}); err != nil {
+					return fmt.Errorf("can't write receipts to Freezer: %v", err)
+				}
+				hashes = append(hashes, common.Hash{})
+				continue
+			}
 			// Retrieve all the components of the canonical block.
 			hash := ReadCanonicalHash(nfdb, number)
 			if hash == (common.Hash{}) {
