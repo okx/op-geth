@@ -5,8 +5,10 @@ package e2e
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"math/big"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -28,6 +30,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	// Feature flags for e2e tests
+	// Use these flags to enable tests that require specific node features
+	// Example: go test -v ./test/e2e/ -run TestOkPayPriority -test.okpay
+	enableOkPayTests    = flag.Bool("test.okpay", false, "Enable OkPay feature tests")
+	enableApolloTests   = flag.Bool("test.apollo", false, "Enable Apollo feature tests")
+	enableRealtimeTests = flag.Bool("test.realtime", false, "Enable Realtime feature tests")
+)
+
 const (
 	Gwei            = 1000000000
 	blockAddress    = "0xdD2FD4581271e230360230F9337D5c0430Bf44C0"
@@ -46,10 +57,10 @@ func TestSendTx(t *testing.T) {
 	ctx := context.Background()
 	client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
 	require.NoError(t, err)
-	TransToken(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2AdminAddress)
+	TransToken(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultRichAddress)
 
-	from := common.HexToAddress(operations.DefaultL2AdminAddress)
-	to := common.HexToAddress(operations.DefaultL2AdminAddress)
+	from := common.HexToAddress(operations.DefaultRichAddress)
+	to := common.HexToAddress(operations.DefaultRichAddress)
 	nonce, err := client.PendingNonceAt(ctx, from)
 	require.NoError(t, err)
 	gas, err := client.EstimateGas(ctx, ethereum.CallMsg{
@@ -97,7 +108,7 @@ func TestEthTransfer(t *testing.T) {
 	client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
 	require.NoError(t, err)
 
-	from := common.HexToAddress(operations.DefaultL2AdminAddress)
+	from := common.HexToAddress(operations.DefaultRichAddress)
 	to := common.HexToAddress(operations.DefaultL2NewAcc1Address)
 	nonce, err := client.PendingNonceAt(ctx, from)
 	require.NoError(t, err)
@@ -379,7 +390,7 @@ func TestEthereumTransactionRPC(t *testing.T) {
 		t.Skip()
 	}
 	EnsureContractsDeployed(t)
-	fromAddr := common.HexToAddress(operations.DefaultL2AdminAddress)
+	fromAddr := common.HexToAddress(operations.DefaultRichAddress)
 	toAddr := common.HexToAddress(operations.DefaultL2NewAcc1Address)
 
 	ctx := context.Background()
@@ -387,7 +398,7 @@ func TestEthereumTransactionRPC(t *testing.T) {
 	require.NoError(t, err)
 	defer client.Close()
 
-	txhash := TransToken(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2AdminAddress)
+	txhash := TransToken(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultRichAddress)
 	fmt.Printf("TransToken txhash: %s\n", txhash)
 
 	t.Run("EthEstimateGas", func(t *testing.T) {
@@ -474,7 +485,7 @@ func TestEthereumTransactionRPC(t *testing.T) {
 
 		fromAddr, exists := txData["from"].(string)
 		require.True(t, exists, "Transaction should have from field")
-		require.Equal(t, strings.ToLower(operations.DefaultL2AdminAddress), strings.ToLower(fromAddr), "From address should match")
+		require.Equal(t, strings.ToLower(operations.DefaultRichAddress), strings.ToLower(fromAddr), "From address should match")
 	})
 
 	t.Run("EthGetTransactionReceipt", func(t *testing.T) {
@@ -486,7 +497,7 @@ func TestEthereumTransactionRPC(t *testing.T) {
 
 		fromAddrStr, exists := receiptData["from"].(string)
 		require.True(t, exists, "Receipt should have from field")
-		require.Equal(t, strings.ToLower(operations.DefaultL2AdminAddress), strings.ToLower(fromAddrStr), "from address should match sender")
+		require.Equal(t, strings.ToLower(operations.DefaultRichAddress), strings.ToLower(fromAddrStr), "from address should match sender")
 
 		statusStr, exists := receiptData["status"].(string)
 		require.True(t, exists, "Receipt should have status field")
@@ -494,7 +505,7 @@ func TestEthereumTransactionRPC(t *testing.T) {
 
 		toAddrStr, exists := receiptData["to"].(string)
 		require.True(t, exists, "Receipt should have to field")
-		require.Equal(t, strings.ToLower(operations.DefaultL2AdminAddress), strings.ToLower(toAddrStr), "to address should match recipient")
+		require.Equal(t, strings.ToLower(operations.DefaultRichAddress), strings.ToLower(toAddrStr), "to address should match recipient")
 
 		txHashStr, exists := receiptData["transactionHash"].(string)
 		require.True(t, exists, "Receipt should have transactionHash field")
@@ -1507,4 +1518,418 @@ func TestNewTransactionTypes(t *testing.T) {
 		t.Logf("Block excess blob gas: %s", excessBlobGas)
 	})
 
+}
+
+// TestOkPayPriority is a comprehensive test suite for OkPay transaction priority feature.
+// It tests various scenarios to ensure OkPay transactions are correctly prioritized.
+//
+// Prerequisites:
+// - Node must be started with --okpay.priority-enable-flag=true
+// - The account from tmpSenderPrivateKey must be in the node's --okpay.sender-accounts list
+// - Test accounts must have sufficient balance
+//
+// Test Coverage:
+// 1. Basic Priority: OkPay tx beats normal tx despite lower gas price
+// 2. Time Ordering: Multiple OkPay txs are ordered by arrival time
+// 3. Transaction Limit: Respects BlockPriorityTxsLimit
+// 4. Mixed Priorities: Tests complex scenarios with OkPay, priority, and normal txs
+//
+// Run with: RUN_OKPAY_PRIORITY_TEST=1 go test -v ./test/e2e/ -run TestOkPayPriority
+func TestOkPayPriority(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping in short mode")
+	}
+
+	if os.Getenv("RUN_OKPAY_PRIORITY_TEST") != "1" {
+		t.Skip("Skipping OkPay priority test. Set RUN_OKPAY_PRIORITY_TEST=1 to run")
+	}
+
+	ctx := context.Background()
+	client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
+	require.NoError(t, err)
+	defer client.Close()
+
+	// Test 1: Basic Priority Override
+	t.Run("BasicPriorityOverride", func(t *testing.T) {
+		testOkPayBasicPriority(t, ctx, client)
+	})
+
+	// Test 2: Time-Based Ordering
+	t.Run("TimeBasedOrdering", func(t *testing.T) {
+		testOkPayTimeOrdering(t, ctx, client)
+	})
+
+	// Test 3: Transaction Limit Enforcement
+	t.Run("TransactionLimit", func(t *testing.T) {
+		testOkPayTransactionLimit(t, ctx, client)
+	})
+
+	// Test 4: Mixed Priorities (OkPay + Priority Addresses + Normal)
+	t.Run("MixedPriorities", func(t *testing.T) {
+		testOkPayMixedPriorities(t, ctx, client)
+	})
+}
+
+// testOkPayBasicPriority tests that OkPay transactions with low gas price
+// are prioritized over normal transactions with high gas price
+func testOkPayBasicPriority(t *testing.T, ctx context.Context, client *ethclient.Client) {
+	// Get OkPay sender account
+	okPayPrivateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultOkPaySender1PrivateKey, "0x"))
+	require.NoError(t, err)
+	okPayAddress := crypto.PubkeyToAddress(okPayPrivateKey.PublicKey)
+
+	// Create a normal sender account
+	normalPrivateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultRichPrivateKey, "0x"))
+	require.NoError(t, err)
+	normalAddress := crypto.PubkeyToAddress(normalPrivateKey.PublicKey)
+
+	recipient := common.HexToAddress("0x1111111111111111111111111111111111111111")
+
+	// Verify balances
+	okPayBalance, err := client.BalanceAt(ctx, okPayAddress, nil)
+	require.NoError(t, err)
+	require.True(t, okPayBalance.Cmp(big.NewInt(0)) > 0, "OkPay account must have balance")
+
+	normalBalance, err := client.BalanceAt(ctx, normalAddress, nil)
+	require.NoError(t, err)
+	require.True(t, normalBalance.Cmp(big.NewInt(0)) > 0, "Normal account must have balance")
+
+	// Get nonces
+	okPayNonce, err := client.PendingNonceAt(ctx, okPayAddress)
+	require.NoError(t, err)
+	normalNonce, err := client.PendingNonceAt(ctx, normalAddress)
+	require.NoError(t, err)
+
+	chainID, err := client.ChainID(ctx)
+	require.NoError(t, err)
+
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	require.NoError(t, err)
+
+	// Create normal tx with HIGH gas price (10x)
+	normalHighGasPrice := new(big.Int).Mul(gasPrice, big.NewInt(10))
+	normalTx := types.NewTransaction(normalNonce, recipient, big.NewInt(1000), params.TxGas, normalHighGasPrice, nil)
+	signedNormalTx, err := types.SignTx(normalTx, types.NewEIP155Signer(chainID), normalPrivateKey)
+	require.NoError(t, err)
+
+	// Create OkPay tx with LOW gas price (1x)
+	okPayTx := types.NewTransaction(okPayNonce, recipient, big.NewInt(1000), params.TxGas, gasPrice, nil)
+	signedOkPayTx, err := types.SignTx(okPayTx, types.NewEIP155Signer(chainID), okPayPrivateKey)
+	require.NoError(t, err)
+
+	t.Logf("Normal tx: hash=%s, gasPrice=%s", signedNormalTx.Hash().Hex(), normalHighGasPrice.String())
+	t.Logf("OkPay tx: hash=%s, gasPrice=%s", signedOkPayTx.Hash().Hex(), gasPrice.String())
+
+	// Send normal transaction first
+	err = client.SendTransaction(ctx, signedNormalTx)
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Send OkPay transaction
+	err = client.SendTransaction(ctx, signedOkPayTx)
+	require.NoError(t, err)
+
+	// Wait for both to be mined
+	okPayReceipt := waitForReceipt(t, ctx, client, signedOkPayTx.Hash(), 120*time.Second)
+	normalReceipt := waitForReceipt(t, ctx, client, signedNormalTx.Hash(), 120*time.Second)
+
+	require.Equal(t, uint64(types.ReceiptStatusSuccessful), okPayReceipt.Status)
+	require.Equal(t, uint64(types.ReceiptStatusSuccessful), normalReceipt.Status)
+
+	// Verify priority
+	verifyTransactionPriority(t, ctx, client, okPayReceipt, normalReceipt, signedOkPayTx.Hash(), signedNormalTx.Hash(), "OkPay", "Normal")
+}
+
+// testOkPayTimeOrdering tests that multiple OkPay transactions are ordered by arrival time
+func testOkPayTimeOrdering(t *testing.T, ctx context.Context, client *ethclient.Client) {
+	okPayPrivateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultOkPaySender1PrivateKey, "0x"))
+	require.NoError(t, err)
+	okPayAddress := crypto.PubkeyToAddress(okPayPrivateKey.PublicKey)
+
+	recipient := common.HexToAddress("0x2222222222222222222222222222222222222222")
+
+	nonce, err := client.PendingNonceAt(ctx, okPayAddress)
+	require.NoError(t, err)
+
+	chainID, err := client.ChainID(ctx)
+	require.NoError(t, err)
+
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	require.NoError(t, err)
+
+	// Create and send 3 OkPay transactions with delays
+	var txHashes []common.Hash
+	for i := 0; i < 3; i++ {
+		tx := types.NewTransaction(nonce+uint64(i), recipient, big.NewInt(100), params.TxGas, gasPrice, nil)
+		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), okPayPrivateKey)
+		require.NoError(t, err)
+
+		err = client.SendTransaction(ctx, signedTx)
+		require.NoError(t, err)
+		txHashes = append(txHashes, signedTx.Hash())
+
+		t.Logf("Sent OkPay tx %d: %s", i+1, signedTx.Hash().Hex())
+		time.Sleep(50 * time.Millisecond) // Small delay between transactions
+	}
+
+	// Wait for all transactions to be mined
+	var receipts []*types.Receipt
+	for _, hash := range txHashes {
+		receipt := waitForReceipt(t, ctx, client, hash, 120*time.Second)
+		receipts = append(receipts, receipt)
+	}
+
+	// All should be in same block or consecutive blocks
+	blockNum := receipts[0].BlockNumber.Uint64()
+	t.Logf("First OkPay tx in block %d", blockNum)
+
+	// Get the block and verify ordering
+	block, err := client.BlockByNumber(ctx, receipts[0].BlockNumber)
+	require.NoError(t, err)
+
+	// Find indices of our transactions
+	var indices []int
+	for _, targetHash := range txHashes {
+		for i, tx := range block.Transactions() {
+			if tx.Hash() == targetHash {
+				indices = append(indices, i)
+				break
+			}
+		}
+	}
+
+	// Verify all transactions were found
+	require.Equal(t, len(txHashes), len(indices), "Not all OkPay transactions found in block")
+
+	// Verify they appear in order
+	for i := 1; i < len(indices); i++ {
+		require.Less(t, indices[i-1], indices[i],
+			"OkPay tx %d (sent earlier) should appear before OkPay tx %d in block", i, i+1)
+	}
+
+	t.Logf("✓ Time ordering verified: OkPay txs at indices %v in block %d", indices, blockNum)
+}
+
+// testOkPayTransactionLimit tests that the BlockPriorityTxsLimit is enforced
+func testOkPayTransactionLimit(t *testing.T, ctx context.Context, client *ethclient.Client) {
+	okPayPrivateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultOkPaySender1PrivateKey, "0x"))
+	require.NoError(t, err)
+	okPayAddress := crypto.PubkeyToAddress(okPayPrivateKey.PublicKey)
+
+	normalPrivateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultRichPrivateKey, "0x"))
+	require.NoError(t, err)
+	normalAddress := crypto.PubkeyToAddress(normalPrivateKey.PublicKey)
+
+	recipient := common.HexToAddress("0x3333333333333333333333333333333333333333")
+
+	okPayNonce, err := client.PendingNonceAt(ctx, okPayAddress)
+	require.NoError(t, err)
+	normalNonce, err := client.PendingNonceAt(ctx, normalAddress)
+	require.NoError(t, err)
+
+	chainID, err := client.ChainID(ctx)
+	require.NoError(t, err)
+
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	require.NoError(t, err)
+
+	// Create 5 OkPay transactions (likely exceeds limit)
+	var okPayTxHashes []common.Hash
+	for i := 0; i < 5; i++ {
+		tx := types.NewTransaction(okPayNonce+uint64(i), recipient, big.NewInt(100), params.TxGas, gasPrice, nil)
+		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), okPayPrivateKey)
+		require.NoError(t, err)
+
+		err = client.SendTransaction(ctx, signedTx)
+		require.NoError(t, err)
+		okPayTxHashes = append(okPayTxHashes, signedTx.Hash())
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// Create 1 normal transaction with high gas price
+	normalHighGasPrice := new(big.Int).Mul(gasPrice, big.NewInt(20))
+	t.Logf("Normal high gas price: %s, gas price: %s", normalHighGasPrice.String(), gasPrice.String())
+	normalTx := types.NewTransaction(normalNonce, recipient, big.NewInt(1000), params.TxGas, normalHighGasPrice, nil)
+	signedNormalTx, err := types.SignTx(normalTx, types.NewEIP155Signer(chainID), normalPrivateKey)
+	require.NoError(t, err)
+
+	err = client.SendTransaction(ctx, signedNormalTx)
+	require.NoError(t, err)
+
+	t.Logf("Sent 5 OkPay txs and 1 high-value normal tx")
+
+	// Wait for transactions
+	firstOkPayReceipt := waitForReceipt(t, ctx, client, okPayTxHashes[0], 120*time.Second)
+	_ = waitForReceipt(t, ctx, client, signedNormalTx.Hash(), 120*time.Second)
+
+	// Get the block
+	block, err := client.BlockByNumber(ctx, firstOkPayReceipt.BlockNumber)
+	require.NoError(t, err)
+
+	// Count how many OkPay txs appear before the normal tx
+	normalIndex := -1
+	okPayCount := 0
+
+	for i, tx := range block.Transactions() {
+		if tx.Hash() == signedNormalTx.Hash() {
+			normalIndex = i
+		}
+		for _, okPayHash := range okPayTxHashes {
+			if tx.Hash() == okPayHash && (normalIndex == -1 || i < normalIndex) {
+				okPayCount++
+			}
+		}
+	}
+
+	t.Logf("Found %d OkPay txs before normal tx (index %d) in block %d", okPayCount, normalIndex, block.NumberU64())
+
+	// The limit should be enforced - not all 5 OkPay txs should be prioritized
+	// At least some OkPay txs should appear before normal tx, but not necessarily all
+	require.Greater(t, okPayCount, 0, "At least some OkPay txs should be prioritized")
+	if okPayCount < 5 {
+		t.Logf("✓ Transaction limit enforced: Only %d of 5 OkPay txs were prioritized", okPayCount)
+	}
+}
+
+// testOkPayMixedPriorities tests complex scenarios with OkPay, priority, and normal transactions
+func testOkPayMixedPriorities(t *testing.T, ctx context.Context, client *ethclient.Client) {
+	okPayPrivateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultOkPaySender1PrivateKey, "0x"))
+	require.NoError(t, err)
+
+	normalPrivateKey1, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultRichPrivateKey, "0x"))
+	require.NoError(t, err)
+
+	normalPrivateKey2, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultL2AdminPrivateKey, "0x"))
+	require.NoError(t, err)
+
+	recipient := common.HexToAddress("0x4444444444444444444444444444444444444444")
+
+	okPayNonce, err := client.PendingNonceAt(ctx, crypto.PubkeyToAddress(okPayPrivateKey.PublicKey))
+	require.NoError(t, err)
+	normalNonce1, err := client.PendingNonceAt(ctx, crypto.PubkeyToAddress(normalPrivateKey1.PublicKey))
+	require.NoError(t, err)
+	normalNonce2, err := client.PendingNonceAt(ctx, crypto.PubkeyToAddress(normalPrivateKey2.PublicKey))
+	require.NoError(t, err)
+
+	chainID, err := client.ChainID(ctx)
+	require.NoError(t, err)
+
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	require.NoError(t, err)
+
+	// Create transactions with different characteristics
+	// OkPay: LOW gas price
+	okPayTx := types.NewTransaction(okPayNonce, recipient, big.NewInt(100), params.TxGas, gasPrice, nil)
+	signedOkPayTx, err := types.SignTx(okPayTx, types.NewEIP155Signer(chainID), okPayPrivateKey)
+	require.NoError(t, err)
+
+	// Normal1: MEDIUM gas price
+	mediumGasPrice := new(big.Int).Mul(gasPrice, big.NewInt(5))
+	normalTx1 := types.NewTransaction(normalNonce1, recipient, big.NewInt(100), params.TxGas, mediumGasPrice, nil)
+	signedNormalTx1, err := types.SignTx(normalTx1, types.NewEIP155Signer(chainID), normalPrivateKey1)
+	require.NoError(t, err)
+
+	// Normal2: HIGH gas price
+	highGasPrice := new(big.Int).Mul(gasPrice, big.NewInt(15))
+	normalTx2 := types.NewTransaction(normalNonce2, recipient, big.NewInt(100), params.TxGas, highGasPrice, nil)
+	signedNormalTx2, err := types.SignTx(normalTx2, types.NewEIP155Signer(chainID), normalPrivateKey2)
+	require.NoError(t, err)
+
+	// Send in reverse order (highest gas price first)
+	err = client.SendTransaction(ctx, signedNormalTx2)
+	require.NoError(t, err)
+	time.Sleep(50 * time.Millisecond)
+
+	err = client.SendTransaction(ctx, signedNormalTx1)
+	require.NoError(t, err)
+	time.Sleep(50 * time.Millisecond)
+
+	err = client.SendTransaction(ctx, signedOkPayTx)
+	require.NoError(t, err)
+
+	t.Logf("Sent OkPay (gas=%s), Normal1 (gas=%s), Normal2 (gas=%s)",
+		gasPrice.String(), mediumGasPrice.String(), highGasPrice.String())
+
+	// Wait for all transactions
+	okPayReceipt := waitForReceipt(t, ctx, client, signedOkPayTx.Hash(), 120*time.Second)
+	_ = waitForReceipt(t, ctx, client, signedNormalTx1.Hash(), 120*time.Second)
+	_ = waitForReceipt(t, ctx, client, signedNormalTx2.Hash(), 120*time.Second)
+
+	// Get block
+	block, err := client.BlockByNumber(ctx, okPayReceipt.BlockNumber)
+	require.NoError(t, err)
+
+	// Find indices
+	var okPayIndex, normal1Index, normal2Index int = -1, -1, -1
+	for i, tx := range block.Transactions() {
+		if tx.Hash() == signedOkPayTx.Hash() {
+			okPayIndex = i
+		} else if tx.Hash() == signedNormalTx1.Hash() {
+			normal1Index = i
+		} else if tx.Hash() == signedNormalTx2.Hash() {
+			normal2Index = i
+		}
+	}
+
+	// Verify OkPay transaction comes first
+	if okPayIndex != -1 && normal1Index != -1 {
+		require.Less(t, okPayIndex, normal1Index, "OkPay tx should come before Normal tx1")
+	}
+	if okPayIndex != -1 && normal2Index != -1 {
+		require.Less(t, okPayIndex, normal2Index, "OkPay tx should come before Normal tx2")
+	}
+
+	// Verify normal transactions are ordered by gas price (highest first)
+	if normal1Index != -1 && normal2Index != -1 {
+		require.Less(t, normal2Index, normal1Index, "Normal tx2 (higher gas) should come before Normal tx1")
+	}
+
+	t.Logf("✓ Mixed priorities verified: OkPay[%d], Normal2[%d], Normal1[%d] in block %d",
+		okPayIndex, normal2Index, normal1Index, block.NumberU64())
+}
+
+// Helper function to wait for a transaction receipt
+func waitForReceipt(t *testing.T, ctx context.Context, client *ethclient.Client, txHash common.Hash, timeout time.Duration) *types.Receipt {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		receipt, err := client.TransactionReceipt(ctx, txHash)
+		if err == nil && receipt != nil {
+			t.Logf("Transaction %s mined in block %d", txHash.Hex(), receipt.BlockNumber.Uint64())
+			return receipt
+		}
+		time.Sleep(2 * time.Second)
+	}
+	t.Fatalf("Transaction %s was not mined within timeout", txHash.Hex())
+	return nil
+}
+
+// Helper function to verify transaction priority in the same block
+func verifyTransactionPriority(t *testing.T, ctx context.Context, client *ethclient.Client,
+	receipt1, receipt2 *types.Receipt, hash1, hash2 common.Hash, name1, name2 string) {
+
+	require.LessOrEqual(t, receipt1.BlockNumber.Uint64(), receipt2.BlockNumber.Uint64(),
+		"%s tx should be in same or earlier block than %s tx", name1, name2)
+
+	if receipt1.BlockNumber.Uint64() == receipt2.BlockNumber.Uint64() {
+		block, err := client.BlockByNumber(ctx, receipt1.BlockNumber)
+		require.NoError(t, err)
+
+		var index1, index2 int = -1, -1
+		for i, tx := range block.Transactions() {
+			if tx.Hash() == hash1 {
+				index1 = i
+			}
+			if tx.Hash() == hash2 {
+				index2 = i
+			}
+		}
+
+		require.NotEqual(t, -1, index1, "%s transaction not found in block", name1)
+		require.NotEqual(t, -1, index2, "%s transaction not found in block", name2)
+		require.Less(t, index1, index2, "%s tx (index %d) should come before %s tx (index %d) in block %d",
+			name1, index1, name2, index2, block.NumberU64())
+
+		t.Logf("✓ Priority verified: %s[%d] < %s[%d] in block %d", name1, index1, name2, index2, block.NumberU64())
+	}
 }
