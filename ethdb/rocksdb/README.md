@@ -11,7 +11,7 @@ In summary, on Ubuntu:
 git clone -b v10.4.2 https://github.com/facebook/rocksdb.git
 cd rocksdb
 sudo apt update
-sudo apt install -y libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev libgflags-dev
+sudo apt install -y libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev libgflags-dev liburing-dev
 make clean
 make -j static_lib
 sudo make install
