@@ -1128,10 +1128,13 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 			totalOpBalance.Add(totalOpBalance, account.Balance)
 		}
 	}
-	if totalErigonBalance.Cmp(totalOpBalance) != 0 {
-		return nil, common.Hash{}, nil, nil, fmt.Errorf("migration pre & post balance does not match: pre balance: %d, post balance: %d, delta: %d", totalErigonBalance, totalOpBalance, new(big.Int).Sub(totalOpBalance, totalErigonBalance))
-	} else {
-		log.Info("migration pre & post balance does not match, totalBalance: %d", totalOpBalance)
+
+	if !ctx.Bool("no-balance-check") {
+		if totalErigonBalance.Cmp(totalOpBalance) != 0 {
+			return nil, common.Hash{}, nil, nil, fmt.Errorf("migration pre & post balance does not match: pre balance: %d, post balance: %d, delta: %d", totalErigonBalance, totalOpBalance, new(big.Int).Sub(totalOpBalance, totalErigonBalance))
+		} else {
+			log.Info("migration pre & post balance match, totalBalance: %d", totalOpBalance)
+		}
 	}
 
 	// Wait for both goroutines to complete
