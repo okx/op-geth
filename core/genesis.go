@@ -896,13 +896,11 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 
 	// Marshal the genesis state specification and persist.
 	batch := db.NewBatch()
-	//if !ctx.Bool("no-save-genesis") {
 	//	blob, err := json.Marshal(g.Alloc)
 	//	if err != nil {
 	//		return nil, err
 	//	}
 	//	rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
-	//}
 	rawdb.WriteBlock(batch, block)
 	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), nil)
 	rawdb.WriteCanonicalHash(batch, block.Hash(), block.NumberU64())

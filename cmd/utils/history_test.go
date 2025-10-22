@@ -19,7 +19,6 @@ package utils
 import (
 	"bytes"
 	"crypto/sha256"
-	"github.com/urfave/cli/v2"
 	"io"
 	"math/big"
 	"os"
@@ -166,12 +165,7 @@ func TestHistoryImportAndExport(t *testing.T) {
 		db2.Close()
 	})
 
-	app := &cli.App{
-		Name:  "test-app",
-		Flags: []cli.Flag{},
-	}
-	ctx := cli.NewContext(app, nil, nil)
-	genesis.MustCommit(ctx, db2, triedb.NewDatabase(db2, triedb.HashDefaults))
+	genesis.MustCommit(db2, triedb.NewDatabase(db2, triedb.HashDefaults))
 	imported, err := core.NewBlockChain(db2, genesis, ethash.NewFaker(), nil)
 	if err != nil {
 		t.Fatalf("unable to initialize chain: %v", err)
