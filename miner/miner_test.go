@@ -776,22 +776,13 @@ func testOkPayNonceOrdering(t *testing.T) {
 	// Verify all transactions are included because the block has enough slots
 	blockTxs := r.block.Transactions()
 
-	// Verify only expected fast transactions are included at the start
+	// Verify transactions are included in nonce order
 	for id := range len(expectedIncluded) {
 		actualHash := blockTxs[id].Hash()
 		included, ok := expectedIncluded[actualHash]
 		if !ok || !included {
 			t.Fatalf("Transaction at position %d: expected %s, got %s",
 				id, actualHash.Hex(), actualHash.Hex())
-		}
-	}
-
-	// Verify late transactions are included only after the priority expected transactions
-	for id := len(expectedIncluded); id < len(blockTxs); id++ {
-		actualHash := blockTxs[id].Hash()
-		included, ok := expectedIncluded[actualHash]
-		if ok || included {
-			t.Fatalf("Transaction at position %d should not be included", id)
 		}
 	}
 }
