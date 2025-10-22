@@ -218,7 +218,6 @@ type OpenOptions struct {
 	Era              string // era files directory
 	MetricsNamespace string // prefix added to freezer metric names
 	ReadOnly         bool
-	XLayerProxy      *XlayerAncientProxy // XLayer proxy for legacy header sync
 }
 
 // Open creates a high-level database wrapper for the given key-value store.
@@ -230,7 +229,7 @@ func Open(db ethdb.KeyValueStore, opts OpenOptions) (ethdb.Database, error) {
 	if chainFreezerDir != "" {
 		chainFreezerDir = resolveChainFreezerDir(chainFreezerDir)
 	}
-	frdb, err := newChainFreezer(chainFreezerDir, opts.Era, opts.MetricsNamespace, opts.ReadOnly, opts.XLayerProxy)
+	frdb, err := newChainFreezer(chainFreezerDir, opts.Era, opts.MetricsNamespace, opts.ReadOnly)
 	if err != nil {
 		printChainMetadata(db)
 		return nil, err

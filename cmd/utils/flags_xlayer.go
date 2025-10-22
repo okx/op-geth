@@ -85,13 +85,6 @@ var (
 		Category: flags.XLayerCategory,
 		EnvVars:  []string{"OP_PP_RPC_TIMEOUT"},
 	}
-	PPRPCLegacyHeaderSyncRateLimitFlag = &cli.IntFlag{
-		Name:     "pp-rpc-legacy-header-sync-rate-limit",
-		Usage:    "Rate limit for legacy header sync from PP RPC in queries per second (QPS)",
-		Value:    80,
-		Category: flags.XLayerCategory,
-		EnvVars:  []string{"OP_PP_RPC_LEGACY_HEADER_SYNC_RATE_LIMIT"},
-	}
 	TraceLogPath = &cli.StringFlag{
 		Name:  "monitor.trace-log-path",
 		Usage: "Path of trace.log for transaction monitoring",
@@ -221,7 +214,6 @@ var (
 		MigrationBlockFlag,
 		PPRPCUrlFlag,
 		PPRPCTimeoutFlag,
-		PPRPCLegacyHeaderSyncRateLimitFlag,
 		TraceLogPath,
 		EnableTraceLog,
 		ApolloEnabledFlag,
@@ -295,11 +287,6 @@ func setMigrationXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 		cfg.XLayer.LegacyPp.PPRPCTimeout = ctx.Duration(PPRPCTimeoutFlag.Name)
 	} else if cfg.XLayer.LegacyPp.PPRPCTimeout == 0 && cfg.XLayer.LegacyPp.PPRPCUrl != "" {
 		cfg.XLayer.LegacyPp.PPRPCTimeout = 10 * time.Second
-	}
-	if ctx.IsSet(PPRPCLegacyHeaderSyncRateLimitFlag.Name) {
-		cfg.XLayer.LegacyPp.PPRPCLegacyHeaderSyncRateLimit = ctx.Int(PPRPCLegacyHeaderSyncRateLimitFlag.Name)
-	} else if cfg.XLayer.LegacyPp.PPRPCLegacyHeaderSyncRateLimit == 0 && cfg.XLayer.LegacyPp.PPRPCUrl != "" {
-		cfg.XLayer.LegacyPp.PPRPCLegacyHeaderSyncRateLimit = 80 // Default 80 QPS for legacy header sync
 	}
 }
 

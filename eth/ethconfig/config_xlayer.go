@@ -14,10 +14,9 @@ type XLayerConfig struct {
 }
 
 type MigrationConfig struct {
-	MigrationBlock                 *uint64       `toml:",omitempty"` // Block height threshold for migration routing
-	PPRPCUrl                       string        `toml:",omitempty"` // XLayer-Erigon RPC endpoint URL
-	PPRPCTimeout                   time.Duration `toml:",omitempty"` // Timeout for PP RPC calls (default: 10s)
-	PPRPCLegacyHeaderSyncRateLimit int           `toml:",omitempty"` // Rate limit for legacy header sync in QPS (default: 80)
+	MigrationBlock *uint64       `toml:",omitempty"` // Block height threshold for migration routing
+	PPRPCUrl       string        `toml:",omitempty"` // XLayer-Erigon RPC endpoint URL
+	PPRPCTimeout   time.Duration `toml:",omitempty"` // Timeout for PP RPC calls (default: 10s)
 }
 
 type OkPayConfig struct {
