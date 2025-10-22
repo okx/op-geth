@@ -341,11 +341,13 @@ func generateMigrateAlloc(ctx *cli.Context, dbAlloc types.GenesisAlloc, ignoreAd
 				// override proposer & executor
 				proposer := ctx.String("override-proposer")
 				if proposer != "" {
+					log.Warn("override polygonZkEVMTimelock.proposer", "proposer", proposer)
 					proposerSlot, _ := GetProposerSlot(common.HexToAddress(proposer))
 					timeLockAcct.Storage[proposerSlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")
 				}
 				executor := ctx.String("override-executor")
 				if executor != "" {
+					log.Warn("override polygonZkEVMTimelock.executor", "executor", executor)
 					executorSlot, _ := GetExecutorSlot(common.HexToAddress(executor))
 					timeLockAcct.Storage[executorSlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")
 				}
