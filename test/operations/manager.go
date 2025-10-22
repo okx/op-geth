@@ -43,10 +43,8 @@ const (
 	DefaultL2NewAcc2Address    = "0xAed6892D56AAB5DA8FBcd85b924C3bE63c74Cc29"
 	DefaultL2NewAcc2PrivateKey = "bc362a16d3dedd6cdba639eb8fa91b2f6d9f929eb490ca2e5a748ba041c6a131"
 
-	DefaultOkPaySender1Address    = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
-	DefaultOkPaySender1PrivateKey = "2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"
-	DefaultOkPaySender2Address    = "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f"
-	DefaultOkPaySender2PrivateKey = "dbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97"
+	DefaultOkPaySenderAddress    = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+	DefaultOkPaySenderPrivateKey = "2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"
 )
 
 var clientRPC *ethclient.Client
