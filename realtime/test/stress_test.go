@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	NumTxs = 10_000
+	NumTxs = 50_000
 )
 
 func TestStressSendErc20Txs(t *testing.T) {
@@ -80,8 +80,12 @@ func TestStressSendErc20Txs(t *testing.T) {
 	fmt.Println("Starting stress test")
 
 	count := 0
-	timer := time.NewTimer(500 * time.Millisecond)
-	defer timer.Stop()
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	timeout := time.NewTimer(1 * time.Minute)
+	defer timeout.Stop()
+
 	for count < NumTxs {
 		select {
 		case msg := <-realtimeMsgCh:
@@ -91,8 +95,10 @@ func TestStressSendErc20Txs(t *testing.T) {
 			}
 		case err := <-realtimeSub.Err():
 			require.NoError(t, err)
-		case <-timer.C:
-			fmt.Printf("Confirmed tx count: %d\n", count)
+		case <-ticker.C:
+			fmt.Printf("Confirmed tx count: %d (remaining: %d)\n", count, len(signedTxs))
+		case <-timeout.C:
+			t.Fatalf("Test timeout after 5 minutes. Confirmed %d/%d transactions. Remaining txs: %d", count, NumTxs, len(signedTxs))
 		}
 	}
 	fmt.Printf("Confirmed tx count: %d\n", count)
