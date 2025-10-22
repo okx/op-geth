@@ -14,7 +14,7 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		RelayerURL: "localhost:8000",
+		RelayerURL: "localhost:9093",
 		KafkaURL:   "localhost:9092",
 		BlockTopic: "xlayer-header",
 		TxTopic:    "xlayer-tx",
