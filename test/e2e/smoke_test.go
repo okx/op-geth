@@ -43,6 +43,9 @@ const (
 )
 
 func TestSendTx(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
 	ctx := context.Background()
 	client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
 	require.NoError(t, err)

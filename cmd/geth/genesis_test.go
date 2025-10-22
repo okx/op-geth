@@ -99,6 +99,9 @@ func TestCustomGenesis(t *testing.T) {
 
 // TestCustomBackend that the backend selection and detection (leveldb vs pebble) works properly.
 func TestCustomBackend(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
 	t.Parallel()
 	// Test pebble, but only on 64-bit platforms
 	if strconv.IntSize != 64 {
