@@ -11,9 +11,12 @@ func (bc *BlockChain) SetRealtimeFinishChan(finishChan chan realtimeTypes.Finish
 
 func (bc *BlockChain) RealtimeUpdateExecutionHeight(head *types.Block) {
 	if bc.realtimeFinishChan != nil {
-		bc.realtimeFinishChan <- realtimeTypes.FinishedEntry{
+		select {
+		case bc.realtimeFinishChan <- realtimeTypes.FinishedEntry{
 			Height: head.Number().Uint64(),
 			Root:   head.Header().Root,
+		}:
+		default: // realtime consumer could be killed, dispose message
 		}
 	}
 }

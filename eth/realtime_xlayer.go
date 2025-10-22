@@ -21,28 +21,21 @@ func (eth *Ethereum) RealtimeEnabled() bool {
 }
 
 func (eth *Ethereum) GetRealtimeBlockInfoChan() chan *realtimeTypes.BlockInfo {
-	if eth.RealtimeEnabled() {
+	if eth.RealtimeEnabled() && eth.kafkaProducer != nil {
 		return eth.kafkaBlockInfoChan
 	}
 	return nil
 }
 
 func (eth *Ethereum) GetRealtimeTxInfoChan() chan state.TxInfo {
-	if eth.RealtimeEnabled() {
+	if eth.RealtimeEnabled() && eth.kafkaProducer != nil {
 		return eth.kafkaTxInfoChan
 	}
 	return nil
 }
 
-func (eth *Ethereum) GetFinishChan() chan realtimeTypes.FinishedEntry {
-	if eth.RealtimeEnabled() {
-		return eth.finishChan
-	}
-	return nil
-}
-
 func (eth *Ethereum) SendRealtimeErrorTrigger(height uint64) {
-	if eth.RealtimeEnabled() {
+	if eth.RealtimeEnabled() && eth.kafkaProducer != nil {
 		if err := eth.kafkaProducer.SendKafkaErrorTrigger(height); err != nil {
 			log.Error(fmt.Sprintf("[Realtime] Failed to send kafka error trigger message. error: %v", err))
 		}
@@ -76,7 +69,6 @@ func (eth *Ethereum) InitRealtime() {
 				eth.realtimeSub.Start(context.Background())
 			}
 			eth.realtimeCache = realtimeCache.NewRealtimeCache(context.Background(), eth.blockchain, eth.realtimeSub, eth.config.XLayer.Realtime.CacheDumpPath, eth.config.XLayer.Realtime.CacheHeightThreshold)
-
 		}
 	}
 }
@@ -89,7 +81,7 @@ func (eth *Ethereum) StartRealtime() {
 }
 
 func (eth *Ethereum) StopRealtime() {
-	if eth.RealtimeEnabled() && !eth.config.XLayer.Realtime.RealtimeRpc {
+	if eth.RealtimeEnabled() && eth.kafkaProducer != nil && !eth.config.XLayer.Realtime.RealtimeRpc {
 		if err := eth.kafkaProducer.SendKafkaErrorTrigger(0); err != nil {
 			log.Error(fmt.Sprintf("[Realtime] Failed to send kafka error trigger message. error: %v", err))
 		}
