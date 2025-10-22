@@ -57,11 +57,17 @@ type AccountVerificationResult struct {
 }
 
 // verifyAccount verifies a single account against the expected state
-func verifyAccount(workerId int, addr common.Address, expectedAccount types.Account, stateDB state.StateDB, largeStorage chan<- common.Address, resultChan chan<- AccountVerificationResult) {
+func verifyAccount(workerId int, addr common.Address, expectedAccount types.Account, skippedAddress []common.Address, stateDB state.StateDB, largeStorage chan<- common.Address, resultChan chan<- AccountVerificationResult) {
 	result := AccountVerificationResult{
 		Address:  addr,
 		Errors:   make([]string, 0),
 		Verified: true,
+	}
+
+	if slices.Contains(skippedAddress, addr) {
+		log.Info("skip verify for", "address", addr.Hex())
+		resultChan <- result
+		return
 	}
 
 	// Verify balance
@@ -182,6 +188,35 @@ specify the path to the migration database.
 
 Use --ignore-addresses to specify addresses to ignore during migration.
 Use --no-verify to skip verification after migration.`,
+	}
+	verifyMigrateCommand = &cli.Command{
+		Action:    verifyMigrateGenesis,
+		Name:      "verifyMigrate",
+		Usage:     "verifyMigrate state is correct",
+		ArgsUsage: "<genesisPath>",
+		Flags: slices.Concat([]cli.Flag{
+			utils.CachePreimagesFlag,
+			utils.OverridePrague,
+			utils.OverrideVerkle,
+			&cli.StringFlag{
+				Name:     "chaindata",
+				Usage:    "Path to mdbx database for state migration",
+				Category: flags.EthCategory,
+			},
+			&cli.BoolFlag{
+				Name:     "standalone-smt",
+				Usage:    "Use standalone SMT database instead of embedded SMT",
+				Category: flags.EthCategory,
+			},
+			&cli.UintFlag{
+				Name:     "cache-size",
+				Usage:    "Cache size for database operations (default: 4096)",
+				Value:    4096,
+				Category: flags.EthCategory,
+			},
+		}, utils.DatabaseFlags),
+		Description: `
+verify the genesis.json is consistency with erigon chaindata`,
 	}
 	dumpGenesisCommand = &cli.Command{
 		Action:    dumpGenesis,
@@ -826,10 +861,15 @@ func verifyStorageConcurrently(stateDB *state.CachingDB, addr common.Address, st
 	return nil
 }
 
-func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
+// verifyGenesisInternal it verifies the given alloc data is consistent with op geth data
+// Arguments:
+//
+//	--alloc: alloc data to be verified
+//	--blockNumber: which block the op database is checked
+//	--skippedAddr: list of address to be skipped
+func verifyGenesisInternal(ctx *cli.Context, alloc types.GenesisAlloc, blockNumber uint64, skippedAddr []common.Address) error {
 	start := time.Now()
 
-	// Open the database
 	stack, _ := makeConfigNode(ctx)
 	defer stack.Close()
 
@@ -842,12 +882,12 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	defer chaindb.Close()
 
 	// Get the genesis block from the database
-	genesisHash := rawdb.ReadCanonicalHash(chaindb, genesis.Number)
+	genesisHash := rawdb.ReadCanonicalHash(chaindb, blockNumber)
 	if genesisHash == (common.Hash{}) {
 		utils.Fatalf("No genesis block found in database")
 	}
 
-	genesisBlock := rawdb.ReadBlock(chaindb, genesisHash, genesis.Number)
+	genesisBlock := rawdb.ReadBlock(chaindb, genesisHash, blockNumber)
 	if genesisBlock == nil {
 		utils.Fatalf("Failed to read genesis block from database")
 	}
@@ -855,14 +895,14 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	log.Info("Found genesis block", "hash", genesisHash, "stateRoot", genesisBlock.Root())
 
 	//Create trie database
-	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, genesis.IsVerkle())
+	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, false)
 	defer triedb.Close()
 
 	stateDB := state.NewDatabase(triedb, nil)
 
 	accountsToVerify := make([]common.Address, 0)
 
-	for addr, _ := range genesis.Alloc {
+	for addr, _ := range alloc {
 		accountsToVerify = append(accountsToVerify, addr)
 	}
 
@@ -916,7 +956,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 				panic("Failed to create state database")
 			}
 			for _, addr := range accounts {
-				verifyAccount(workerID, addr, genesis.Alloc[addr], *stateDB3, largeAcctChan, resultChan)
+				verifyAccount(workerID, addr, alloc[addr], skippedAddr, *stateDB3, largeAcctChan, resultChan)
 			}
 
 			log.Info("Worker verifyAccount completed", "worker", workerID, "accounts_processed", len(accounts), "elapsed", common.PrettyDuration(time.Since(start)))
@@ -946,7 +986,6 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 			}
 		}
 
-		// Progress reporting
 		if verifiedCount%100000 == 0 {
 			log.Info("Verification progress", "verified", verifiedCount, "errors", errorCount)
 		}
@@ -957,8 +996,12 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 		if !ok {
 			break
 		} else {
-			expectedStorage := genesis.Alloc[addr].Storage
-			_ = verifyStorageConcurrently(stateDB, addr, expectedStorage, genesisRoot)
+			expectedStorage := alloc[addr].Storage
+			err = verifyStorageConcurrently(stateDB, addr, expectedStorage, genesisRoot)
+			if err != nil {
+				log.Error("Failed to verify storage", "address", addr.Hex(), "error", err)
+				return fmt.Errorf("Failed to verify storage: %v", err)
+			}
 		}
 	}
 
@@ -1073,7 +1116,7 @@ func migrateGenesis(ctx *cli.Context) error {
 			log.Warn("Failed to close node stack", "error", err)
 		}
 		verifyStart := time.Now()
-		if err := verifyGenesisInternal(ctx, mergedGenesis); err != nil {
+		if err := verifyGenesisInternal(ctx, mergedGenesis.Alloc, mergedGenesis.Number, []common.Address{}); err != nil {
 			log.Error("Genesis verification failed", "error", err)
 			return err
 		}
