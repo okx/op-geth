@@ -128,14 +128,14 @@ func TransTokenWithFrom(t *testing.T, ctx context.Context, client *ethclient.Cli
 	return signedTx.Hash().String()
 }
 
-// TransToken transfers tokens using the default admin private key
+// TransToken transfers tokens using the default rich private key
 func TransToken(t *testing.T, ctx context.Context, client *ethclient.Client, amount *uint256.Int, toAddress string) string {
-	return TransTokenWithFrom(t, ctx, client, operations.DefaultL2AdminPrivateKey, amount, toAddress)
+	return TransTokenWithFrom(t, ctx, client, operations.DefaultRichPrivateKey, amount, toAddress)
 }
 
 // Creates multiple transactions in a batch and waits for them all to be mined
 func TransTokenBatch(t *testing.T, ctx context.Context, client *ethclient.Client, amount *uint256.Int, toAddress string, batchSize int, fromPrivateKey ...string) []string {
-	privateKey := operations.DefaultL2AdminPrivateKey
+	privateKey := operations.DefaultRichPrivateKey
 	if len(fromPrivateKey) > 0 && fromPrivateKey[0] != "" {
 		privateKey = fromPrivateKey[0]
 	}
@@ -487,8 +487,8 @@ func EnsureContractsDeployed(t *testing.T) {
 	fundingAmount := uint256.NewInt(5000000000000000000) // 5 ETH
 	TransTokenWithFrom(t, ctx, client, operations.DefaultRichPrivateKey, fundingAmount, DeploymentAddress.String())
 
-	adminAddr := common.HexToAddress(operations.DefaultL2AdminAddress)
-	TransTokenWithFrom(t, ctx, client, operations.DefaultRichPrivateKey, fundingAmount, adminAddr.String())
+	richAddr := common.HexToAddress(operations.DefaultRichAddress)
+	TransTokenWithFrom(t, ctx, client, operations.DefaultRichPrivateKey, fundingAmount, richAddr.String())
 
 	// Deploy contracts
 	ContractBAddr = DeployContract(t, ctx, client, privateKey, "ContractB", constants.ContractBABIJson, constants.ContractBBytecodeStr)

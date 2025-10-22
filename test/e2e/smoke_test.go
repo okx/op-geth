@@ -5,7 +5,6 @@ package e2e
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"math/big"
 	"os"
@@ -28,15 +27,6 @@ import (
 	"github.com/ethereum/go-ethereum/test/operations"
 	"github.com/holiman/uint256"
 	"github.com/stretchr/testify/require"
-)
-
-var (
-	// Feature flags for e2e tests
-	// Use these flags to enable tests that require specific node features
-	// Example: go test -v ./test/e2e/ -run TestOkPayPriority -test.okpay
-	enableOkPayTests    = flag.Bool("test.okpay", false, "Enable OkPay feature tests")
-	enableApolloTests   = flag.Bool("test.apollo", false, "Enable Apollo feature tests")
-	enableRealtimeTests = flag.Bool("test.realtime", false, "Enable Realtime feature tests")
 )
 
 const (
@@ -70,7 +60,7 @@ func TestSendTx(t *testing.T) {
 	})
 	require.NoError(t, err)
 	tx := types.NewTransaction(nonce, to, big.NewInt(10), gas, big.NewInt(100*params.GWei), nil)
-	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultL2AdminPrivateKey, "0x"))
+	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultRichPrivateKey, "0x"))
 	require.NoError(t, err)
 
 	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
@@ -103,7 +93,7 @@ func TestEthTransfer(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	auth, err := operations.GetAuth(operations.DefaultL2AdminPrivateKey, operations.DefaultL2ChainID)
+	auth, err := operations.GetAuth(operations.DefaultRichPrivateKey, operations.DefaultL2ChainID)
 	require.NoError(t, err)
 	client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
 	require.NoError(t, err)
@@ -113,7 +103,7 @@ func TestEthTransfer(t *testing.T) {
 	nonce, err := client.PendingNonceAt(ctx, from)
 	require.NoError(t, err)
 	tx := types.NewTransaction(nonce, to, big.NewInt(0), 21000, big.NewInt(10*params.GWei), nil)
-	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultL2AdminPrivateKey, "0x"))
+	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultRichPrivateKey, "0x"))
 	require.NoError(t, err)
 	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), big.NewInt(1), 0)
 	signedTx, err := types.SignTx(tx, signer, privateKey)
@@ -715,7 +705,7 @@ func TestInnerTx(t *testing.T) {
 	})
 	t.Run("GetInternalTransactions_Batch", func(t *testing.T) {
 		// Send multiple transactions in a batch
-		txHashes := TransTokenBatch(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2NewAcc1Address, 10, operations.DefaultL2AdminPrivateKey)
+		txHashes := TransTokenBatch(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2NewAcc1Address, 10, operations.DefaultRichPrivateKey)
 		require.Len(t, txHashes, 10, "Should have created 10 transactions")
 
 		// Verify each transaction has exactly 1 inner transaction
@@ -739,7 +729,7 @@ func TestInnerTx(t *testing.T) {
 				Name:          "",
 				TraceAddress:  "",
 				CodeAddress:   "",
-				From:          operations.DefaultL1AdminAddress,
+				From:          operations.DefaultRichAddress,
 				To:            operations.DefaultL2NewAcc1Address,
 				Input:         "",
 				Output:        "",
@@ -759,7 +749,7 @@ func TestInnerTx(t *testing.T) {
 
 	t.Run("GetBlockInternalTransactions_Batch", func(t *testing.T) {
 		// Send multiple transactions in a batch
-		txHashes := TransTokenBatch(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2NewAcc1Address, 5, operations.DefaultL2AdminPrivateKey)
+		txHashes := TransTokenBatch(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2NewAcc1Address, 5, operations.DefaultRichPrivateKey)
 		require.Len(t, txHashes, 5, "Should have created 5 transactions")
 
 		blockNumbers := make(map[uint64][]int)
