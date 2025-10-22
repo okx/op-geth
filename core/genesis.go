@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/urfave/cli/v2"
 	"math/big"
 	"runtime"
 	"strings"
@@ -584,7 +583,7 @@ func SetupGenesisBlock(db ethdb.Database, triedb *triedb.Database, genesis *Gene
 	return SetupGenesisBlockWithOverride(db, triedb, genesis, nil)
 }
 
-func SetupGenesisBlockWithOverride(ctx *cli.Context, db ethdb.Database, triedb *triedb.Database, genesis *Genesis, overrides *ChainOverrides) (*params.ChainConfig, common.Hash, *params.ConfigCompatError, error) {
+func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, genesis *Genesis, overrides *ChainOverrides) (*params.ChainConfig, common.Hash, *params.ConfigCompatError, error) {
 	// Copy the genesis, so we can operate on a copy.
 	genesis = genesis.copy()
 	// Sanitize the supplied genesis, ensuring it has the associated chain
@@ -864,7 +863,7 @@ func (g *Genesis) toBlockWithRoot(stateRoot, storageRootMessagePasser common.Has
 
 // Commit writes the block and state of a genesis specification to the database.
 // The block is committed as the canonical head block.
-func (g *Genesis) Commit(ctx *cli.Context, db ethdb.Database, triedb *triedb.Database) (*types.Block, error) {
+func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Block, error) {
 	if g.Number != 0 {
 		return nil, errors.New("can't commit genesis block with number > 0")
 	}
@@ -897,13 +896,13 @@ func (g *Genesis) Commit(ctx *cli.Context, db ethdb.Database, triedb *triedb.Dat
 
 	// Marshal the genesis state specification and persist.
 	batch := db.NewBatch()
-	if !ctx.Bool("no-save-genesis") {
-		blob, err := json.Marshal(g.Alloc)
-		if err != nil {
-			return nil, err
-		}
-		rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
-	}
+	//if !ctx.Bool("no-save-genesis") {
+	//	blob, err := json.Marshal(g.Alloc)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
+	//}
 	rawdb.WriteBlock(batch, block)
 	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), nil)
 	rawdb.WriteCanonicalHash(batch, block.Hash(), block.NumberU64())
@@ -916,8 +915,8 @@ func (g *Genesis) Commit(ctx *cli.Context, db ethdb.Database, triedb *triedb.Dat
 
 // MustCommit writes the genesis block and state to db, panicking on error.
 // The block is committed as the canonical head block.
-func (g *Genesis) MustCommit(ctx *cli.Context, db ethdb.Database, triedb *triedb.Database) *types.Block {
-	block, err := g.Commit(ctx, db, triedb)
+func (g *Genesis) MustCommit(db ethdb.Database, triedb *triedb.Database) *types.Block {
+	block, err := g.Commit(db, triedb)
 	if err != nil {
 		panic(err)
 	}

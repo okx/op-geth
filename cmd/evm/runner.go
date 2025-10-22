@@ -226,7 +226,7 @@ func runCmd(ctx *cli.Context) error {
 		HashDB:    hashdb.Defaults,
 	})
 	defer triedb.Close()
-	genesis := genesisConfig.MustCommit(ctx, db, triedb)
+	genesis := genesisConfig.MustCommit(db, triedb)
 	sdb := state.NewDatabase(triedb, nil)
 	prestate, _ = state.New(genesis.Root(), sdb)
 	chainConfig = genesisConfig.Config
