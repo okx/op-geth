@@ -57,11 +57,16 @@ type AccountVerificationResult struct {
 }
 
 // verifyAccount verifies a single account against the expected state
-func verifyAccount(workerId int, addr common.Address, expectedAccount types.Account, stateDB state.StateDB, largeStorage chan<- common.Address, resultChan chan<- AccountVerificationResult) {
+func verifyAccount(workerId int, addr common.Address, expectedAccount types.Account, skippedAddress []common.Address, stateDB state.StateDB, largeStorage chan<- common.Address, resultChan chan<- AccountVerificationResult) {
 	result := AccountVerificationResult{
 		Address:  addr,
 		Errors:   make([]string, 0),
 		Verified: true,
+	}
+
+	if slices.Contains(skippedAddress, addr) {
+		resultChan <- result
+		return
 	}
 
 	// Verify balance
@@ -849,10 +854,15 @@ func verifyStorageConcurrently(stateDB *state.CachingDB, addr common.Address, st
 	return nil
 }
 
-func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
+// verifyGenesisInternal it verifies the given alloc data is consistent with op geth data
+// Arguments:
+//
+//	--alloc: alloc data to be verified
+//	--blockNumber: which block the op database is checked
+//	--skippedAddr: list of address to be skipped
+func verifyGenesisInternal(ctx *cli.Context, alloc types.GenesisAlloc, blockNumber uint64, skippedAddr []common.Address) error {
 	start := time.Now()
 
-	// Open the database
 	stack, _ := makeConfigNode(ctx)
 	defer stack.Close()
 
@@ -865,12 +875,12 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	defer chaindb.Close()
 
 	// Get the genesis block from the database
-	genesisHash := rawdb.ReadCanonicalHash(chaindb, genesis.Number)
+	genesisHash := rawdb.ReadCanonicalHash(chaindb, blockNumber)
 	if genesisHash == (common.Hash{}) {
 		utils.Fatalf("No genesis block found in database")
 	}
 
-	genesisBlock := rawdb.ReadBlock(chaindb, genesisHash, genesis.Number)
+	genesisBlock := rawdb.ReadBlock(chaindb, genesisHash, blockNumber)
 	if genesisBlock == nil {
 		utils.Fatalf("Failed to read genesis block from database")
 	}
@@ -878,14 +888,14 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 	log.Info("Found genesis block", "hash", genesisHash, "stateRoot", genesisBlock.Root())
 
 	//Create trie database
-	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, genesis.IsVerkle())
+	triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), true, false)
 	defer triedb.Close()
 
 	stateDB := state.NewDatabase(triedb, nil)
 
 	accountsToVerify := make([]common.Address, 0)
 
-	for addr, _ := range genesis.Alloc {
+	for addr, _ := range alloc {
 		accountsToVerify = append(accountsToVerify, addr)
 	}
 
@@ -939,7 +949,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 				panic("Failed to create state database")
 			}
 			for _, addr := range accounts {
-				verifyAccount(workerID, addr, genesis.Alloc[addr], *stateDB3, largeAcctChan, resultChan)
+				verifyAccount(workerID, addr, alloc[addr], skippedAddr, *stateDB3, largeAcctChan, resultChan)
 			}
 
 			log.Info("Worker verifyAccount completed", "worker", workerID, "accounts_processed", len(accounts), "elapsed", common.PrettyDuration(time.Since(start)))
@@ -969,7 +979,6 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 			}
 		}
 
-		// Progress reporting
 		if verifiedCount%100000 == 0 {
 			log.Info("Verification progress", "verified", verifiedCount, "errors", errorCount)
 		}
@@ -980,7 +989,7 @@ func verifyGenesisInternal(ctx *cli.Context, genesis *core.Genesis) error {
 		if !ok {
 			break
 		} else {
-			expectedStorage := genesis.Alloc[addr].Storage
+			expectedStorage := alloc[addr].Storage
 			_ = verifyStorageConcurrently(stateDB, addr, expectedStorage, genesisRoot)
 		}
 	}
@@ -1096,7 +1105,7 @@ func migrateGenesis(ctx *cli.Context) error {
 			log.Warn("Failed to close node stack", "error", err)
 		}
 		verifyStart := time.Now()
-		if err := verifyGenesisInternal(ctx, mergedGenesis); err != nil {
+		if err := verifyGenesisInternal(ctx, mergedGenesis.Alloc, mergedGenesis.Number, []common.Address{}); err != nil {
 			log.Error("Genesis verification failed", "error", err)
 			return err
 		}

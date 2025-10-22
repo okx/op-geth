@@ -24,7 +24,7 @@ nohup ./build/bin/geth --datadir=${OP_DATA_DIR} --gcmode=archive migrate --state
 
 ## verifyMigration
 ```
-geth verifyMigrate --chaindata=${erigon_chaindata_path} --standalone-smt=true ${op_genesis_path}
+geth verifyMigrate --chaindata=${erigon_chaindata_path} --standalone-smt=true
 ```
 
 ## unit test

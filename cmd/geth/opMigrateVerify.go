@@ -1,18 +1,14 @@
 package main
 
 import (
-	"bytes"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"github.com/ledgerwatch/erigon-lib/kv"
 	"math/big"
-	"os"
 	"time"
+
+	"github.com/ledgerwatch/erigon-lib/kv"
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/log"
@@ -168,28 +164,9 @@ func init() {
 }
 
 func verifyMigrateGenesis(ctx *cli.Context) error {
-	if ctx.Args().Len() != 1 {
-		utils.Fatalf("need genesis.json file as the only argument")
-	}
+
 	start := time.Now()
-	opGenesisPath := ctx.Args().First()
-	if len(opGenesisPath) == 0 {
-		utils.Fatalf("invalid path to genesis file")
-	}
 
-	opGenesisFile, err := os.Open(opGenesisPath)
-	if err != nil {
-		utils.Fatalf("Failed to read genesis file: %v", err)
-	}
-	defer opGenesisFile.Close()
-
-	opGenesis := new(core.Genesis)
-	if err := json.NewDecoder(opGenesisFile).Decode(opGenesis); err != nil {
-		utils.Fatalf("invalid genesis file: %v", err)
-	}
-	log.Info("read file and decode json", "elapsed", time.Since(start))
-
-	// Get migration path from CLI context
 	chainDataPath := ctx.String("chaindata")
 	if chainDataPath == "" {
 		return fmt.Errorf("migration path is required")
@@ -199,113 +176,40 @@ func verifyMigrateGenesis(ctx *cli.Context) error {
 	kv.InitStandaloneSMT(isStandaloneSMT)
 	erigonAlloc, err := core.LoadErigonGenesisData(chainDataPath)
 
-	pass := true
-	for address, _ := range erigonAlloc {
-		if address == common.HexToAddress(IgnoredErigonScalableAddress) {
-			continue
-		}
-		_, ok := opGenesis.Alloc[address]
-		if !ok {
-			pass = false
-			break
-		}
-	}
+	opProtocolAddress := GetOpProtocolAddress()
 
-	if pass {
-		for address, opAccount := range opGenesis.Alloc {
-			if isOpNative(address) {
-				log.Debug("Skipping verification for predeploy/precompile address", "address", address.Hex())
-				continue
-			}
+	skippedAddresses := make([]common.Address, 0, len(opProtocolAddress)+1)
+	skippedAddresses = append(skippedAddresses, opProtocolAddress...)
+	skippedAddresses = append(skippedAddresses, common.HexToAddress(IgnoredErigonScalableAddress))
+	err = verifyGenesisInternal(ctx, erigonAlloc, 0, skippedAddresses)
 
-			erigonAcct := erigonAlloc[address]
-
-			if !bytes.Equal(opAccount.Code, erigonAcct.Code) {
-				log.Warn("Code mismatch", "address", address.Hex(),
-					"opCode", hex.EncodeToString(opAccount.Code),
-					"erigonCode", hex.EncodeToString(erigonAcct.Code))
-				pass = false
-				break
-			}
-
-			if opAccount.Balance == nil {
-				opAccount.Balance = big.NewInt(0)
-			}
-
-			if erigonAcct.Balance == nil {
-				erigonAcct.Balance = big.NewInt(0)
-			}
-
-			if opAccount.Balance.Cmp(erigonAcct.Balance) != 0 {
-				log.Warn("Balance mismatch", "address", address.Hex(),
-					"opBalance", opAccount.Balance.String(), "erigonBalance", erigonAcct.Balance.String())
-				pass = false
-				break
-			}
-
-			if opAccount.Nonce != erigonAcct.Nonce {
-				log.Warn("Nonce mismatch", "address", address.Hex(),
-					"opNonce", opAccount.Nonce, "erigonNonce", erigonAcct.Nonce)
-				pass = false
-				break
-			}
-
-			if !compareStorageMaps(opAccount.Storage, erigonAcct.Storage) {
-				log.Warn("Storage mismatch", "address", address.Hex())
-				pass = false
-				break
-			}
-
-		}
-	}
-
-	if !pass {
-		return fmt.Errorf("verification failed")
+	if err != nil {
+		return fmt.Errorf("verification failed, %v", err)
 	} else {
-		log.Info("verification success")
+		log.Info("verification success", "elapsed", time.Since(start))
 		return nil
 	}
 
 }
 
-func compareStorageMaps(storage1, storage2 map[common.Hash]common.Hash) bool {
-	if len(storage1) != len(storage2) {
-		return false
+func GetOpProtocolAddress() []common.Address {
+	protocolAddresses := make([]common.Address, 0, PredeployCount*2+PrecompileCount+PreinstallCount)
+
+	for _, addr := range OP_PREDEPLOY {
+		protocolAddresses = append(protocolAddresses, addr)
 	}
 
-	for key, value1 := range storage1 {
-		if value2, exists := storage2[key]; !exists || value1 != value2 {
-			return false
-		}
+	for _, addr := range OP_PREDEPLOY_SHIFTED {
+		protocolAddresses = append(protocolAddresses, addr)
 	}
 
-	return true
-}
-
-func isOpNative(address common.Address) bool {
-	for _, predeployAddr := range OP_PREDEPLOY {
-		if address == predeployAddr {
-			return true
-		}
+	for _, addr := range OP_PRECOMPILE {
+		protocolAddresses = append(protocolAddresses, addr)
 	}
 
-	for _, predeployAddr := range OP_PREDEPLOY_SHIFTED {
-		if address == predeployAddr {
-			return true
-		}
+	for _, addr := range OP_PREINSTALL {
+		protocolAddresses = append(protocolAddresses, addr)
 	}
 
-	for _, precompileAddr := range OP_PRECOMPILE {
-		if address == precompileAddr {
-			return true
-		}
-	}
-
-	for _, preInstall := range OP_PREINSTALL {
-		if address == preInstall {
-			return true
-		}
-	}
-
-	return false
+	return protocolAddresses
 }
