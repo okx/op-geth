@@ -53,6 +53,7 @@ func TestRealtimeBenchmarkNativeTransferConfirmation(t *testing.T) {
 
 		// Send tx
 		signedTx := nativeTransferTx(t, context.Background(), client, big.NewInt(Gwei), testAddress.String())
+		fmt.Printf("Sent tx: %s\n", signedTx.Hash().String())
 
 		// Run state benchmark
 		g, ctx := errgroup.WithContext(ctx)
@@ -134,6 +135,7 @@ func TestRealtimeBenchmarkERC20TransferConfirmation(t *testing.T) {
 		require.Equal(t, ethBalance.String(), realtimeBalance.String())
 
 		signedTx := erc20TransferTx(t, ctx, privateKey, client, transferAmount, nil, testAddress, erc20Address, startNonce+uint64(i))
+		fmt.Printf("Sent tx: %s\n", signedTx.Hash().String())
 
 		// Run state benchmark
 		g, ctx := errgroup.WithContext(ctx)
