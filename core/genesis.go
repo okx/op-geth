@@ -896,7 +896,8 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 
 	batch := db.NewBatch()
 
-	if len(g.Alloc) < 100000 {
+	// TODO:
+	if len(g.Alloc) < 100000 { // make ut pass
 		// Marshal the genesis state specification and persist.
 		blob, err := json.Marshal(g.Alloc)
 		if err != nil {
@@ -904,7 +905,7 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 		}
 		rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
 	} else {
-		log.Warn("Alloc was not saved to the database because the genesis block is too large", "total accounts", len(g.Alloc))
+		log.Warn("Alloc was not saved to the database because the genesis is too large", "total accounts", len(g.Alloc))
 	}
 
 	rawdb.WriteBlock(batch, block)
