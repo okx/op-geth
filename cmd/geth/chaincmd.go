@@ -208,6 +208,12 @@ Use --no-verify to skip verification after migration.`,
 				Usage:    "Use standalone SMT database instead of embedded SMT",
 				Category: flags.EthCategory,
 			},
+			&cli.UintFlag{
+				Name:     "cache-size",
+				Usage:    "Cache size for database operations (default: 4096)",
+				Value:    4096,
+				Category: flags.EthCategory,
+			},
 		}, utils.DatabaseFlags),
 		Description: `
 verify the genesis.json is consistency with erigon chaindata`,
@@ -991,7 +997,11 @@ func verifyGenesisInternal(ctx *cli.Context, alloc types.GenesisAlloc, blockNumb
 			break
 		} else {
 			expectedStorage := alloc[addr].Storage
-			_ = verifyStorageConcurrently(stateDB, addr, expectedStorage, genesisRoot)
+			err = verifyStorageConcurrently(stateDB, addr, expectedStorage, genesisRoot)
+			if err != nil {
+				log.Error("Failed to verify storage", "address", addr.Hex(), "error", err)
+				return fmt.Errorf("Failed to verify storage: %v", err)
+			}
 		}
 	}
 
