@@ -18,6 +18,7 @@
 package core
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -996,6 +997,149 @@ func dumpGenesis(genesis *Genesis, outputPath string) {
 	log.Info("dumpGenesis: completed", "elapsed", time.Since(start))
 }
 
+// dumpGenesisDiff generates a detailed diff between two GenesisAlloc maps and writes it to a file
+func dumpGenesisDiff(mergedAlloc, erigonAlloc types.GenesisAlloc, outputPath string) error {
+	file, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create diff file: %w", err)
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+
+	// Write header
+	writer.WriteString("=== GENESIS ALLOC DIFF REPORT ===\n")
+	writer.WriteString(fmt.Sprintf("Generated at: %s\n", time.Now().Format(time.RFC3339)))
+	writer.WriteString(fmt.Sprintf("Merged Genesis Accounts: %d\n", len(mergedAlloc)))
+	writer.WriteString(fmt.Sprintf("Erigon Accounts: %d\n", len(erigonAlloc)))
+	writer.WriteString("=" + strings.Repeat("=", 50) + "\n\n")
+
+	// Track statistics
+	stats := struct {
+		OnlyInMerged     int
+		OnlyInErigon     int
+		CommonAccounts   int
+		DifferentBalance int
+		DifferentNonce   int
+		DifferentCode    int
+		DifferentStorage int
+	}{}
+
+	// Find accounts only in erigon alloc
+	writer.WriteString("=== ACCOUNTS ONLY IN ERIGON ALLOC ===\n")
+	for addr, account := range erigonAlloc {
+		if _, exists := mergedAlloc[addr]; !exists {
+			stats.OnlyInErigon++
+			writer.WriteString(fmt.Sprintf("Address: %s\n", addr.Hex()))
+			writer.WriteString(fmt.Sprintf("  Balance: %s\n", account.Balance.String()))
+			writer.WriteString(fmt.Sprintf("  Nonce: %d\n", account.Nonce))
+			writer.WriteString(fmt.Sprintf("  Code Length: %d\n", len(account.Code)))
+			writer.WriteString(fmt.Sprintf("  Storage Entries: %d\n", len(account.Storage)))
+			writer.WriteString("\n")
+		}
+	}
+
+	// Compare common accounts
+	writer.WriteString("=== COMMON ACCOUNTS DIFFERENCES ===\n")
+	for addr, mergedAccount := range mergedAlloc {
+		erigonAccount, exists := erigonAlloc[addr]
+		if !exists {
+			continue
+		}
+
+		stats.CommonAccounts++
+		hasDifferences := false
+		var differences []string
+
+		// Compare Balance
+		if mergedAccount.Balance == nil && erigonAccount.Balance != nil {
+			hasDifferences = true
+			differences = append(differences, fmt.Sprintf("Balance: merged=nil, erigon=%s", erigonAccount.Balance.String()))
+			stats.DifferentBalance++
+		} else if mergedAccount.Balance != nil && erigonAccount.Balance == nil {
+			hasDifferences = true
+			differences = append(differences, fmt.Sprintf("Balance: merged=%s, erigon=nil", mergedAccount.Balance.String()))
+			stats.DifferentBalance++
+		} else if mergedAccount.Balance != nil && erigonAccount.Balance != nil && mergedAccount.Balance.Cmp(erigonAccount.Balance) != 0 {
+			hasDifferences = true
+			differences = append(differences, fmt.Sprintf("Balance: merged=%s, erigon=%s", mergedAccount.Balance.String(), erigonAccount.Balance.String()))
+			stats.DifferentBalance++
+		}
+
+		// Compare Nonce
+		if mergedAccount.Nonce != erigonAccount.Nonce {
+			hasDifferences = true
+			differences = append(differences, fmt.Sprintf("Nonce: merged=%d, erigon=%d", mergedAccount.Nonce, erigonAccount.Nonce))
+			stats.DifferentNonce++
+		}
+
+		// Compare Code
+		if !bytes.Equal(mergedAccount.Code, erigonAccount.Code) {
+			hasDifferences = true
+			differences = append(differences, fmt.Sprintf("Code: merged_len=%d, erigon_len=%d", len(mergedAccount.Code), len(erigonAccount.Code)))
+			stats.DifferentCode++
+		}
+
+		// Compare Storage
+		if !compareStorageMaps(mergedAccount.Storage, erigonAccount.Storage) {
+			hasDifferences = true
+			differences = append(differences, fmt.Sprintf("Storage: merged_entries=%d, erigon_entries=%d", len(mergedAccount.Storage), len(erigonAccount.Storage)))
+			stats.DifferentStorage++
+		}
+
+		if hasDifferences {
+			writer.WriteString(fmt.Sprintf("Address: %s\n", addr.Hex()))
+			for _, diff := range differences {
+				writer.WriteString(fmt.Sprintf("  %s\n", diff))
+			}
+			writer.WriteString("\n")
+		}
+	}
+
+	// Find accounts only in merged genesis
+	writer.WriteString("=== ACCOUNTS ONLY IN MERGED GENESIS ===\n")
+	for addr, account := range mergedAlloc {
+		if _, exists := erigonAlloc[addr]; !exists {
+			stats.OnlyInMerged++
+			writer.WriteString(fmt.Sprintf("Address: %s\n", addr.Hex()))
+			writer.WriteString(fmt.Sprintf("  Balance: %s\n", account.Balance.String()))
+			writer.WriteString(fmt.Sprintf("  Nonce: %d\n", account.Nonce))
+			writer.WriteString(fmt.Sprintf("  Code Length: %d\n", len(account.Code)))
+			writer.WriteString(fmt.Sprintf("  Storage Entries: %d\n", len(account.Storage)))
+			writer.WriteString("\n")
+		}
+	}
+
+	// Write summary statistics
+	writer.WriteString("=== SUMMARY STATISTICS ===\n")
+	writer.WriteString(fmt.Sprintf("Accounts only in merged genesis: %d\n", stats.OnlyInMerged))
+	writer.WriteString(fmt.Sprintf("Accounts only in erigon alloc: %d\n", stats.OnlyInErigon))
+	writer.WriteString(fmt.Sprintf("Common accounts: %d\n", stats.CommonAccounts))
+	writer.WriteString(fmt.Sprintf("Accounts with different balance: %d\n", stats.DifferentBalance))
+	writer.WriteString(fmt.Sprintf("Accounts with different nonce: %d\n", stats.DifferentNonce))
+	writer.WriteString(fmt.Sprintf("Accounts with different code: %d\n", stats.DifferentCode))
+	writer.WriteString(fmt.Sprintf("Accounts with different storage: %d\n", stats.DifferentStorage))
+
+	return nil
+}
+
+// compareStorageMaps compares two storage maps for equality
+func compareStorageMaps(storage1, storage2 map[common.Hash]common.Hash) bool {
+	if len(storage1) != len(storage2) {
+		return false
+	}
+
+	for key, value1 := range storage1 {
+		value2, exists := storage2[key]
+		if !exists || value1 != value2 {
+			return false
+		}
+	}
+
+	return true
+}
+
 func printL2Info(hash common.Hash, number uint64) {
 	l2Info := map[string]interface{}{
 		"l2": map[string]interface{}{
@@ -1079,7 +1223,8 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			smtErr = verifySMT(migrationConfig.ChainDataPath, migrationConfig.SMTDataPath, &erigonAlloc)
+			erigonAllocCopied := erigonAlloc.DeepCopy()
+			smtErr = verifySMT(migrationConfig.ChainDataPath, migrationConfig.SMTDataPath, erigonAllocCopied)
 		}()
 	}
 
@@ -1098,6 +1243,7 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 		go func() {
 			defer wg.Done()
 			dumpGenesis(mergedGenesis, ctx.String("output"))
+			dumpGenesisDiff(mergedGenesis.Alloc, erigonAlloc, "diff.genesis.json")
 		}()
 	}
 
