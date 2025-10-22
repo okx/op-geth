@@ -339,7 +339,7 @@ func generateMigrateAlloc(ctx *cli.Context, dbAlloc types.GenesisAlloc, ignoreAd
 				timeLockAcct.Storage[minDelaySlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000E10") // 3600 in hex, which is 1h
 
 				// override proposer & executor
-				proposer := ctx.String("override-propposer")
+				proposer := ctx.String("override-proposer")
 				if proposer != "" {
 					proposerSlot, _ := GetProposerSlot(common.HexToAddress(proposer))
 					timeLockAcct.Storage[proposerSlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")

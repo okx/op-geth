@@ -172,7 +172,7 @@ It expects the genesis file as argument.`,
 				Category: flags.EthCategory,
 			},
 			&cli.StringFlag{
-				Name:     "override-propposer",
+				Name:     "override-proposer",
 				Usage:    "override timelock proposer",
 				Value:    "",
 				Category: flags.EthCategory,
