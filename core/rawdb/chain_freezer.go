@@ -49,9 +49,6 @@ type chainFreezer struct {
 	// Optional Era database used as a backup for the pruned chain.
 	eradb *eradb.Store
 
-	// Optional XLayer proxy for legacy header sync from remote PP RPC
-	xlayerProxy *XlayerAncientProxy
-
 	quit    chan struct{}
 	wg      sync.WaitGroup
 	trigger chan chan struct{} // Manual blocking freeze trigger, test determinism
@@ -63,13 +60,12 @@ type chainFreezer struct {
 //     state freezer (e.g. dev mode).
 //   - if non-empty directory is given, initializes the regular file-based
 //     state freezer.
-func newChainFreezer(datadir string, eraDir string, namespace string, readonly bool, xlayerProxy *XlayerAncientProxy) (*chainFreezer, error) {
+func newChainFreezer(datadir string, eraDir string, namespace string, readonly bool) (*chainFreezer, error) {
 	if datadir == "" {
 		return &chainFreezer{
-			ancients:    NewMemoryFreezer(readonly, chainFreezerTableConfigs),
-			xlayerProxy: xlayerProxy,
-			quit:        make(chan struct{}),
-			trigger:     make(chan chan struct{}),
+			ancients: NewMemoryFreezer(readonly, chainFreezerTableConfigs),
+			quit:     make(chan struct{}),
+			trigger:  make(chan chan struct{}),
 		}, nil
 	}
 	freezer, err := NewFreezer(datadir, namespace, readonly, freezerTableSize, chainFreezerTableConfigs)
@@ -81,11 +77,10 @@ func newChainFreezer(datadir string, eraDir string, namespace string, readonly b
 		return nil, err
 	}
 	return &chainFreezer{
-		ancients:    freezer,
-		eradb:       edb,
-		xlayerProxy: xlayerProxy,
-		quit:        make(chan struct{}),
-		trigger:     make(chan chan struct{}),
+		ancients: freezer,
+		eradb:    edb,
+		quit:     make(chan struct{}),
+		trigger:  make(chan chan struct{}),
 	}, nil
 }
 
@@ -98,9 +93,6 @@ func (f *chainFreezer) Close() error {
 	}
 	f.wg.Wait()
 
-	if f.xlayerProxy != nil {
-		f.xlayerProxy.Close()
-	}
 	if f.eradb != nil {
 		f.eradb.Close()
 	}
@@ -355,7 +347,6 @@ func (f *chainFreezer) freezeRange(nfdb *nofreezedb, number, limit uint64) (hash
 			if len(receipts) == 0 {
 				return fmt.Errorf("block receipts missing, can't freeze block %d", number)
 			}
-
 			// Write to the batch.
 			if err := op.AppendRaw(ChainFreezerHashTable, number, hash[:]); err != nil {
 				return fmt.Errorf("can't write hash to Freezer: %v", err)
