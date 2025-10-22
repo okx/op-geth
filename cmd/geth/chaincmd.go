@@ -122,10 +122,6 @@ var (
 			utils.CachePreimagesFlag,
 			utils.OverrideOsaka,
 			utils.OverrideVerkle,
-			&cli.BoolFlag{
-				Name:  "no-save-genesis",
-				Usage: "do not save genesis block",
-			},
 		}, utils.DatabaseFlags),
 		Description: `
 The init command initializes a new genesis block and definition for the network.
