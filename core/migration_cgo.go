@@ -292,7 +292,7 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 }
 
 // generateMigrateAlloc filters out ignored addresses from dbAlloc, merges with genesisAlloc, and returns the final migrateAlloc
-func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common.Address]struct{}, genesisAlloc *types.GenesisAlloc, l1ChainId *big.Int) types.GenesisAlloc {
+func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common.Address]struct{}, genesisAlloc *types.GenesisAlloc, l2ChainId *big.Int) types.GenesisAlloc {
 	start := time.Now()
 	migrateAlloc := make(types.GenesisAlloc)
 
@@ -329,16 +329,22 @@ func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common
 	}
 	log.Info("mergeAlloc: merge completed", "status", "✅", "total_accounts", len(migrateAlloc), "elapsed", time.Since(start))
 
-	polygonZkEVMTimelock := common.HexToAddress("0xBBa0935Fa93Eb23de7990b47F0D96a8f75766d13") // default to mainnet
-	if l1ChainId != nil && l1ChainId.Cmp(big.NewInt(11155111)) == 0 {                         // testnet
-		polygonZkEVMTimelock = common.HexToAddress("0x56401b742AFf96A817dF983169231Bbe76B5e87f")
+	if l2ChainId != nil && l2ChainId.Cmp(big.NewInt(196)) == 0 { // override timelock.Mindelay for mainnet
+		polygonZkEVMTimelock := common.HexToAddress("0xBBa0935Fa93Eb23de7990b47F0D96a8f75766d13")
+		if timeLockAcct, ok := migrateAlloc[polygonZkEVMTimelock]; ok {
+			minDelaySlot := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002")
+			curValue := timeLockAcct.Storage[minDelaySlot]
+			if curValue.Cmp(common.HexToHash("0x00000000000000000000000000000000000000000000000000000000000d2f00")) == 0 { // if current value is 86400
+				log.Warn("override polygonZkEVMTimelock.minDelay from 86400 to 3600")
+				timeLockAcct.Storage[minDelaySlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000E10") // 3600 in hex, which is 1h
+			} else {
+				log.Warn("current polygonZkEVMTimelock.minDelay is not 86400", "curValue", curValue.Hex())
+			}
+		} else {
+			log.Warn("no polygonZkEVMTimelock contract found", "address", polygonZkEVMTimelock)
+		}
 	}
-	if timeLockAcct, ok := migrateAlloc[polygonZkEVMTimelock]; ok {
-		minDelaySlot := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002")
-		timeLockAcct.Storage[minDelaySlot] = common.HexToHash("0x00000000000000000000000000000000000000000000000000000000000d0E10") // 3600 in hex, which is 1h
-	} else {
-		log.Warn("no polygonZkEVMTimelock contract found", "address", polygonZkEVMTimelock)
-	}
+
 	return migrateAlloc
 }
 
