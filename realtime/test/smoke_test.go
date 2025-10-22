@@ -698,7 +698,7 @@ func compareCacheWithSequenceDB(t *testing.T, dbDir, cacheDir string) {
 	require.NoError(t, err)
 	defer stack.Close()
 
-	db, err := stack.OpenDatabaseWithFreezer("chaindata", 0, 0, "ancient", "eth/db/chaindata/", false)
+	db, err := stack.OpenDatabaseWithFreezer("chaindata", 0, 0, "", "", false)
 	require.NoError(t, err)
 	defer db.Close()
 
