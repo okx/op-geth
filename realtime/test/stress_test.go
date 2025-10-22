@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	NumTxs = 5_000
+	NumTxs = 10_000
 )
 
 func TestStressSendErc20Txs(t *testing.T) {
