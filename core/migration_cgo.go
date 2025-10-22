@@ -346,7 +346,7 @@ func generateMigrateAlloc(ctx *cli.Context, dbAlloc types.GenesisAlloc, ignoreAd
 				}
 				executor := ctx.String("override-executor")
 				if executor != "" {
-					executorSlot, _ := GetProposerSlot(common.HexToAddress(executor))
+					executorSlot, _ := GetExecutorSlot(common.HexToAddress(executor))
 					timeLockAcct.Storage[executorSlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")
 				}
 			} else {

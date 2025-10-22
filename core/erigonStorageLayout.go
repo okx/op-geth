@@ -42,6 +42,6 @@ func GetProposerSlot(account common.Address) (common.Hash, common.Hash) {
 }
 
 func GetExecutorSlot(account common.Address) (common.Hash, common.Hash) {
-	proposerRoleId := common.HexToHash("0xd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e63")
-	return roleLayout(proposerRoleId, account)
+	executorRoleId := common.HexToHash("0xd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e63")
+	return roleLayout(executorRoleId, account)
 }
