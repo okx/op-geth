@@ -9,9 +9,6 @@ const (
 	DefaultL2NetworkWSURL                 = "ws://localhost:7547"
 	DefaultL2ChainID               uint64 = 196
 
-	StreamerL2NetworkRealtimeURL = "http://localhost:8129"
-	StreamerL2NetworkWSURL       = "ws://localhost:8550"
-
 	DefaultL2AdminAddress    = "0x14dC79964da2C08b23698B3D3cc7Ca32193d9955"
 	DefaultL2AdminPrivateKey = "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356"
 
