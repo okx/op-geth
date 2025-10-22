@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	NumTxs = 5_000
+	NumTxs = 10_000
 )
 
 func TestStressSendErc20Txs(t *testing.T) {
@@ -63,7 +63,7 @@ func TestStressSendErc20Txs(t *testing.T) {
 	// Benchmark variables
 	var totalRealtimeDuration time.Duration
 
-	realtimeMsgCh := make(chan realtimeapi.RealtimeSubResult)
+	realtimeMsgCh := make(chan realtimeapi.RealtimeSubResult, NumTxs)
 	realtimeSub, err := wsClient.Subscribe(ctx, "eth", realtimeMsgCh, "realtime", map[string]bool{"NewHeads": false, "TransactionExtraInfo": false, "TransactionReceipt": false, "TransactionInnerTxs": false})
 	require.NoError(t, err)
 	defer realtimeSub.Unsubscribe()
