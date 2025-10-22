@@ -114,7 +114,6 @@ func TestGenesisAlloc_DeepCopy(t *testing.T) {
 		original[addr1].Balance.Add(original[addr1].Balance, big.NewInt(1000))
 		original[addr1].Code[0] = 0xff
 		original[addr1].Storage[common.HexToHash("0x1111111111111111111111111111111111111111111111111111111111111111")] = common.HexToHash("0x9999999999999999999999999999999999999999999999999999999999999999")
-		original[addr1].PrivateKey[0] = 0xaa
 
 		// Verify copied is unchanged
 		copiedAccount := (*copied)[addr1]
@@ -129,9 +128,6 @@ func TestGenesisAlloc_DeepCopy(t *testing.T) {
 		}
 		if copiedAccount.Nonce != 42 {
 			t.Error("Copied nonce was modified when original was changed")
-		}
-		if copiedAccount.PrivateKey[0] != 0xaa {
-			t.Error("Copied private key was modified when original was changed")
 		}
 	})
 
@@ -223,20 +219,6 @@ func verifyAccountDeepCopy(t *testing.T, addr common.Address, original, copied A
 		t.Errorf("Address %v: Nonce mismatch: expected %d, got %d", addr, original.Nonce, copied.Nonce)
 	}
 
-	// Verify PrivateKey slice
-	if len(original.PrivateKey) != len(copied.PrivateKey) {
-		t.Errorf("Address %v: PrivateKey length mismatch: expected %d, got %d", addr, len(original.PrivateKey), len(copied.PrivateKey))
-	}
-	for i, b := range original.PrivateKey {
-		if copied.PrivateKey[i] != b {
-			t.Errorf("Address %v: PrivateKey byte %d mismatch: expected %d, got %d", addr, i, b, copied.PrivateKey[i])
-		}
-	}
-
-	// Verify PrivateKey slice is not the same underlying array
-	if len(original.PrivateKey) > 0 && &original.PrivateKey[0] == &copied.PrivateKey[0] {
-		t.Errorf("Address %v: PrivateKey slice shares underlying array", addr)
-	}
 }
 
 // Benchmark tests

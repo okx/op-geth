@@ -99,10 +99,7 @@ func (ga *GenesisAlloc) DeepCopy() *GenesisAlloc {
 			copy(copiedAccount.Code, account.Code)
 		}
 
-		if account.PrivateKey != nil {
-			copiedAccount.PrivateKey = make([]byte, len(account.PrivateKey))
-			copy(copiedAccount.PrivateKey, account.PrivateKey)
-		}
+		copiedAccount.Nonce = account.Nonce
 
 		if account.Balance != nil {
 			copiedAccount.Balance = new(big.Int).Set(account.Balance)
