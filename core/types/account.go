@@ -21,6 +21,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -84,4 +85,39 @@ func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
 		(*ga)[common.Address(addr)] = a
 	}
 	return nil
+}
+
+func (ga *GenesisAlloc) DeepCopy() *GenesisAlloc {
+	erigonAllocCopied := make(GenesisAlloc, len(*ga))
+	for addr, account := range *ga {
+		copiedAccount := Account{
+			Nonce: account.Nonce,
+		}
+
+		if account.Code != nil {
+			copiedAccount.Code = make([]byte, len(account.Code))
+			copy(copiedAccount.Code, account.Code)
+		}
+
+		if account.PrivateKey != nil {
+			copiedAccount.PrivateKey = make([]byte, len(account.PrivateKey))
+			copy(copiedAccount.PrivateKey, account.PrivateKey)
+		}
+
+		if account.Balance != nil {
+			copiedAccount.Balance = new(big.Int).Set(account.Balance)
+		}
+
+		// Deep copy Storage map
+		if account.Storage != nil {
+			copiedAccount.Storage = make(map[common.Hash]common.Hash, len(account.Storage))
+			maps.Copy(copiedAccount.Storage, account.Storage)
+			//for key, value := range account.Storage {
+			//	copiedAccount.Storage[key] = value // common.Hash is copied by value
+			//}
+		}
+
+		erigonAllocCopied[addr] = copiedAccount
+	}
+	return &erigonAllocCopied
 }
