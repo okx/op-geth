@@ -658,7 +658,7 @@ func TestMigrationGenerateMigrateAlloc(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateMigrateAlloc(tt.dbAlloc, tt.ignoreAddresses, tt.genesisAlloc)
+			result := generateMigrateAlloc(tt.dbAlloc, tt.ignoreAddresses, tt.genesisAlloc, big.NewInt(0))
 
 			if tt.expectError {
 				// For error cases, we expect the function to still return a result

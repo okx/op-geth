@@ -46,6 +46,7 @@ require (
 	github.com/holiman/bloomfilter/v2 v2.0.3
 	github.com/holiman/uint256 v1.3.2
 	github.com/huin/goupnp v1.3.0
+	github.com/iden3/go-iden3-crypto v0.0.17
 	github.com/influxdata/influxdb-client-go/v2 v2.4.0
 	github.com/influxdata/influxdb1-client v0.0.0-20220302092344-a9ab5670611c
 	github.com/jackpal/go-nat-pmp v1.0.2

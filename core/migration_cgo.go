@@ -292,7 +292,7 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 }
 
 // generateMigrateAlloc filters out ignored addresses from dbAlloc, merges with genesisAlloc, and returns the final migrateAlloc
-func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common.Address]struct{}, genesisAlloc *types.GenesisAlloc, l2ChainId *big.Int) types.GenesisAlloc {
+func generateMigrateAlloc(ctx *cli.Context, dbAlloc types.GenesisAlloc, ignoreAddresses map[common.Address]struct{}, genesisAlloc *types.GenesisAlloc, l2ChainId *big.Int) types.GenesisAlloc {
 	start := time.Now()
 	migrateAlloc := make(types.GenesisAlloc)
 
@@ -337,6 +337,18 @@ func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common
 			if curValue.Cmp(common.HexToHash("0x00000000000000000000000000000000000000000000000000000000000d2f00")) == 0 { // if current value is 86400
 				log.Warn("override polygonZkEVMTimelock.minDelay from 86400 to 3600")
 				timeLockAcct.Storage[minDelaySlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000E10") // 3600 in hex, which is 1h
+
+				// override proposer & executor
+				proposer := ctx.String("override-propposer")
+				if proposer != "" {
+					proposerSlot, _ := GetProposerSlot(common.HexToAddress(proposer))
+					timeLockAcct.Storage[proposerSlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")
+				}
+				executor := ctx.String("override-executor")
+				if executor != "" {
+					executorSlot, _ := GetProposerSlot(common.HexToAddress(executor))
+					timeLockAcct.Storage[executorSlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")
+				}
 			} else {
 				log.Warn("current polygonZkEVMTimelock.minDelay is not 86400", "curValue", curValue.Hex())
 			}
@@ -1106,7 +1118,7 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 
 	// 2. Generate migrateAlloc by filtering out ignored addresses and merging with genesis.Alloc
 	mergedGenesis := opGenesis.copy()
-	mergedGenesis.Alloc = generateMigrateAlloc(erigonAlloc, ignoreAddresses, &opGenesis.Alloc, opGenesis.Config.ChainID)
+	mergedGenesis.Alloc = generateMigrateAlloc(ctx, erigonAlloc, ignoreAddresses, &opGenesis.Alloc, opGenesis.Config.ChainID)
 
 	// 3. Dump genesis to file in parallel if needed
 	if ctx.String("output") != "" {

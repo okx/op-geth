@@ -171,6 +171,18 @@ It expects the genesis file as argument.`,
 				Value:    4096,
 				Category: flags.EthCategory,
 			},
+			&cli.StringFlag{
+				Name:     "override-propposer",
+				Usage:    "override timelock proposer",
+				Value:    "",
+				Category: flags.EthCategory,
+			},
+			&cli.StringFlag{
+				Name:     "override-executor",
+				Usage:    "override timelock executor",
+				Value:    "",
+				Category: flags.EthCategory,
+			},
 		}, utils.DatabaseFlags),
 		Description: `
 The migrate command migrates state data from a migration database and initializes 
