@@ -65,6 +65,7 @@ func verifyAccount(workerId int, addr common.Address, expectedAccount types.Acco
 	}
 
 	if slices.Contains(skippedAddress, addr) {
+		log.Info("skip verify for", "address", addr.Hex())
 		resultChan <- result
 		return
 	}
