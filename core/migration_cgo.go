@@ -293,7 +293,7 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 }
 
 // generateMigrateAlloc filters out ignored addresses from dbAlloc, merges with genesisAlloc, and returns the final migrateAlloc
-func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common.Address]struct{}, genesisAlloc *types.GenesisAlloc) types.GenesisAlloc {
+func generateMigrateAlloc(ctx *cli.Context, dbAlloc types.GenesisAlloc, ignoreAddresses map[common.Address]struct{}, genesisAlloc *types.GenesisAlloc, l2ChainId *big.Int) types.GenesisAlloc {
 	start := time.Now()
 	migrateAlloc := make(types.GenesisAlloc)
 
@@ -329,6 +329,36 @@ func generateMigrateAlloc(dbAlloc types.GenesisAlloc, ignoreAddresses map[common
 		migrateAlloc[addr] = destAccount
 	}
 	log.Info("mergeAlloc: merge completed", "status", "✅", "total_accounts", len(migrateAlloc), "elapsed", time.Since(start))
+
+	if l2ChainId != nil && l2ChainId.Cmp(big.NewInt(196)) == 0 { // override timelock.Mindelay for mainnet
+		polygonZkEVMTimelock := common.HexToAddress("0xBBa0935Fa93Eb23de7990b47F0D96a8f75766d13")
+		if timeLockAcct, ok := migrateAlloc[polygonZkEVMTimelock]; ok {
+			minDelaySlot := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002")
+			curValue := timeLockAcct.Storage[minDelaySlot]
+			if curValue.Cmp(common.HexToHash("0x00000000000000000000000000000000000000000000000000000000000d2f00")) == 0 { // if current value is 86400
+				log.Warn("override polygonZkEVMTimelock.minDelay from 86400 to 3600")
+				timeLockAcct.Storage[minDelaySlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000E10") // 3600 in hex, which is 1h
+
+				// override proposer & executor
+				proposer := ctx.String("override-proposer")
+				if proposer != "" {
+					log.Warn("override polygonZkEVMTimelock.proposer", "proposer", proposer)
+					proposerSlot, _ := GetProposerSlot(common.HexToAddress(proposer))
+					timeLockAcct.Storage[proposerSlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")
+				}
+				executor := ctx.String("override-executor")
+				if executor != "" {
+					log.Warn("override polygonZkEVMTimelock.executor", "executor", executor)
+					executorSlot, _ := GetExecutorSlot(common.HexToAddress(executor))
+					timeLockAcct.Storage[executorSlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")
+				}
+			} else {
+				log.Warn("current polygonZkEVMTimelock.minDelay is not 86400", "curValue", curValue.Hex())
+			}
+		} else {
+			log.Warn("no polygonZkEVMTimelock contract found", "address", polygonZkEVMTimelock)
+		}
+	}
 
 	return migrateAlloc
 }
@@ -1235,7 +1265,7 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 
 	// 2. Generate migrateAlloc by filtering out ignored addresses and merging with genesis.Alloc
 	mergedGenesis := opGenesis.copy()
-	mergedGenesis.Alloc = generateMigrateAlloc(erigonAlloc, ignoreAddresses, &opGenesis.Alloc)
+	mergedGenesis.Alloc = generateMigrateAlloc(ctx, erigonAlloc, ignoreAddresses, &opGenesis.Alloc, opGenesis.Config.ChainID)
 
 	// 3. Dump genesis to file in parallel if needed
 	if ctx.String("output") != "" {

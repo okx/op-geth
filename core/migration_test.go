@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"github.com/urfave/cli/v2"
 	"math/big"
 	"testing"
 	"unsafe"
@@ -658,7 +659,12 @@ func TestMigrationGenerateMigrateAlloc(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateMigrateAlloc(tt.dbAlloc, tt.ignoreAddresses, tt.genesisAlloc)
+			app := &cli.App{
+				Name:  "test-app",
+				Flags: []cli.Flag{},
+			}
+			ctx := cli.NewContext(app, nil, nil)
+			result := generateMigrateAlloc(ctx, tt.dbAlloc, tt.ignoreAddresses, tt.genesisAlloc, big.NewInt(0))
 
 			if tt.expectError {
 				// For error cases, we expect the function to still return a result
