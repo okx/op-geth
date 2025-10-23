@@ -20,6 +20,7 @@ import (
 )
 
 const EnvKafkaConsumerGroupID = "REALTIME_KAFKA_CONSUMER_GROUP_ID"
+const EnvKafkaConsumerClientID = "REALTIME_KAFKA_CONSUMER_CLIENT_ID"
 
 var (
 	// OkPay
@@ -456,6 +457,13 @@ func setRealtimeXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 		// Override consumer group id if env variable is set
 		cfg.XLayer.Realtime.Kafka.GroupID = envGroupID
 	}
+	if ctx.IsSet(RealtimeKafkaSyncClientID.Name) {
+		cfg.XLayer.Realtime.Kafka.ClientID = ctx.String(RealtimeKafkaSyncClientID.Name)
+	}
+	if envClientID := os.Getenv(EnvKafkaConsumerClientID); envClientID != "" {
+		// Override consumer client id if env variable is set
+		cfg.XLayer.Realtime.Kafka.ClientID = envClientID
+	}
 	if ctx.IsSet(RealtimeEnableFlag.Name) {
 		cfg.XLayer.Realtime.Enable = ctx.Bool(RealtimeEnableFlag.Name)
 	}
@@ -485,9 +493,6 @@ func setRealtimeXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 	if ctx.IsSet(RealtimeKafkaSyncErrorTopic.Name) {
 		cfg.XLayer.Realtime.Kafka.ErrorTopic = ctx.String(RealtimeKafkaSyncErrorTopic.Name)
-	}
-	if ctx.IsSet(RealtimeKafkaSyncClientID.Name) {
-		cfg.XLayer.Realtime.Kafka.ClientID = ctx.String(RealtimeKafkaSyncClientID.Name)
 	}
 	if ctx.IsSet(RealtimeSubscribeWebsocket.Name) {
 		cfg.XLayer.Realtime.SubscribeWebsocket = ctx.Bool(RealtimeSubscribeWebsocket.Name)
