@@ -316,7 +316,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	}
 
 	// For X Layer, realtime
-	realtimeApi := eth.TryGetRealtimeAPIs(filterApi)
+	realtimeApi := eth.TryGetSubRealtimeAPIs(filterApi)
 	if realtimeApi != nil {
 		stack.RegisterAPIs(realtimeApi)
 	}

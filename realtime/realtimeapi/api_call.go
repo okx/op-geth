@@ -20,8 +20,7 @@ import (
 // Note that realtime API only supports execution on the latest block.
 func (api *RealtimeAPIImpl) Call(ctx context.Context, args ethapi.TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash, overrides *override.StateOverride, blockOverrides *override.BlockOverrides) (hexutil.Bytes, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.Call(ctx, args, blockNrOrHash, overrides, blockOverrides)
+		return api.blockchainApi.Call(ctx, args, blockNrOrHash, overrides, blockOverrides)
 	}
 
 	if blockNrOrHash == nil {
@@ -31,8 +30,7 @@ func (api *RealtimeAPIImpl) Call(ctx context.Context, args ethapi.TransactionArg
 
 	reader, blockNum, err := api.createStateReader(*blockNrOrHash)
 	if err != nil || reader == nil {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.Call(ctx, args, blockNrOrHash, overrides, blockOverrides)
+		return api.blockchainApi.Call(ctx, args, blockNrOrHash, overrides, blockOverrides)
 	}
 
 	return api.doRealtimeCall(ctx, args, reader, blockNum, overrides, blockOverrides)
@@ -63,8 +61,7 @@ func (api *RealtimeAPIImpl) doRealtimeCall(ctx context.Context, args ethapi.Tran
 // Returns an estimate of how much gas is necessary to allow the transaction to complete.
 func (api *RealtimeAPIImpl) EstimateGas(ctx context.Context, args ethapi.TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash, overrides *override.StateOverride, blockOverrides *override.BlockOverrides) (hexutil.Uint64, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.EstimateGas(ctx, args, blockNrOrHash, overrides, blockOverrides)
+		return api.blockchainApi.EstimateGas(ctx, args, blockNrOrHash, overrides, blockOverrides)
 	}
 
 	if blockNrOrHash == nil {
@@ -74,8 +71,7 @@ func (api *RealtimeAPIImpl) EstimateGas(ctx context.Context, args ethapi.Transac
 
 	reader, blockNum, err := api.createStateReader(*blockNrOrHash)
 	if err != nil || reader == nil {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.EstimateGas(ctx, args, blockNrOrHash, overrides, blockOverrides)
+		return api.blockchainApi.EstimateGas(ctx, args, blockNrOrHash, overrides, blockOverrides)
 	}
 	header, _, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {

@@ -14,19 +14,16 @@ import (
 // Returns the receipt of a transaction given the transaction's hash.
 func (api *RealtimeAPIImpl) GetTransactionReceipt(ctx context.Context, hash common.Hash) (map[string]interface{}, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
-		backend := ethapi.NewTransactionAPI(api.b, nil)
-		return backend.GetTransactionReceipt(ctx, hash)
+		return api.transactionApi.GetTransactionReceipt(ctx, hash)
 	}
 
 	txn, receipt, _, _, ok := api.cacheDB.Stateless.GetTxInfo(hash)
 	if !ok {
-		backend := ethapi.NewTransactionAPI(api.b, nil)
-		return backend.GetTransactionReceipt(ctx, hash)
+		return api.transactionApi.GetTransactionReceipt(ctx, hash)
 	}
 	header, _, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(receipt.BlockNumber.Uint64())
 	if !ok {
-		backend := ethapi.NewTransactionAPI(api.b, nil)
-		return backend.GetTransactionReceipt(ctx, hash)
+		return api.transactionApi.GetTransactionReceipt(ctx, hash)
 	}
 	signer := types.MakeSigner(api.b.ChainConfig(), header.Number, header.Time)
 	return ethapi.MarshalReceipt(receipt, header.Number.Uint64(), signer, txn, api.b.ChainConfig()), nil
@@ -34,14 +31,12 @@ func (api *RealtimeAPIImpl) GetTransactionReceipt(ctx context.Context, hash comm
 
 func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.BlockNumberOrHash) ([]map[string]interface{}, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.GetBlockReceipts(ctx, number)
+		return api.blockchainApi.GetBlockReceipts(ctx, number)
 	}
 
 	blockNum, _, isPending, err := api.getBlockNumberOrHash(number)
 	if err != nil {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.GetBlockReceipts(ctx, number)
+		return api.blockchainApi.GetBlockReceipts(ctx, number)
 	}
 
 	header, _, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
@@ -54,23 +49,20 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 				return nil, fmt.Errorf("header not found for block %d", blockNum)
 			}
 		} else {
-			backend := ethapi.NewBlockChainAPI(api.b)
-			return backend.GetBlockReceipts(ctx, number)
+			return api.blockchainApi.GetBlockReceipts(ctx, number)
 		}
 	}
 
 	txHashes, ok := api.cacheDB.Stateless.GetBlockTxs(blockNum)
 	if !ok {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.GetBlockReceipts(ctx, number)
+		return api.blockchainApi.GetBlockReceipts(ctx, number)
 	}
 	signer := types.MakeSigner(api.b.ChainConfig(), header.Number, header.Time)
 	result := make([]map[string]interface{}, 0, len(txHashes))
 	for _, txHash := range txHashes {
 		txn, receipt, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash)
 		if !exists {
-			backend := ethapi.NewBlockChainAPI(api.b)
-			return backend.GetBlockReceipts(ctx, number)
+			return api.blockchainApi.GetBlockReceipts(ctx, number)
 		}
 		result = append(result, ethapi.MarshalReceipt(receipt, header.Number.Uint64(), signer, txn, api.b.ChainConfig()))
 	}

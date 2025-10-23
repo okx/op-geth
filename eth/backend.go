@@ -552,12 +552,15 @@ func makeExtraData(extra []byte) []byte {
 func (s *Ethereum) APIs() []rpc.API {
 	apis := ethapi.GetAPIs(s.APIBackend)
 
+	// For X Layer, realtime
+	apis = s.TryGetRealtimeAPIs(apis)
+
 	//// Append any APIs exposed explicitly by the consensus engine
 	//apis = append(apis, s.engine.APIs(s.BlockChain())...)
 
 	// For X Layer, wrap APIs with migration routing if configured
 	if s.xlayerLegacyRPCService != nil {
-		apis = WrapAPIsForXlayer(apis, s.xlayerLegacyRPCService)
+		apis = s.WrapAPIsForXlayer(apis, s.xlayerLegacyRPCService)
 	}
 
 	// Append any Sequencer APIs as enabled

@@ -8,11 +8,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/params"
 	realtimeCache "github.com/ethereum/go-ethereum/realtime/cache"
-	"github.com/ethereum/go-ethereum/realtime/subscription"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -23,23 +21,23 @@ var (
 )
 
 type RealtimeAPIImpl struct {
-	cacheDB    *realtimeCache.RealtimeCache
-	subService *subscription.RealtimeSubscription
-	b          ethapi.Backend
-	filterApi  *filters.FilterAPI
+	cacheDB        *realtimeCache.RealtimeCache
+	b              ethapi.Backend
+	blockchainApi  BlockchainAPI
+	transactionApi TransactionAPI
 }
 
 func NewRealtimeAPI(
 	cacheDB *realtimeCache.RealtimeCache,
-	subService *subscription.RealtimeSubscription,
 	base ethapi.Backend,
-	filterApi *filters.FilterAPI,
+	blockchainApi BlockchainAPI,
+	transactionApi TransactionAPI,
 ) *RealtimeAPIImpl {
 	return &RealtimeAPIImpl{
-		cacheDB:    cacheDB,
-		subService: subService,
-		b:          base,
-		filterApi:  filterApi,
+		cacheDB:        cacheDB,
+		b:              base,
+		blockchainApi:  blockchainApi,
+		transactionApi: transactionApi,
 	}
 }
 

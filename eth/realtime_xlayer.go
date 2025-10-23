@@ -6,6 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/eth/filters"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/realtime"
 	realtimeCache "github.com/ethereum/go-ethereum/realtime/cache"
@@ -88,16 +89,29 @@ func (eth *Ethereum) StopRealtime() {
 	}
 }
 
-func (eth *Ethereum) TryGetRealtimeAPIs(filterApi *filters.FilterAPI) []rpc.API {
+func (eth *Ethereum) TryGetRealtimeAPIs(apis []rpc.API) []rpc.API {
 	if eth.RealtimeEnabled() {
-		return []rpc.API{
+		apis = append(apis, []rpc.API{
 			{
 				Namespace: "eth",
-				Service:   realtimeapi.NewRealtimeAPI(eth.realtimeCache, eth.realtimeSub, eth.APIBackend, filterApi),
+				Service:   realtimeapi.NewRealtimeAPI(eth.realtimeCache, eth.APIBackend, ethapi.NewBlockChainAPI(eth.APIBackend), ethapi.NewTransactionAPI(eth.APIBackend, nil)),
 			},
 			{
 				Namespace: "debug",
 				Service:   realtimeapi.NewRealtimeDebugAPI(eth.realtimeCache, eth.APIBackend),
+			},
+		}...)
+		return apis
+	}
+	return apis
+}
+
+func (eth *Ethereum) TryGetSubRealtimeAPIs(filterApi *filters.FilterAPI) []rpc.API {
+	if eth.RealtimeEnabled() {
+		return []rpc.API{
+			{
+				Namespace: "eth",
+				Service:   realtimeapi.NewRealtimeSubAPI(eth.realtimeCache, eth.realtimeSub, eth.APIBackend, filterApi),
 			},
 		}
 	}

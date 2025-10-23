@@ -7,13 +7,36 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/filters"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
+	realtimeCache "github.com/ethereum/go-ethereum/realtime/cache"
 	realtimeSub "github.com/ethereum/go-ethereum/realtime/subscription"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
+type RealtimeSubAPIImpl struct {
+	cacheDB    *realtimeCache.RealtimeCache
+	subService *realtimeSub.RealtimeSubscription
+	b          ethapi.Backend
+	filterApi  *filters.FilterAPI
+}
+
+func NewRealtimeSubAPI(
+	cacheDB *realtimeCache.RealtimeCache,
+	subService *realtimeSub.RealtimeSubscription,
+	base ethapi.Backend,
+	filterApi *filters.FilterAPI,
+) *RealtimeSubAPIImpl {
+	return &RealtimeSubAPIImpl{
+		cacheDB:    cacheDB,
+		subService: subService,
+		b:          base,
+		filterApi:  filterApi,
+	}
+}
+
 // Realtime send a notification each time when a transaction was received in real-time.
-func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.StreamCriteria) (*rpc.Subscription, error) {
+func (api *RealtimeSubAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.StreamCriteria) (*rpc.Subscription, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
 		// Custom for realtime
 		return &rpc.Subscription{}, ErrRealtimeNotEnabled
@@ -118,7 +141,7 @@ func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.S
 }
 
 // Logs send a notification each time a new log appears in real-time.
-func (api *RealtimeAPIImpl) Logs(ctx context.Context, crit filters.FilterCriteria) (*rpc.Subscription, error) {
+func (api *RealtimeSubAPIImpl) Logs(ctx context.Context, crit filters.FilterCriteria) (*rpc.Subscription, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
 		return api.filterApi.Logs(ctx, crit)
 	}

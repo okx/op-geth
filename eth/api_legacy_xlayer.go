@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/internal/ethapi/override"
+	"github.com/ethereum/go-ethereum/realtime/realtimeapi"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -780,7 +781,7 @@ func (api *XlayerHybridFilterAPI) GetLogs(ctx context.Context, crit filters.Filt
 }
 
 // WrapAPIsForXlayer wraps the standard APIs with migration-aware versions
-func WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API {
+func (eth *Ethereum) WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API {
 	if config == nil {
 		return apis // No migration configured, return original APIs
 	}
@@ -788,6 +789,8 @@ func WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API
 	// Create a map for easy lookup and replacement
 	wrapped := make([]rpc.API, 0, len(apis))
 
+	var blockchainApi *XlayerHybridBlockChainAPI
+	var txApi *XlayerHybridTransactionAPI
 	for _, api := range apis {
 		switch api.Namespace {
 		case "eth":
@@ -819,10 +822,21 @@ func WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API
 				})
 			default:
 				wrapped = append(wrapped, api)
+			case *realtimeapi.RealtimeAPIImpl:
+				// Skip adding this as we will used the wrapped backends instead
+				continue
 			}
 		default:
 			wrapped = append(wrapped, api)
 		}
+	}
+
+	// For X Layer, realtime
+	if eth.RealtimeEnabled() {
+		wrapped = append(wrapped, rpc.API{
+			Namespace: "eth",
+			Service:   realtimeapi.NewRealtimeAPI(eth.realtimeCache, eth.APIBackend, blockchainApi, txApi),
+		})
 	}
 
 	return wrapped

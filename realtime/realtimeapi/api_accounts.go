@@ -7,20 +7,17 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
 func (api *RealtimeAPIImpl) GetBalance(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Big, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.GetBalance(ctx, address, blockNrOrHash)
+		return api.blockchainApi.GetBalance(ctx, address, blockNrOrHash)
 	}
 
 	reader, _, err := api.createStateReader(blockNrOrHash)
 	if err != nil || reader == nil {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.GetBalance(ctx, address, blockNrOrHash)
+		return api.blockchainApi.GetBalance(ctx, address, blockNrOrHash)
 	}
 
 	acc, err := reader.Account(address)
@@ -37,18 +34,15 @@ func (api *RealtimeAPIImpl) GetBalance(ctx context.Context, address common.Addre
 
 func (api *RealtimeAPIImpl) GetTransactionCount(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Uint64, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
-		backend := ethapi.NewTransactionAPI(api.b, nil)
-		return backend.GetTransactionCount(ctx, address, blockNrOrHash)
+		return api.transactionApi.GetTransactionCount(ctx, address, blockNrOrHash)
 	}
 
 	reader, _, err := api.createStateReader(blockNrOrHash)
 	if err != nil || reader == nil {
-		backend := ethapi.NewTransactionAPI(api.b, nil)
-		return backend.GetTransactionCount(ctx, address, blockNrOrHash)
+		return api.transactionApi.GetTransactionCount(ctx, address, blockNrOrHash)
 	}
 
-	backend := ethapi.NewTransactionAPI(api.b, nil)
-	ethNonce, err := backend.GetTransactionCount(ctx, address, blockNrOrHash)
+	ethNonce, err := api.transactionApi.GetTransactionCount(ctx, address, blockNrOrHash)
 	if err != nil {
 		ethNonce = nil
 	}
@@ -81,14 +75,12 @@ func (api *RealtimeAPIImpl) GetTransactionCount(ctx context.Context, address com
 
 func (api *RealtimeAPIImpl) GetCode(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.GetCode(ctx, address, blockNrOrHash)
+		return api.blockchainApi.GetCode(ctx, address, blockNrOrHash)
 	}
 
 	reader, _, err := api.createStateReader(blockNrOrHash)
 	if err != nil || reader == nil {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.GetCode(ctx, address, blockNrOrHash)
+		return api.blockchainApi.GetCode(ctx, address, blockNrOrHash)
 	}
 
 	acc, err := reader.Account(address)
@@ -104,14 +96,12 @@ func (api *RealtimeAPIImpl) GetCode(ctx context.Context, address common.Address,
 
 func (api *RealtimeAPIImpl) GetStorageAt(ctx context.Context, address common.Address, index string, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.GetStorageAt(ctx, address, index, blockNrOrHash)
+		return api.blockchainApi.GetStorageAt(ctx, address, index, blockNrOrHash)
 	}
 
 	reader, _, err := api.createStateReader(blockNrOrHash)
 	if err != nil || reader == nil {
-		backend := ethapi.NewBlockChainAPI(api.b)
-		return backend.GetStorageAt(ctx, address, index, blockNrOrHash)
+		return api.blockchainApi.GetStorageAt(ctx, address, index, blockNrOrHash)
 	}
 
 	var empty []byte
