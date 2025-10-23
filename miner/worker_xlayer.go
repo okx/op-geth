@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
@@ -51,6 +52,12 @@ func (env *environment) snapshot() *environment {
 }
 
 func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generateParams, witness bool) *newPayloadResult {
+	proposeStats, ok := metrics.GlobalStatsStore.Get(genParam.parentHash)
+	if !ok {
+		proposeStats = nil
+	}
+	startBuildTime := time.Now()
+
 	// Validation cached state
 	if payload.baseEnv == nil {
 		return &newPayloadResult{err: errors.New("no cached environment")}
@@ -73,6 +80,7 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 		existingTxHashes[tx.Hash()] = struct{}{}
 	}
 
+	execStart := time.Now()
 	if !genParam.noTxs {
 		// use shared interrupt if present
 		interrupt := genParam.interrupt
@@ -91,6 +99,9 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 			log.Info("Block building got interrupted by payload resolution")
 		}
 	}
+	if proposeStats != nil {
+		proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
+	}
 
 	// Note that we do not handle interrupts on incremental updates since block is building incrementally
 	// and we need to compute state root and finalize the block to ensure the incremental update is updated
@@ -106,6 +117,7 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 	if miner.chainConfig.IsPrague(work.header.Number, work.header.Time) && !isIsthmus {
 		requests = [][]byte{}
 		// EIP-6110 deposits
+		xstart := time.Now()
 		if err := core.ParseDepositLogs(&requests, allLogs, miner.chainConfig); err != nil {
 			return &newPayloadResult{err: err}
 		}
@@ -117,6 +129,9 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 		if err := core.ProcessConsolidationQueue(&requests, work.evm); err != nil {
 			return &newPayloadResult{err: err}
 		}
+		if proposeStats != nil {
+			proposeStats.CumulativeTiming(metrics.ProposePragueMs, time.Since(xstart))
+		}
 	}
 	if isIsthmus {
 		requests = [][]byte{}
@@ -126,10 +141,35 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 		work.header.RequestsHash = &reqHash
 	}
 
+	assembleStart := time.Now()
 	block, err := miner.engine.FinalizeAndAssemble(miner.chain, work.header, work.state, &body, work.receipts)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
+	if proposeStats != nil {
+		proposeStats.CumulativeTiming(metrics.ProposeAssembleMs, time.Since(assembleStart))
+	}
+
+	// Include StateDB internal timings
+	if work != nil && work.state != nil {
+		sdb := work.state
+		if proposeStats != nil {
+			proposeStats.CumulativeTiming(metrics.AccountReadMs, sdb.AccountReads)
+			proposeStats.CumulativeTiming(metrics.AccountHashMs, sdb.AccountHashes)
+			proposeStats.CumulativeTiming(metrics.AccountUpdateMs, sdb.AccountUpdates)
+			proposeStats.CumulativeTiming(metrics.StorageReadMs, sdb.StorageReads)
+			proposeStats.CumulativeTiming(metrics.StorageUpdateMs, sdb.StorageUpdates)
+		}
+	}
+
+	// Counters and total time
+	// Set block number and counters
+	if proposeStats != nil {
+		proposeStats.SetValue(metrics.TxCounter, int64(len(work.txs)))
+		proposeStats.SetValue(metrics.GasUsedCounter, int64(block.GasUsed()))
+		proposeStats.CumulativeTiming(metrics.ProposeTotalMs, time.Since(startBuildTime))
+	}
+
 	newPayload := &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),

@@ -55,6 +55,7 @@ const (
 type Statistics interface {
 	CumulativeCounting(tag LogTag)
 	CumulativeValue(tag LogTag, value int64)
+	SetValue(tag LogTag, value int64)
 	CumulativeTiming(tag LogTag, duration time.Duration)
 	CumulativeMicroTiming(tag LogTag, duration time.Duration)
 	SetTag(tag LogTag, value string)
@@ -94,6 +95,13 @@ func (l *statisticsInstance) CumulativeValue(tag LogTag, value int64) {
 		l.counters = make(map[LogTag]int64)
 	}
 	l.counters[tag] += value
+}
+
+func (l *statisticsInstance) SetValue(tag LogTag, value int64) {
+	if l.counters == nil {
+		l.counters = make(map[LogTag]int64)
+	}
+	l.counters[tag] = value
 }
 
 func (l *statisticsInstance) CumulativeTiming(tag LogTag, duration time.Duration) {

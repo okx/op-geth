@@ -276,9 +276,9 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 
 	// Counters and total time
 	// Set block number and counters
-	proposeStats.CumulativeValue(metrics.BlockNumberTag, int64(block.NumberU64()))
-	proposeStats.CumulativeValue(metrics.TxCounter, int64(len(work.txs)))
-	proposeStats.CumulativeValue(metrics.GasUsedCounter, int64(block.GasUsed()))
+	proposeStats.SetValue(metrics.BlockNumberTag, int64(block.NumberU64()))
+	proposeStats.SetValue(metrics.TxCounter, int64(len(work.txs)))
+	proposeStats.SetValue(metrics.GasUsedCounter, int64(block.GasUsed()))
 	proposeStats.CumulativeTiming(metrics.ProposeTotalMs, time.Since(startBuildTime))
 
 	// store propose stats snapshot keyed by block hash; output will be merged at insertChain

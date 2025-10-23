@@ -34,6 +34,19 @@ func (s *StatsStore) Put(hash common.Hash, stat Statistics) {
 	s.mu.Unlock()
 }
 
+func (s *StatsStore) Get(hash common.Hash) (Statistics, bool) {
+	if s == nil {
+		return nil, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	it, ok := s.items[hash]
+	if !ok {
+		return nil, false
+	}
+	return it.stat, true
+}
+
 func (s *StatsStore) GetAndDelete(hash common.Hash) (Statistics, bool) {
 	if s == nil {
 		return nil, false
