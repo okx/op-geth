@@ -52,13 +52,15 @@ func (env *environment) snapshot() *environment {
 }
 
 func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generateParams, witness bool) *newPayloadResult {
-	proposeStats, ok := metrics.GlobalStatsStore.GetAndDelete(payload.full.Hash())
+	oldBlockHash := payload.full.Hash()
+	proposeStats, ok := metrics.GlobalStatsStore.Get(oldBlockHash)
 	if !ok {
 		proposeStats = nil
 	}
 	startBuildTime := time.Now()
 
 	// Validation cached state
+	prepareStart := time.Now()
 	if payload.baseEnv == nil {
 		return &newPayloadResult{err: errors.New("no cached environment")}
 	}
@@ -69,6 +71,14 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 	}
 
 	work := payload.baseEnv.snapshot()
+
+	// Capture base StateDB timings before incremental work to calculate deltas
+	baseAccountReads := work.state.AccountReads
+	baseAccountHashes := work.state.AccountHashes
+	baseAccountUpdates := work.state.AccountUpdates
+	baseStorageReads := work.state.StorageReads
+	baseStorageUpdates := work.state.StorageUpdates
+
 	if witness {
 		work.state.StartPrefetcher("miner-incremental", work.witness, nil)
 		defer work.state.StopPrefetcher()
@@ -78,6 +88,9 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 	existingTxHashes := make(map[common.Hash]struct{}, len(work.txs))
 	for _, tx := range work.txs {
 		existingTxHashes[tx.Hash()] = struct{}{}
+	}
+	if proposeStats != nil {
+		proposeStats.CumulativeTiming(metrics.ProposePrepareMs, time.Since(prepareStart))
 	}
 
 	execStart := time.Now()
@@ -150,15 +163,14 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 		proposeStats.CumulativeTiming(metrics.ProposeAssembleMs, time.Since(assembleStart))
 	}
 
-	// Include StateDB internal timings
 	if work != nil && work.state != nil {
 		sdb := work.state
 		if proposeStats != nil {
-			proposeStats.CumulativeTiming(metrics.AccountReadMs, sdb.AccountReads)
-			proposeStats.CumulativeTiming(metrics.AccountHashMs, sdb.AccountHashes)
-			proposeStats.CumulativeTiming(metrics.AccountUpdateMs, sdb.AccountUpdates)
-			proposeStats.CumulativeTiming(metrics.StorageReadMs, sdb.StorageReads)
-			proposeStats.CumulativeTiming(metrics.StorageUpdateMs, sdb.StorageUpdates)
+			proposeStats.CumulativeTiming(metrics.AccountReadMs, sdb.AccountReads-baseAccountReads)
+			proposeStats.CumulativeTiming(metrics.AccountHashMs, sdb.AccountHashes-baseAccountHashes)
+			proposeStats.CumulativeTiming(metrics.AccountUpdateMs, sdb.AccountUpdates-baseAccountUpdates)
+			proposeStats.CumulativeTiming(metrics.StorageReadMs, sdb.StorageReads-baseStorageReads)
+			proposeStats.CumulativeTiming(metrics.StorageUpdateMs, sdb.StorageUpdates-baseStorageUpdates)
 		}
 	}
 
@@ -171,6 +183,7 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 	}
 
 	if block != nil && proposeStats != nil {
+		metrics.GlobalStatsStore.GetAndDelete(oldBlockHash)
 		metrics.GlobalStatsStore.Put(block.Hash(), proposeStats)
 	}
 

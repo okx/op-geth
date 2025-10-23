@@ -799,6 +799,8 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment, 
 	// Split the pending transactions into locals and remotes.
 	prioPlainTxs, normalPlainTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingPlainTxs
 	prioBlobTxs, normalBlobTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingBlobTxs
+	log.Info(fmt.Sprintf("[Realtime] XXX here, normalPlainTxs count: %d, normalBlobTxs count: %d", len(normalPlainTxs), len(normalBlobTxs)))
+	log.Info(fmt.Sprintf("[Realtime] XXX here, prioPlainTxs count: %d, prioBlobTxs count: %d", len(prioPlainTxs), len(prioBlobTxs)))
 
 	// For X Layer
 	type okPayTx struct {
