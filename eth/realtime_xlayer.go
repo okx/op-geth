@@ -90,24 +90,42 @@ func (eth *Ethereum) StopRealtime() {
 }
 
 func (eth *Ethereum) TryGetRealtimeAPIs(apis []rpc.API) []rpc.API {
-	if eth.RealtimeEnabled() {
+	if eth.RealtimeEnabled() && eth.config.XLayer.Realtime.RealtimeRpc {
+		var blockchainApi *ethapi.BlockChainAPI
+		var transactionApi *ethapi.TransactionAPI
+		for _, api := range apis {
+			switch api.Namespace {
+			case "eth":
+				switch original := api.Service.(type) {
+				case *ethapi.BlockChainAPI:
+					blockchainApi = original
+				case *ethapi.TransactionAPI:
+					transactionApi = original
+				}
+			}
+		}
+		if blockchainApi == nil {
+			blockchainApi = ethapi.NewBlockChainAPI(eth.APIBackend)
+		}
+		if transactionApi == nil {
+			transactionApi = ethapi.NewTransactionAPI(eth.APIBackend, nil)
+		}
 		apis = append(apis, []rpc.API{
 			{
 				Namespace: "eth",
-				Service:   realtimeapi.NewRealtimeAPI(eth.realtimeCache, eth.APIBackend, ethapi.NewBlockChainAPI(eth.APIBackend), ethapi.NewTransactionAPI(eth.APIBackend, nil)),
+				Service:   realtimeapi.NewRealtimeAPI(eth.realtimeCache, eth.APIBackend, blockchainApi, transactionApi),
 			},
 			{
 				Namespace: "debug",
 				Service:   realtimeapi.NewRealtimeDebugAPI(eth.realtimeCache, eth.APIBackend),
 			},
 		}...)
-		return apis
 	}
 	return apis
 }
 
 func (eth *Ethereum) TryGetSubRealtimeAPIs(filterApi *filters.FilterAPI) []rpc.API {
-	if eth.RealtimeEnabled() {
+	if eth.RealtimeEnabled() && eth.config.XLayer.Realtime.RealtimeRpc {
 		return []rpc.API{
 			{
 				Namespace: "eth",
