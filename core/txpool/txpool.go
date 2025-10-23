@@ -366,6 +366,7 @@ func (p *TxPool) Add(txs []*types.Transaction, sync bool) []error {
 		// If the transaction was rejected by all subpools, mark it unsupported
 		if split == -1 {
 			errs[i] = fmt.Errorf("%w: received type %d", core.ErrTxTypeNotSupported, txs[i].Type())
+			// For X Layer, monitor
 			monitor.LogTransactionEnd(txHash, monitor.ServiceNameTxPool, monitor.StepTxPoolReject.ID,
 				monitor.StepTxPoolReject.Key, 0, "", 0, int8(txs[i].Type()),
 				"rejected", errs[i].Error(), 0)
@@ -374,7 +375,7 @@ func (p *TxPool) Add(txs []*types.Transaction, sync bool) []error {
 		// Find which subpool handled it and pull in the corresponding error
 		errs[i] = errsets[split][0]
 		errsets[split] = errsets[split][1:]
-		// Log transaction end based on result
+		// For X Layer, log transaction end based on result
 		if errs[i] == nil {
 			monitor.LogTransactionEnd(txHash, monitor.ServiceNameTxPool, monitor.StepTxPoolAccept.ID,
 				monitor.StepTxPoolAccept.Key, 0, "", 0, int8(txs[i].Type()),

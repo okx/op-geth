@@ -49,7 +49,6 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		BlobPool                                  blobpool.Config
 		GPO                                       gasprice.Config
 		EnablePreimageRecording                   bool
-		EnableInnerTx                             bool
 		VMTrace                                   string
 		VMTraceJsonConfig                         string
 		RPCGasCap                                 uint64
@@ -74,10 +73,10 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		RollupDisableTxPoolGossip                 bool
 		RollupDisableTxPoolAdmission              bool
 		RollupHaltOnIncompatibleProtocolVersion   string
-		InteropMessageRPC                         string        `toml:",omitempty"`
-		InteropMempoolFiltering                   bool          `toml:",omitempty"`
-		XLayer                                    XLayerConfig  `toml:",omitempty"`
-		Monitor                                   MonitorConfig `toml:",omitempty"`
+		InteropMessageRPC                         string `toml:",omitempty"`
+		InteropMempoolFiltering                   bool   `toml:",omitempty"`
+		// For X Layer
+		XLayer XLayerConfig `toml:",omitempty"`
 	}
 	var enc Config
 	enc.Genesis = c.Genesis
@@ -112,7 +111,6 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.BlobPool = c.BlobPool
 	enc.GPO = c.GPO
 	enc.EnablePreimageRecording = c.EnablePreimageRecording
-	enc.EnableInnerTx = c.EnableInnerTx
 	enc.VMTrace = c.VMTrace
 	enc.VMTraceJsonConfig = c.VMTraceJsonConfig
 	enc.RPCGasCap = c.RPCGasCap
@@ -139,8 +137,8 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.RollupHaltOnIncompatibleProtocolVersion = c.RollupHaltOnIncompatibleProtocolVersion
 	enc.InteropMessageRPC = c.InteropMessageRPC
 	enc.InteropMempoolFiltering = c.InteropMempoolFiltering
+	// For X Layer
 	enc.XLayer = c.XLayer
-	enc.Monitor = c.Monitor
 	return &enc, nil
 }
 
@@ -179,7 +177,6 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		BlobPool                                  *blobpool.Config
 		GPO                                       *gasprice.Config
 		EnablePreimageRecording                   *bool
-		EnableInnerTx                             *bool
 		VMTrace                                   *string
 		VMTraceJsonConfig                         *string
 		RPCGasCap                                 *uint64
@@ -204,10 +201,10 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		RollupDisableTxPoolGossip                 *bool
 		RollupDisableTxPoolAdmission              *bool
 		RollupHaltOnIncompatibleProtocolVersion   *string
-		InteropMessageRPC                         *string        `toml:",omitempty"`
-		InteropMempoolFiltering                   *bool          `toml:",omitempty"`
-		XLayer                                    *XLayerConfig  `toml:",omitempty"`
-		Monitor                                   *MonitorConfig `toml:",omitempty"`
+		InteropMessageRPC                         *string `toml:",omitempty"`
+		InteropMempoolFiltering                   *bool   `toml:",omitempty"`
+		// For X Layer
+		XLayer *XLayerConfig `toml:",omitempty"`
 	}
 	var dec Config
 	if err := unmarshal(&dec); err != nil {
@@ -309,9 +306,6 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	if dec.EnablePreimageRecording != nil {
 		c.EnablePreimageRecording = *dec.EnablePreimageRecording
 	}
-	if dec.EnableInnerTx != nil {
-		c.EnableInnerTx = *dec.EnableInnerTx
-	}
 	if dec.VMTrace != nil {
 		c.VMTrace = *dec.VMTrace
 	}
@@ -390,11 +384,9 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	if dec.InteropMempoolFiltering != nil {
 		c.InteropMempoolFiltering = *dec.InteropMempoolFiltering
 	}
+	// For X Layer
 	if dec.XLayer != nil {
 		c.XLayer = *dec.XLayer
-	}
-	if dec.Monitor != nil {
-		c.Monitor = *dec.Monitor
 	}
 	return nil
 }
