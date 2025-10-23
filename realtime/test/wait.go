@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -78,7 +77,7 @@ func WaitEthTxToBeMined(parentCtx context.Context, client ethClienter, tx *types
 }
 
 // WaitRealtimeTxToBeConfirmed waits until a tx has been confirmed or the given timeout expires.
-func WaitRealtimeTxToBeConfirmed(parentCtx context.Context, client *rtclient.RealtimeClient, tx *types.Transaction, timeout time.Duration, toAddress common.Address, initialBalance *big.Int) error {
+func WaitRealtimeTxToBeConfirmed(parentCtx context.Context, client *rtclient.RealtimeClient, tx *types.Transaction, timeout time.Duration, toAddress common.Address) error {
 	ctx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()
 	receipt, err := WaitMined(ctx, client, tx.Hash())
@@ -101,7 +100,7 @@ func WaitRealtimeTxToBeConfirmed(parentCtx context.Context, client *rtclient.Rea
 }
 
 // WaitEthTxToBeConfirmed waits until a tx has been confirmed or the given timeout expires.
-func WaitEthTxToBeConfirmed(parentCtx context.Context, client ethClienter, tx *types.Transaction, timeout time.Duration, toAddress common.Address, initialBalance *big.Int) error {
+func WaitEthTxToBeConfirmed(parentCtx context.Context, client ethClienter, tx *types.Transaction, timeout time.Duration, toAddress common.Address) error {
 	ctx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()
 	receipt, err := WaitMined(ctx, client, tx.Hash())
@@ -124,7 +123,7 @@ func WaitEthTxToBeConfirmed(parentCtx context.Context, client ethClienter, tx *t
 }
 
 // WaitRealtimeErc20TxToBeConfirmed waits until an erc20 tx has been confirmed or the given timeout expires.
-func WaitRealtimeErc20TxToBeConfirmed(parentCtx context.Context, client *rtclient.RealtimeClient, tx *types.Transaction, timeout time.Duration, fromAddress, toAddress common.Address, initialBalance *big.Int) error {
+func WaitRealtimeErc20TxToBeConfirmed(parentCtx context.Context, client *rtclient.RealtimeClient, tx *types.Transaction, timeout time.Duration, fromAddress, toAddress common.Address) error {
 	ctx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()
 	receipt, err := WaitMined(ctx, client, tx.Hash())
@@ -147,7 +146,7 @@ func WaitRealtimeErc20TxToBeConfirmed(parentCtx context.Context, client *rtclien
 }
 
 // WaitEthErc20TxToBeConfirmed waits until an erc20 tx has been confirmed or the given timeout expires.
-func WaitEthErc20TxToBeConfirmed(parentCtx context.Context, client ethClienter, tx *types.Transaction, timeout time.Duration, toAddress common.Address, initialBalance *big.Int) error {
+func WaitEthErc20TxToBeConfirmed(parentCtx context.Context, client ethClienter, tx *types.Transaction, timeout time.Duration, toAddress common.Address) error {
 	ctx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()
 	receipt, err := WaitMined(ctx, client, tx.Hash())

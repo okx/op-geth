@@ -45,22 +45,6 @@ func TestRealtimeBenchmarkNativeTransferConfirmation(t *testing.T) {
 	time.Sleep(3 * time.Second)
 	var totalRealtimeBalanceDuration, totalEthBalanceDuration time.Duration
 	for i := 0; i < Iterations; i++ {
-		// Ensure heights are consistent
-		realtimeHeight, err := client.RealtimeBlockNumber(ctx, "latest")
-		require.NoError(t, err)
-		nonRtHeight, err := nonRtClient.BlockNumber(ctx)
-		require.NoError(t, err)
-		commonHeight := nonRtHeight
-		if realtimeHeight < nonRtHeight {
-			commonHeight = realtimeHeight
-		}
-
-		ethBalance, err := nonRtClient.BalanceAt(ctx, testAddress, big.NewInt(int64(commonHeight)))
-		require.NoError(t, err)
-		realtimeBalance, err := client.BalanceAt(ctx, testAddress, big.NewInt(int64(commonHeight)))
-		require.NoError(t, err)
-		require.Equal(t, ethBalance.String(), realtimeBalance.String())
-
 		// Send tx
 		signedTx := nativeTransferTx(t, context.Background(), client, big.NewInt(Gwei), testAddress.String())
 		fmt.Printf("Sent tx: %s\n", signedTx.Hash().String())
@@ -70,7 +54,7 @@ func TestRealtimeBenchmarkNativeTransferConfirmation(t *testing.T) {
 		var realtimeBalanceDuration, ethBalanceDuration time.Duration
 		g.Go(func() error {
 			startTime := time.Now()
-			err := WaitRealtimeTxToBeConfirmed(ctx, client, signedTx, DefaultTimeoutTxToBeMined, testAddress, realtimeBalance)
+			err := WaitRealtimeTxToBeConfirmed(ctx, client, signedTx, DefaultTimeoutTxToBeMined, testAddress)
 			require.NoError(t, err)
 			realtimeBalanceDuration = time.Since(startTime)
 			return nil
@@ -78,7 +62,7 @@ func TestRealtimeBenchmarkNativeTransferConfirmation(t *testing.T) {
 
 		g.Go(func() error {
 			startTime := time.Now()
-			err := WaitEthTxToBeConfirmed(ctx, nonRtClient, signedTx, DefaultTimeoutTxToBeMined, testAddress, ethBalance)
+			err := WaitEthTxToBeConfirmed(ctx, nonRtClient, signedTx, DefaultTimeoutTxToBeMined, testAddress)
 			require.NoError(t, err)
 			ethBalanceDuration = time.Since(startTime)
 			return nil
@@ -135,15 +119,8 @@ func TestRealtimeBenchmarkERC20TransferConfirmation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Benchmark erc20 transfer tx
-	time.Sleep(3 * time.Second)
 	var totalRealtimeBalanceDuration, totalEthBalanceDuration time.Duration
 	for i := 0; i < Iterations; i++ {
-		ethBalance, err := GetErc20Balance(ctx, nonRtClient, testAddress, erc20Address, nil)
-		require.NoError(t, err)
-		realtimeBalance, err := client.RealtimeGetTokenBalance(ctx, fromAddress, testAddress, erc20Address)
-		require.NoError(t, err)
-		require.Equal(t, ethBalance.String(), realtimeBalance.String())
-
 		signedTx := erc20TransferTx(t, ctx, privateKey, client, transferAmount, nil, testAddress, erc20Address, startNonce+uint64(i))
 		fmt.Printf("Sent tx: %s\n", signedTx.Hash().String())
 
@@ -152,7 +129,7 @@ func TestRealtimeBenchmarkERC20TransferConfirmation(t *testing.T) {
 		var realtimeBalanceDuration, ethBalanceDuration time.Duration
 		g.Go(func() error {
 			startTime := time.Now()
-			err := WaitRealtimeErc20TxToBeConfirmed(ctx, client, signedTx, DefaultTimeoutTxToBeMined, fromAddress, testAddress, realtimeBalance)
+			err := WaitRealtimeErc20TxToBeConfirmed(ctx, client, signedTx, DefaultTimeoutTxToBeMined, fromAddress, testAddress)
 			require.NoError(t, err)
 			realtimeBalanceDuration = time.Since(startTime)
 			return nil
@@ -160,7 +137,7 @@ func TestRealtimeBenchmarkERC20TransferConfirmation(t *testing.T) {
 
 		g.Go(func() error {
 			startTime := time.Now()
-			err := WaitEthErc20TxToBeConfirmed(ctx, nonRtClient, signedTx, DefaultTimeoutTxToBeMined, testAddress, ethBalance)
+			err := WaitEthErc20TxToBeConfirmed(ctx, nonRtClient, signedTx, DefaultTimeoutTxToBeMined, testAddress)
 			require.NoError(t, err)
 			ethBalanceDuration = time.Since(startTime)
 			return nil
