@@ -52,7 +52,7 @@ func (env *environment) snapshot() *environment {
 }
 
 func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generateParams, witness bool) *newPayloadResult {
-	proposeStats, ok := metrics.GlobalStatsStore.Get(genParam.parentHash)
+	proposeStats, ok := metrics.GlobalStatsStore.GetAndDelete(payload.full.Hash())
 	if !ok {
 		proposeStats = nil
 	}
@@ -168,6 +168,10 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 		proposeStats.SetValue(metrics.TxCounter, int64(len(work.txs)))
 		proposeStats.SetValue(metrics.GasUsedCounter, int64(block.GasUsed()))
 		proposeStats.CumulativeTiming(metrics.ProposeTotalMs, time.Since(startBuildTime))
+	}
+
+	if block != nil && proposeStats != nil {
+		metrics.GlobalStatsStore.Put(block.Hash(), proposeStats)
 	}
 
 	newPayload := &newPayloadResult{
