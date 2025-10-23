@@ -658,6 +658,7 @@ func TestRealtimeStateIsConsistent(t *testing.T) {
 	// Dump state cache for further checking
 	err = client.RealtimeDumpCache(ctx)
 	require.NoError(t, err)
+	time.Sleep(1 * time.Second)
 	compareCacheWithSequenceDB(t, DefaultSequncerDBPath, DefaultStateCachePath)
 }
 
