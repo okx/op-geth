@@ -656,13 +656,15 @@ func TestRealtimeStateIsConsistent(t *testing.T) {
 	}
 
 	// Dump state cache for further checking
+	realtimeBlock, err := client.RealtimeGetBlock(ctx, "latest")
+	require.NoError(t, err)
 	err = client.RealtimeDumpCache(ctx)
 	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
-	compareCacheWithSequenceDB(t, DefaultSequncerDBPath, DefaultStateCachePath)
+	compareCacheWithSequenceDB(t, DefaultSequncerDBPath, DefaultStateCachePath, realtimeBlock.Number.ToInt().Uint64(), *realtimeBlock.Hash)
 }
 
-func compareCacheWithSequenceDB(t *testing.T, dbDir, cacheDir string) {
+func compareCacheWithSequenceDB(t *testing.T, dbDir, cacheDir string, height uint64, hash common.Hash) {
 	// Cache Files list
 	cacheFiles := map[string]string{
 		"account_cache.json": "",
@@ -704,7 +706,7 @@ func compareCacheWithSequenceDB(t *testing.T, dbDir, cacheDir string) {
 	defer db.Close()
 
 	// Get the latest state root
-	headHeader := rawdb.ReadHeadHeader(db)
+	headHeader := rawdb.ReadHeader(db, hash, height)
 	require.NotNil(t, headHeader, "Head header should not be nil")
 
 	// Create a trie database and state database
