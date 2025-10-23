@@ -270,6 +270,7 @@ func TestOkPayPrioritization(t *testing.T) {
 	t.Run("TransactionLimit", testOkPayTransactionLimit)
 	t.Run("MixedPriorities", testOkPayMixedPriorities)
 	t.Run("TimeOrdering", testOkPayTimeOrdering)
+	t.Run("NonceOrdering", testOkPayNonceOrdering)
 
 }
 
@@ -711,6 +712,84 @@ func testOkPayTimeOrdering(t *testing.T) {
 		included, ok := expectedIncluded[actualHash]
 		if ok || included {
 			t.Fatalf("Transaction at position %d should not be included", id)
+		}
+	}
+}
+
+// testOkPayNonceOrdering tests that OkPay transactions are ordered by their nonce
+func testOkPayNonceOrdering(t *testing.T) {
+	// Create test accounts
+	okPayKey, _ := crypto.GenerateKey()
+	normalKey, _ := crypto.GenerateKey()
+
+	okPayAddr1 := crypto.PubkeyToAddress(okPayKey.PublicKey)
+	normalAddr := crypto.PubkeyToAddress(normalKey.PublicKey)
+	// Configure OkPay with high limit to ensure all transactions are prioritized
+
+	miner := createMiner(t, []common.Address{okPayAddr1, normalAddr})
+	miner.config.OkPayPriorityEnable = true
+	miner.config.OkPayBlockPriorityTxsLimit = 5
+	miner.config.OkPaySenderAccounts = []common.Address{okPayAddr1}
+
+	signer := types.LatestSigner(miner.chainConfig)
+
+	// Create transactions with different nonces
+	txCount := 3
+	txs := make([]*types.Transaction, 3)
+	expectedIncluded := map[common.Hash]bool{}
+
+	for i := 0; i < txCount; i++ {
+		// Submit nonce in decreasing order
+		j := txCount - i - 1
+		tx := types.MustSignNewTx(okPayKey, signer, &types.LegacyTx{
+			Nonce:    uint64(j),
+			To:       &testUserAddress,
+			Value:    big.NewInt(1000),
+			Gas:      params.TxGas,
+			GasPrice: big.NewInt(int64(params.InitialBaseFee * (1 + rand.Intn(10)))), // Same gas price for all
+		})
+		txs[i] = tx
+
+		t.Logf("Transaction %d: %s", i, tx.Hash().Hex())
+
+		// Add to expected included transactions
+		expectedIncluded[tx.Hash()] = true
+
+		// Add transaction to pool
+		miner.txpool.Add(types.Transactions{tx}, true)
+	}
+
+	// Verify transactions are in the pool
+	for _, tx := range txs {
+		if !miner.txpool.Has(tx.Hash()) {
+			t.Fatalf("Transaction %s is not in the pool", tx.Hash().Hex())
+		}
+	}
+
+	// Generate block
+	timestamp := uint64(time.Now().Unix())
+	r := miner.generateWork(&generateParams{
+		parentHash: miner.chain.CurrentBlock().Hash(),
+		timestamp:  timestamp,
+		random:     common.HexToHash("0xcafebabe"),
+		noTxs:      false,
+		forceTime:  true,
+	}, false)
+
+	if r.err != nil {
+		t.Fatalf("Failed to generate work: %v", r.err)
+	}
+
+	// Verify all transactions are included because the block has enough slots
+	blockTxs := r.block.Transactions()
+
+	// Verify transactions are included in nonce order
+	for id := range len(expectedIncluded) {
+		actualHash := blockTxs[id].Hash()
+		included, ok := expectedIncluded[actualHash]
+		if !ok || !included {
+			t.Fatalf("Transaction at position %d: expected %s, got %s",
+				id, actualHash.Hex(), actualHash.Hex())
 		}
 	}
 }

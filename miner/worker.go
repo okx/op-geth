@@ -24,6 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum/internal/monitor"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
@@ -810,10 +812,10 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment, 
 
 	sortedOkPayTxs := common.OrderedList[okPayTx]{}
 	sortedOkPayTxs.SetCompareFunc(func(a, b okPayTx) int {
-		if a.tx.Time.Before(b.tx.Time) {
+		if a.tx.Tx.Nonce() < b.tx.Tx.Nonce() {
 			return -1
 		}
-		if a.tx.Time.After(b.tx.Time) {
+		if a.tx.Tx.Nonce() > b.tx.Tx.Nonce() {
 			return 1
 		}
 		return 0
