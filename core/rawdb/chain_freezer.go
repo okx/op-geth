@@ -314,7 +314,7 @@ func (f *chainFreezer) freezeRange(nfdb *nofreezedb, number, limit uint64) (hash
 
 		for ; number <= limit; number++ {
 			// save empty data for legacy blocks
-			if number < config.LegacyXLayerBlock.Uint64() && number != 0 {
+			if config.IsXLayer() && number < config.LegacyXLayerBlock.Uint64() && number != 0 {
 				if err := op.AppendRaw(ChainFreezerHashTable, number, []byte{}); err != nil {
 					return fmt.Errorf("can't write hash to Freezer: %v", err)
 				}
