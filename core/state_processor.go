@@ -97,7 +97,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	for i, tx := range block.Transactions() {
 		txHash := tx.Hash().Hex()
 
-		// Log transaction processing start
+		// For X Layer, log transaction processing start
 		monitor.LogTransactionStart(
 			txHash,
 			monitor.ServiceNameState,

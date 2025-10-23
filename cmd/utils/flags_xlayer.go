@@ -212,73 +212,61 @@ var (
 		Usage: "GPO type",
 		Value: "follower",
 	}
-
 	GpoUpdatePeriod = &cli.Uint64Flag{
 		Name:  "gpo.update-period",
 		Usage: "GPO update period",
 		Value: 100000000000,
 	}
-
 	GpoFactor = &cli.Float64Flag{
 		Name:  "gpo.factor",
 		Usage: "raw gas price factor (Follower mode only)",
 		Value: 0,
 	}
-
 	GpoKafkaURL = &cli.StringFlag{
 		Name:  "gpo.kafka-url",
 		Usage: "GPO kafka url",
 		Value: "localhost:9092",
 	}
-
 	GpoTopic = &cli.StringFlag{
 		Name:  "gpo.topic",
 		Usage: "GPO topic",
 		Value: "middle_coinPrice_push",
 	}
-
 	GpoGroupID = &cli.StringFlag{
 		Name:  "gpo.group-id",
 		Usage: "GPO group id",
 		Value: "geth-consumer",
 	}
-
 	GpoL1CoinId = &cli.Uint64Flag{
 		Name:  "gpo.l1-coin-id",
 		Usage: "GPO l1 coin id",
 		Value: 15756,
 	}
-
 	GpoL2CoinId = &cli.Uint64Flag{
 		Name:  "gpo.l2-coin-id",
 		Usage: "GPO l2 coin id",
 		Value: 7184,
 	}
-
 	GpoDefaultL1CoinPrice = &cli.Float64Flag{
 		Name:  "gpo.default-l1-coin-price",
 		Usage: "GPO default l1 coin price",
 		Value: 2000.0,
 	}
-
 	GpoDefaultL2CoinPrice = &cli.Float64Flag{
 		Name:  "gpo.default-l2-coin-price",
 		Usage: "GPO default l2 coin price",
 		Value: 0.5,
 	}
-
 	GpoGasPriceUsdt = &cli.Float64Flag{
 		Name:  "gpo.gas-price-usdt",
 		Usage: "GPO gas price usdt",
 		Value: 0,
 	}
-
 	GpoCongestionThreshold = &cli.Uint64Flag{
 		Name:  "gpo.congestion-threshold",
 		Usage: "GPO congestion threshold",
 		Value: 0,
 	}
-
 	GpoDefault = &cli.StringFlag{
 		Name:  "gpo.default",
 		Usage: "GPO default",
@@ -506,7 +494,6 @@ func setRealtimeXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.IsSet(RealtimeStreamerTimeout.Name) {
 		cfg.XLayer.Realtime.WSConn.RealtimeStreamerTimeout = ctx.Duration(RealtimeStreamerTimeout.Name)
 	}
-
 }
 
 func setGPOXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
