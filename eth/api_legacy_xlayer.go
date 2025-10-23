@@ -797,18 +797,20 @@ func (eth *Ethereum) WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCSe
 			// Check if this is a BlockChainAPI, TransactionAPI or FilterAPI and wrap it
 			switch original := api.Service.(type) {
 			case *ethapi.BlockChainAPI:
+				blockchainApi = NewXlayerHybridBlockChainAPI(original, config)
 				wrapped = append(wrapped, rpc.API{
 					Namespace:     api.Namespace,
 					Version:       api.Version,
-					Service:       NewXlayerHybridBlockChainAPI(original, config),
+					Service:       blockchainApi,
 					Public:        api.Public,
 					Authenticated: api.Authenticated,
 				})
 			case *ethapi.TransactionAPI:
+				txApi = NewXlayerHybridTransactionAPI(original, config)
 				wrapped = append(wrapped, rpc.API{
 					Namespace:     api.Namespace,
 					Version:       api.Version,
-					Service:       NewXlayerHybridTransactionAPI(original, config),
+					Service:       txApi,
 					Public:        api.Public,
 					Authenticated: api.Authenticated,
 				})
@@ -820,11 +822,11 @@ func (eth *Ethereum) WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCSe
 					Public:        api.Public,
 					Authenticated: api.Authenticated,
 				})
-			default:
-				wrapped = append(wrapped, api)
 			case *realtimeapi.RealtimeAPIImpl:
 				// Skip adding this as we will used the wrapped backends instead
 				continue
+			default:
+				wrapped = append(wrapped, api)
 			}
 		default:
 			wrapped = append(wrapped, api)
@@ -832,12 +834,11 @@ func (eth *Ethereum) WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCSe
 	}
 
 	// For X Layer, realtime
-	if eth.RealtimeEnabled() {
+	if eth.RealtimeEnabled() && eth.config.XLayer.Realtime.RealtimeRpc {
 		wrapped = append(wrapped, rpc.API{
 			Namespace: "eth",
 			Service:   realtimeapi.NewRealtimeAPI(eth.realtimeCache, eth.APIBackend, blockchainApi, txApi),
 		})
 	}
-
 	return wrapped
 }
