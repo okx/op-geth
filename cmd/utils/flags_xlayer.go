@@ -37,7 +37,6 @@ var (
 		Value:    0,
 		Category: flags.XLayerCategory,
 	}
-
 	// Xlayer Intercept feature
 	InterceptEnabled = &cli.BoolFlag{
 		Name:     "intercept.enabled",
@@ -57,7 +56,6 @@ var (
 		Value:    ethconfig.Defaults.Miner.InterceptConfig.TargetTokenAddress,
 		Category: flags.XLayerCategory,
 	}
-
 	// InnerTx
 	InnerTxFlag = &cli.BoolFlag{
 		Name:     "innertx",
@@ -85,18 +83,17 @@ var (
 		Category: flags.XLayerCategory,
 		EnvVars:  []string{"OP_PP_RPC_TIMEOUT"},
 	}
+	// Monitor related flags
 	TraceLogPath = &cli.StringFlag{
 		Name:  "monitor.trace-log-path",
 		Usage: "Path of trace.log for transaction monitoring",
 		Value: "/var/log/op-geth/trace.log",
 	}
-
 	EnableTraceLog = &cli.BoolFlag{
 		Name:  "monitor.enable-trace-log",
 		Usage: "Enable full transaction trace log",
 		Value: false,
 	}
-
 	// Apollo
 	ApolloEnabledFlag = &cli.BoolFlag{
 		Name:  "apollo.enabled",
@@ -123,79 +120,67 @@ var (
 		Usage: "Apollo namespace",
 		Value: "application",
 	}
-
+	// GPO
 	GpoType = &cli.StringFlag{
 		Name:  "gpo.type",
 		Usage: "GPO type",
 		Value: "follower",
 	}
-
 	GpoUpdatePeriod = &cli.Uint64Flag{
 		Name:  "gpo.update-period",
 		Usage: "GPO update period",
 		Value: 100000000000,
 	}
-
 	GpoFactor = &cli.Float64Flag{
 		Name:  "gpo.factor",
 		Usage: "raw gas price factor (Follower mode only)",
 		Value: 0,
 	}
-
 	GpoKafkaURL = &cli.StringFlag{
 		Name:  "gpo.kafka-url",
 		Usage: "GPO kafka url",
 		Value: "localhost:9092",
 	}
-
 	GpoTopic = &cli.StringFlag{
 		Name:  "gpo.topic",
 		Usage: "GPO topic",
 		Value: "middle_coinPrice_push",
 	}
-
 	GpoGroupID = &cli.StringFlag{
 		Name:  "gpo.group-id",
 		Usage: "GPO group id",
 		Value: "geth-consumer",
 	}
-
 	GpoL1CoinId = &cli.Uint64Flag{
 		Name:  "gpo.l1-coin-id",
 		Usage: "GPO l1 coin id",
 		Value: 15756,
 	}
-
 	GpoL2CoinId = &cli.Uint64Flag{
 		Name:  "gpo.l2-coin-id",
 		Usage: "GPO l2 coin id",
 		Value: 7184,
 	}
-
 	GpoDefaultL1CoinPrice = &cli.Float64Flag{
 		Name:  "gpo.default-l1-coin-price",
 		Usage: "GPO default l1 coin price",
 		Value: 2000.0,
 	}
-
 	GpoDefaultL2CoinPrice = &cli.Float64Flag{
 		Name:  "gpo.default-l2-coin-price",
 		Usage: "GPO default l2 coin price",
 		Value: 0.5,
 	}
-
 	GpoGasPriceUsdt = &cli.Float64Flag{
 		Name:  "gpo.gas-price-usdt",
 		Usage: "GPO gas price usdt",
 		Value: 0,
 	}
-
 	GpoCongestionThreshold = &cli.Uint64Flag{
 		Name:  "gpo.congestion-threshold",
 		Usage: "GPO congestion threshold",
 		Value: 0,
 	}
-
 	GpoDefault = &cli.StringFlag{
 		Name:  "gpo.default",
 		Usage: "GPO default",
@@ -237,6 +222,17 @@ var (
 	}
 )
 
+// SetXLayerConfig is a public wrapper function to internally call all XLayer configuration functions
+func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
+	setOkPayXLayer(ctx, cfg)
+	setXLayerIntercept(ctx, cfg)
+	setInnerTxXLayer(ctx, cfg)
+	setMigrationXLayer(ctx, cfg)
+	setMonitorXLayer(ctx, cfg)
+	setApolloXLayer(ctx, cfg)
+	setGPOXLayer(ctx, cfg)
+}
+
 func setOkPayXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.IsSet(OkPayPriorityEnableFlag.Name) {
 		cfg.XLayer.OkPay.PriorityEnable = ctx.Bool(OkPayPriorityEnableFlag.Name)
@@ -270,7 +266,7 @@ func setXLayerIntercept(ctx *cli.Context, cfg *ethconfig.Config) {
 
 func setInnerTxXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.IsSet(InnerTxFlag.Name) {
-		cfg.EnableInnerTx = ctx.Bool(InnerTxFlag.Name)
+		cfg.XLayer.EnableInnerTx = ctx.Bool(InnerTxFlag.Name)
 	}
 }
 
@@ -311,17 +307,6 @@ func setApolloXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 }
 
-// SetXLayerConfig is a public wrapper function to internally call all XLayer configuration functions
-func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
-	setOkPayXLayer(ctx, cfg)
-	setXLayerIntercept(ctx, cfg)
-	setInnerTxXLayer(ctx, cfg)
-	setMigrationXLayer(ctx, cfg)
-	setMonitor(ctx, &cfg.Monitor)
-	setApolloXLayer(ctx, cfg)
-	setGPOXLayer(ctx, cfg)
-}
-
 // RegisterXlayerHybridFilterAPI adds the eth log filtering RPC API to the node.
 func RegisterXlayerHybridFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconfig.Config) *filters.FilterSystem {
 	filterSystem := filters.NewFilterSystem(backend, filters.Config{
@@ -340,15 +325,14 @@ func RegisterXlayerHybridFilterAPI(stack *node.Node, backend ethapi.Backend, eth
 	return filterSystem
 }
 
-// setMonitor applies monitor-related command line flags to the config.
-func setMonitor(ctx *cli.Context, cfg *ethconfig.MonitorConfig) {
+// setMonitorXLayer applies monitor-related command line flags to the config.
+func setMonitorXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.IsSet(EnableTraceLog.Name) {
-		cfg.EnableTraceLog = ctx.Bool(EnableTraceLog.Name)
+		cfg.XLayer.Monitor.EnableTraceLog = ctx.Bool(EnableTraceLog.Name)
 	}
 	if ctx.IsSet(TraceLogPath.Name) {
-		cfg.TraceLogPath = ctx.String(TraceLogPath.Name)
+		cfg.XLayer.Monitor.TraceLogPath = ctx.String(TraceLogPath.Name)
 	}
-
 }
 
 func setGPOXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
