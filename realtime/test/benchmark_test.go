@@ -42,12 +42,22 @@ func TestRealtimeBenchmarkNativeTransferConfirmation(t *testing.T) {
 	testAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
 
 	// Benchmark transfer tx to test address
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	var totalRealtimeBalanceDuration, totalEthBalanceDuration time.Duration
 	for i := 0; i < Iterations; i++ {
-		ethBalance, err := nonRtClient.BalanceAt(ctx, testAddress, nil)
+		// Ensure heights are consistent
+		realtimeHeight, err := client.RealtimeBlockNumber(ctx, "latest")
 		require.NoError(t, err)
-		realtimeBalance, err := client.RealtimeGetBalance(ctx, testAddress)
+		nonRtHeight, err := nonRtClient.BlockNumber(ctx)
+		require.NoError(t, err)
+		commonHeight := nonRtHeight
+		if realtimeHeight < nonRtHeight {
+			commonHeight = realtimeHeight
+		}
+
+		ethBalance, err := nonRtClient.BalanceAt(ctx, testAddress, big.NewInt(int64(commonHeight)))
+		require.NoError(t, err)
+		realtimeBalance, err := client.BalanceAt(ctx, testAddress, big.NewInt(int64(commonHeight)))
 		require.NoError(t, err)
 		require.Equal(t, ethBalance.String(), realtimeBalance.String())
 

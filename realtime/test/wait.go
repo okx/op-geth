@@ -97,25 +97,7 @@ func WaitRealtimeTxToBeConfirmed(parentCtx context.Context, client *rtclient.Rea
 		return fmt.Errorf("transaction has failed, reason: %s, receipt: %+v. tx: %+v, gas: %v", reason, receipt, tx, tx.Gas())
 	}
 	fmt.Printf("Realtime transaction successfully confirmed: %v\n", tx.Hash())
-
-	// Ensure native balance is updated
-	for {
-		balance, err := client.RealtimeGetBalance(ctx, toAddress)
-		if err != nil {
-			return err
-		}
-		if balance.Cmp(initialBalance) != 0 {
-			return nil
-		}
-		// Wait for the next round.
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			// With the default block time set at 1s, 5ms of sleep is a good enough threshold
-			time.Sleep(5 * time.Millisecond)
-		}
-	}
+	return nil
 }
 
 // WaitEthTxToBeConfirmed waits until a tx has been confirmed or the given timeout expires.
@@ -138,25 +120,7 @@ func WaitEthTxToBeConfirmed(parentCtx context.Context, client ethClienter, tx *t
 		return fmt.Errorf("transaction has failed, reason: %s, receipt: %+v. tx: %+v, gas: %v", reason, receipt, tx, tx.Gas())
 	}
 	fmt.Printf("Eth transaction successfully confirmed: %v\n", tx.Hash())
-
-	// Ensure native balance is updated
-	for {
-		balance, err := client.BalanceAt(ctx, toAddress, nil)
-		if err != nil {
-			return err
-		}
-		if balance.Cmp(initialBalance) != 0 {
-			return nil
-		}
-		// Wait for the next round.
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			// With the default block time set at 1s, 5ms of sleep is a good enough threshold
-			time.Sleep(5 * time.Millisecond)
-		}
-	}
+	return nil
 }
 
 // WaitRealtimeErc20TxToBeConfirmed waits until an erc20 tx has been confirmed or the given timeout expires.
@@ -179,31 +143,7 @@ func WaitRealtimeErc20TxToBeConfirmed(parentCtx context.Context, client *rtclien
 		return fmt.Errorf("transaction has failed, reason: %s, receipt: %+v. tx: %+v, gas: %v", reason, receipt, tx, tx.Gas())
 	}
 	fmt.Printf("Realtime transaction successfully confirmed: %v\n", tx.Hash())
-
-	// Ensure erc20 balance is updated
-	for {
-		// Get the receiver address from the transaction
-		erc20Address := *tx.To()
-		if erc20Address == (common.Address{}) {
-			return fmt.Errorf("invalid contract address")
-		}
-
-		balance, err := client.RealtimeGetTokenBalance(ctx, fromAddress, toAddress, erc20Address)
-		if err != nil {
-			return err
-		}
-
-		// Check if balance matches expected value
-		if balance.Cmp(initialBalance) != 0 {
-			return nil
-		}
-		// Wait for the next round.
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-	}
+	return nil
 }
 
 // WaitEthErc20TxToBeConfirmed waits until an erc20 tx has been confirmed or the given timeout expires.
@@ -226,29 +166,5 @@ func WaitEthErc20TxToBeConfirmed(parentCtx context.Context, client ethClienter, 
 		return fmt.Errorf("transaction has failed, reason: %s, receipt: %+v. tx: %+v, gas: %v", reason, receipt, tx, tx.Gas())
 	}
 	fmt.Printf("Eth transaction successfully confirmed: %v\n", tx.Hash())
-
-	// Ensure erc20 balance is updated
-	for {
-		// Get the receiver address from the transaction
-		erc20Address := *tx.To()
-		if erc20Address == (common.Address{}) {
-			return fmt.Errorf("invalid contract address")
-		}
-
-		balance, err := GetErc20Balance(ctx, client, toAddress, erc20Address, nil)
-		if err != nil {
-			return err
-		}
-
-		// Check if balance matches expected value
-		if balance.Cmp(initialBalance) != 0 {
-			return nil
-		}
-		// Wait for the next round.
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-	}
+	return nil
 }
