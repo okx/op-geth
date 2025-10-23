@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/ethereum/go-ethereum/log"
@@ -45,7 +46,6 @@ type consumerGroupHandler struct {
 	txMsgsChan    chan kafkaTypes.TransactionMessage
 	errorMsgsChan chan kafkaTypes.ErrorTriggerMessage
 	errorChan     chan error
-	headerTopic   string
 	blockTopic    string
 	txTopic       string
 	errorTopic    string
@@ -69,7 +69,8 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 			return err
 		case msg, ok := <-claim.Messages():
 			if !ok {
-				log.Debug("[Realtime] kafka consumer failed to get claim messages")
+				// Kafka server not available. Timeout and retry
+				time.Sleep(1 * time.Second)
 				continue
 			}
 			switch msg.Topic {
