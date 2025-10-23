@@ -205,7 +205,12 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 			interrupt.Store(commitInterruptTimeout)
 		})
 
-		err := miner.fillTransactions(interrupt, work, nil, genParam.realtimeEnabled)
+		// For X Layer. Optimize check interruption signal
+		if err := checkInterrupt(interrupt); err != nil {
+			return &newPayloadResult{err: err}
+		}
+		// For X Layer
+		err := miner.fillTransactions_XLayer(interrupt, work, nil, genParam.realtimeEnabled)
 		timer.Stop() // don't need timeout interruption any more
 		if errors.Is(err, errBlockInterruptedByTimeout) {
 			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(miner.config.Recommit))
@@ -766,7 +771,7 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 // fillTransactions retrieves the pending transactions from the txpool and fills them
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
-func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment, existTxs map[common.Hash]struct{}, realtimeEnabled bool) error {
+func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) error {
 	miner.confMu.RLock()
 	tip := miner.config.GasPrice
 	prio := miner.prio
@@ -792,85 +797,9 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment, 
 	filter.OnlyPlainTxs, filter.OnlyBlobTxs = false, true
 	pendingBlobTxs := miner.txpool.Pending(filter)
 
-	// For X Layer, filter out already-included transactions
-	pendingPlainTxs = filterNewTxs(pendingPlainTxs, existTxs)
-	pendingBlobTxs = filterNewTxs(pendingBlobTxs, existTxs)
-
 	// Split the pending transactions into locals and remotes.
 	prioPlainTxs, normalPlainTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingPlainTxs
 	prioBlobTxs, normalBlobTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingBlobTxs
-	log.Info(fmt.Sprintf("[Realtime] XXX here, normalPlainTxs count: %d, normalBlobTxs count: %d", len(normalPlainTxs), len(normalBlobTxs)))
-	log.Info(fmt.Sprintf("[Realtime] XXX here, prioPlainTxs count: %d, prioBlobTxs count: %d", len(prioPlainTxs), len(prioBlobTxs)))
-
-	// For X Layer
-	type okPayTx struct {
-		account common.Address
-		tx      *txpool.LazyTransaction
-	}
-
-	okPayTxs := make(map[common.Address][]*txpool.LazyTransaction)
-
-	sortedOkPayTxs := common.OrderedList[okPayTx]{}
-	sortedOkPayTxs.SetCompareFunc(func(a, b okPayTx) int {
-		if a.tx.Tx.Nonce() < b.tx.Tx.Nonce() {
-			return -1
-		}
-		if a.tx.Tx.Nonce() > b.tx.Tx.Nonce() {
-			return 1
-		}
-		return 0
-	})
-
-	accounts := miner.config.OkPaySenderAccounts
-
-	// Skip the entire loop if OkPay priority feature is disabled
-	if miner.config.OkPayPriorityEnable && len(accounts) > 0 {
-		for _, account := range accounts {
-			if txs := normalPlainTxs[account]; len(txs) > 0 {
-				for _, tx := range txs {
-					sortedOkPayTxs.Add(okPayTx{account: account, tx: tx})
-				}
-				delete(normalPlainTxs, account)
-			}
-		}
-
-		if sortedOkPayTxs.Size() > 0 {
-			sortedOkPayTxs.Sort()
-			items := sortedOkPayTxs.Items()
-
-			limit := int(miner.config.OkPayBlockPriorityTxsLimit) - env.okPayTxs
-			if limit < 0 {
-				limit = 0
-			}
-			if len(items) > limit {
-				// Process priority transactions
-				for _, item := range items[:limit] {
-					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
-					env.okPayTxs++
-				}
-				// Put back unselected transactions
-				for _, item := range items[limit:] {
-					normalPlainTxs[item.account] = append(normalPlainTxs[item.account], item.tx)
-				}
-			} else {
-				// All transactions get priority
-				for _, item := range items {
-					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
-					env.okPayTxs++
-				}
-			}
-		}
-	}
-	// Process OkPay transactions first (highest priority)
-	if len(okPayTxs) > 0 {
-		okpayPlainTxs := newTransactionsByPriceAndNonce(env.signer, okPayTxs, env.header.BaseFee)
-		emptyBlobTxs := newTransactionsByPriceAndNonce(env.signer, nil, env.header.BaseFee)
-		// execStart removed: caller accumulates timings
-		if err := miner.commitTransactions(env, okpayPlainTxs, emptyBlobTxs, interrupt, realtimeEnabled); err != nil {
-			return err
-		}
-		// Note: execution timing is accumulated in caller scope (generateWork)
-	}
 
 	for _, account := range prio {
 		if txs := normalPlainTxs[account]; len(txs) > 0 {
@@ -887,7 +816,8 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment, 
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, prioPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, prioBlobTxs, env.header.BaseFee)
 
-		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt, realtimeEnabled); err != nil {
+		// For X Layer, realtime is disabled for default
+		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt, false); err != nil {
 			return err
 		}
 	}
@@ -895,7 +825,8 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment, 
 		plainTxs := newTransactionsByPriceAndNonce(env.signer, normalPlainTxs, env.header.BaseFee)
 		blobTxs := newTransactionsByPriceAndNonce(env.signer, normalBlobTxs, env.header.BaseFee)
 
-		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt, realtimeEnabled); err != nil {
+		// For X Layer, realtime is disabled for default
+		if err := miner.commitTransactions(env, plainTxs, blobTxs, interrupt, false); err != nil {
 			return err
 		}
 	}
