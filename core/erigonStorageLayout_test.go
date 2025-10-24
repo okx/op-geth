@@ -1,6 +1,8 @@
 package core
 
 import (
+	"github.com/stretchr/testify/assert"
+	"math/big"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -28,4 +30,11 @@ func TestGetExecutorSlot_Deterministic(t *testing.T) {
 	if adminSlot.Cmp(common.HexToHash("0xdae2aa361dfd1ca020a396615627d436107c35eff9fe7738a3512819782d706a")) != 0 {
 		t.Errorf("ADMIN_SLOT should be equal to zero")
 	}
+}
+
+func TestCalculateBatchInboxAddr(t *testing.T) {
+	chainId := LeftPadBytes(big.NewInt(196).Bytes(), 32)
+	chainIdHash := common.BytesToHash(chainId)
+	addr := CalculateBatchInboxAddr(chainIdHash)
+	assert.Equal(t, "0x002bdE9b0c0857AEE2cFFDea6b8723eAF5989449", addr.Hex())
 }
