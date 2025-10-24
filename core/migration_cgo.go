@@ -293,17 +293,15 @@ func mergeConflictAccount(addr common.Address, xlayerErigonAcct, opGenesisAcct *
 }
 
 // generateMigrateAlloc filters out ignored addresses from dbAlloc, merges with genesisAlloc, and returns the final migrateAlloc
-func generateMigrateAlloc(ctx *cli.Context, erigonAlloc types.GenesisAlloc, ignoreAddresses map[common.Address]struct{}, genesisAlloc *types.GenesisAlloc, l2ChainId *big.Int) types.GenesisAlloc {
+func generateMigrateAlloc(ctx *cli.Context, dbAlloc types.GenesisAlloc, ignoreAddresses map[common.Address]struct{}, genesisAlloc *types.GenesisAlloc, l2ChainId *big.Int) types.GenesisAlloc {
 	start := time.Now()
 	migrateAlloc := make(types.GenesisAlloc)
 
-	dbAlloc := erigonAlloc.DeepCopy()
-
 	// Remove ignored addresses from dbAlloc
-	for addr, account := range *dbAlloc {
+	for addr, account := range dbAlloc {
 		if _, exists := ignoreAddresses[addr]; !exists {
 			if !IsEmptyAccount(account) {
-				migrateAlloc[addr] = account
+				migrateAlloc[addr] = account.DeepCopy()
 			} else {
 				log.Warn("mergeAlloc: empty account found", "address", addr.Hex())
 			}
