@@ -45,3 +45,11 @@ func GetExecutorSlot(account common.Address) (common.Hash, common.Hash) {
 	executorRoleId := common.HexToHash("0xd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e63")
 	return roleLayout(executorRoleId, account)
 }
+
+func CalculateBatchInboxAddr(chainID common.Hash) common.Address {
+	versionByte := byte(0x00)
+	var out common.Address
+	out[0] = versionByte
+	copy(out[1:], keccak256.Hash(chainID[:])[:19])
+	return out
+}

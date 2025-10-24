@@ -985,7 +985,6 @@ func verifyGenesisInternal(ctx *cli.Context, alloc types.GenesisAlloc, blockNumb
 	// Collect results
 	var verifiedCount int64
 	var errorCount int64
-	var ignoredCount int64
 
 	// Process results as they come in
 	for result := range resultChan {
@@ -1021,13 +1020,12 @@ func verifyGenesisInternal(ctx *cli.Context, alloc types.GenesisAlloc, blockNumb
 	if errorCount == 0 {
 		log.Info("✅ Genesis verification successful",
 			"accounts_verified", verifiedCount,
-			"accounts_ignored", ignoredCount,
 			"elapsed", common.PrettyDuration(time.Since(start)))
 	} else {
 		log.Error("❌ Genesis verification failed",
 			"errors", errorCount,
 			"accounts_verified", verifiedCount,
-			"accounts_ignored", ignoredCount)
+			"accounts_ignored")
 		return fmt.Errorf("verification failed with %d errors", errorCount)
 	}
 
