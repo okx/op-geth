@@ -265,7 +265,7 @@ func (payload *Payload) resolve(onlyFull bool) *engine.ExecutionPayloadEnvelope 
 	payload.interruptBuilding()
 
 	// For X Layer, realtime
-	if payload.full == nil && (onlyFull || payload.empty == nil) ||
+	if (payload.full == nil && (onlyFull || payload.empty == nil)) ||
 		(payload.realtimeEnabled.Load() && !payload.stoppedFlag.Load()) {
 		select {
 		case <-payload.stop:
