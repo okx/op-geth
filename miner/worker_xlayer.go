@@ -3,6 +3,7 @@ package miner
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"sync/atomic"
 	"time"
 
@@ -47,7 +48,7 @@ func (env *environment) snapshot() *environment {
 		noTxs:        env.noTxs,
 		rpcCtx:       env.rpcCtx,
 		okPayTxs:     env.okPayTxs,
-		blockDaBytes: env.blockDaBytes,
+		blockDaBytes: new(big.Int).Set(env.blockDaBytes),
 	}
 	if env.witness != nil {
 		snap.witness = env.witness.Copy()
