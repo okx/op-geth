@@ -462,15 +462,14 @@ func (api *XlayerHybridTransactionAPI) GetBlockTransactionCountByNumber(ctx cont
 }
 
 // eth_getBlockInternalTransactions FORWARD
-func (api *XlayerHybridTransactionAPI) GetBlockInternalTransactions(ctx context.Context, blockNr rpc.BlockNumber) (map[common.Hash][]*types.InnerTx, error) {
-	// Check if we should proxy to erigon
-	if api.legacyRpc.shouldProxy(uint64(blockNr)) {
-		var result map[common.Hash][]*types.InnerTx
-		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getBlockInternalTransactions", hexutil.Uint64(blockNr))
-		return result, err
+func (api *XlayerHybridTransactionAPI) GetBlockInternalTransactions(ctx context.Context, blockHash common.Hash) (map[common.Hash][]*types.InnerTx, error) {
+	result, err := api.TransactionAPI.GetBlockInternalTransactions(ctx, blockHash)
+	if err == nil && result != nil {
+		return result, nil
 	}
-	// Handle locally
-	return api.TransactionAPI.GetBlockInternalTransactions(ctx, blockNr)
+	var remoteResult map[common.Hash][]*types.InnerTx
+	err = api.legacyRpc.ErigonClient.CallContext(ctx, &remoteResult, "eth_getBlockInternalTransactions", blockHash)
+	return remoteResult, err
 }
 
 // eth_getInternalTransactions TransactionAPI LOCAL
