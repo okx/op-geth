@@ -22,6 +22,7 @@ import (
 	"math/big"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -246,7 +247,7 @@ func TestRejectedConditionalTx(t *testing.T) {
 		random:     common.HexToHash("0xcafebabe"),
 		noTxs:      false,
 		forceTime:  true,
-	}, false)
+	}, false, &atomic.Bool{})
 
 	if len(r.block.Transactions()) != 0 {
 		t.Fatalf("block should be empty")
@@ -350,7 +351,7 @@ func testOkPayPriorityOrder(t *testing.T) {
 		random:     common.HexToHash("0xcafebabe"),
 		noTxs:      false,
 		forceTime:  true,
-	}, false)
+	}, false, &atomic.Bool{})
 
 	if r.err != nil {
 		t.Fatalf("Failed to generate work: %v", r.err)
@@ -457,7 +458,7 @@ func testOkPayTransactionLimit(t *testing.T) {
 		random:     common.HexToHash("0xcafebabe"),
 		noTxs:      false,
 		forceTime:  true,
-	}, false)
+	}, false, &atomic.Bool{})
 
 	if r.err != nil {
 		t.Fatalf("Failed to generate work: %v", r.err)
@@ -572,7 +573,7 @@ func testOkPayMixedPriorities(t *testing.T) {
 		random:     common.HexToHash("0xcafebabe"),
 		noTxs:      false,
 		forceTime:  true,
-	}, false)
+	}, false, &atomic.Bool{})
 
 	if r.err != nil {
 		t.Fatalf("Failed to generate work: %v", r.err)
@@ -687,7 +688,7 @@ func testOkPayTimeOrdering(t *testing.T) {
 		random:     common.HexToHash("0xcafebabe"),
 		noTxs:      false,
 		forceTime:  true,
-	}, false)
+	}, false, &atomic.Bool{})
 
 	if r.err != nil {
 		t.Fatalf("Failed to generate work: %v", r.err)
@@ -774,7 +775,7 @@ func testOkPayNonceOrdering(t *testing.T) {
 		random:     common.HexToHash("0xcafebabe"),
 		noTxs:      false,
 		forceTime:  true,
-	}, false)
+	}, false, &atomic.Bool{})
 
 	if r.err != nil {
 		t.Fatalf("Failed to generate work: %v", r.err)

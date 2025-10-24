@@ -110,9 +110,11 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 		err := miner.fillTransactions_XLayer(interrupt, work, existingTxHashes, genParam.realtimeEnabled)
 		timer.Stop() // don't need timeout interruption any more
 		if errors.Is(err, errBlockInterruptedByTimeout) {
-			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(miner.config.Recommit))
+			log.Warn("Incremental block building is interrupted", "allowance", common.PrettyDuration(miner.config.Recommit))
+			payload.stoppedFlag.Store(true)
 		} else if errors.Is(err, errBlockInterruptedByResolve) {
-			log.Info("Block building got interrupted by payload resolution")
+			log.Info("Incremental block building got interrupted by payload resolution")
+			payload.stoppedFlag.Store(true)
 		}
 	}
 	if proposeStats != nil {
@@ -260,7 +262,6 @@ loop:
 	prioPlainTxs, normalPlainTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingPlainTxs
 	prioBlobTxs, normalBlobTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingBlobTxs
 
-	// For X Layer
 	type okPayTx struct {
 		account common.Address
 		tx      *txpool.LazyTransaction

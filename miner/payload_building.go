@@ -122,7 +122,8 @@ type Payload struct {
 
 	// For X Layer, realtime. Incremental building
 	realtimeEnabled        atomic.Bool
-	incrementalFlag        bool
+	incrementalFlag        atomic.Bool
+	stoppedFlag            atomic.Bool
 	baseEnv                *environment
 	baseParent             common.Hash
 	finalizeBlockChangeset *realtimeTypes.Changeset
@@ -145,7 +146,8 @@ func newPayload(lifeCtx context.Context, empty *types.Block, emptyRequests [][]b
 
 		// For X Layer, realtime
 		realtimeEnabled: atomic.Bool{},
-		incrementalFlag: false,
+		incrementalFlag: atomic.Bool{},
+		stoppedFlag:     atomic.Bool{},
 		baseEnv:         nil,
 	}
 	// For X Layer, realtime
@@ -197,10 +199,12 @@ func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration, backe
 				// Something went wrong here, should not happen. Trigger error
 				backend.SendRealtimeErrorTrigger(r.block.NumberU64())
 			} else {
-				// Cache successful env for incremental updates
-				payload.incrementalFlag = true
-				payload.baseEnv = r.env.snapshot()
-				payload.baseParent = r.block.ParentHash()
+				if !payload.stoppedFlag.Load() {
+					// Cache successful env for incremental updates
+					payload.incrementalFlag.Store(true)
+					payload.baseEnv = r.env.snapshot()
+					payload.baseParent = r.block.ParentHash()
+				}
 			}
 			payload.finalizeBlockChangeset = r.finalizeBlockChangeset
 		}
@@ -223,10 +227,6 @@ func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration, backe
 // Resolve returns the latest built payload and also terminates the background
 // thread for updating payload. It's safe to be called multiple times.
 func (payload *Payload) Resolve() *engine.ExecutionPayloadEnvelope {
-	// For X Layer, realtime
-	if payload.realtimeEnabled.Load() {
-		return payload.resolveRealtime()
-	}
 	return payload.resolve(false)
 }
 
@@ -264,7 +264,7 @@ func (payload *Payload) resolve(onlyFull bool) *engine.ExecutionPayloadEnvelope 
 	// and if it is an update, don't attempt to seal the block.
 	payload.interruptBuilding()
 
-	if payload.full == nil && (onlyFull || payload.empty == nil) {
+	if payload.full == nil && (onlyFull || payload.empty == nil) || payload.realtimeEnabled.Load() {
 		select {
 		case <-payload.stop:
 			return nil
@@ -357,7 +357,7 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 			// For X Layer, realtime
 			realtimeEnabled: args.RealtimeEnabled,
 		}
-		empty := miner.generateWork(emptyParams, witness)
+		empty := miner.generateWork(emptyParams, witness, &atomic.Bool{})
 		if empty.err != nil {
 			return nil, empty.err
 		}
@@ -431,11 +431,11 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 			var r *newPayloadResult
 			if !fullParams.realtimeEnabled {
 				// getSealingBlock is interrupted by shared interrupt
-				r = miner.generateWork(fullParams, witness)
+				r = miner.generateWork(fullParams, witness, &payload.stoppedFlag)
 			} else {
 				// For X Layer, realtime
-				if !payload.incrementalFlag {
-					r = miner.generateWork(fullParams, witness)
+				if !payload.incrementalFlag.Load() {
+					r = miner.generateWork(fullParams, witness, &payload.stoppedFlag)
 				} else {
 					// Incremental building
 					r = miner.tryIncrementalUpdate(payload, fullParams, witness)

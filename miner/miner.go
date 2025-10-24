@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -297,7 +298,7 @@ func (miner *Miner) getPending() *newPayloadResult {
 		withdrawals: withdrawal,
 		beaconRoot:  nil,
 		noTxs:       false,
-	}, false) // we will never make a witness for a pending block
+	}, false, &atomic.Bool{}) // we will never make a witness for a pending block
 	if ret.err != nil {
 		return nil
 	}
