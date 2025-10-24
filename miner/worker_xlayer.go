@@ -390,18 +390,12 @@ func (miner *Miner) asyncGetPendingTxsFromPool(filter *txpool.PendingFilter, res
 }
 
 func (miner *Miner) applyTransaction_XLayer(env *environment, tx *types.Transaction) (*types.Receipt, []*types.InnerTx, *state.Entries, error) {
-	// Get transaction sender
-	sender, err := types.Sender(env.signer, tx)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get sender: %w", err)
-	}
-
 	var (
 		snap = env.state.Snapshot()
 		gp   = env.gasPool.Gas()
 	)
 
-	// Do not finalize statedb to generate changeset
+	// Do not finalize statedb yet to generate changeset or bridge intercept
 	receipt, innertxs, entries, err := core.ApplyTransaction_XLayer(env.evm, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, false)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
@@ -411,6 +405,11 @@ func (miner *Miner) applyTransaction_XLayer(env *environment, tx *types.Transact
 
 	// Only intercept LegacyTxType transactions (most common for cross-chain bridge transactions)
 	if tx.Type() == types.LegacyTxType {
+		// Get transaction sender
+		sender, err := types.Sender(env.signer, tx)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to get sender: %w", err)
+		}
 		if interceptErr := interceptBridgeTransactionIfNeeded(receipt, sender, miner.config.InterceptConfig); interceptErr != nil {
 			// Revert state changes
 			env.state.RevertToSnapshot(snap)
@@ -421,7 +420,6 @@ func (miner *Miner) applyTransaction_XLayer(env *environment, tx *types.Transact
 			return nil, nil, nil, errors.New("bridge transaction intercepted")
 		}
 	}
-
 	return receipt, innertxs, entries, err
 }
 
