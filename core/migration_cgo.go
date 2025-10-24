@@ -301,7 +301,7 @@ func generateMigrateAlloc(ctx *cli.Context, dbAlloc types.GenesisAlloc, ignoreAd
 	for addr, account := range dbAlloc {
 		if _, exists := ignoreAddresses[addr]; !exists {
 			if !IsEmptyAccount(account) {
-				migrateAlloc[addr] = account
+				migrateAlloc[addr] = account.DeepCopy()
 			} else {
 				log.Warn("mergeAlloc: empty account found", "address", addr.Hex())
 			}

@@ -707,6 +707,44 @@ func TestMigrationGenerateMigrateAlloc(t *testing.T) {
 	}
 }
 
+func TestMigrationOverrideTimeLock(t *testing.T) {
+	app := &cli.App{
+		Name:  "test-app",
+		Flags: []cli.Flag{},
+	}
+	ctx := cli.NewContext(app, nil, nil)
+
+	timeLockStorage := make(map[common.Hash]common.Hash)
+	timeLockStorage[common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002")] = common.HexToHash("0x00000000000000000000000000000000000000000000000000000000000d2f00")
+	timeLockAcct := common.HexToAddress("0xBBa0935Fa93Eb23de7990b47F0D96a8f75766d13")
+	dbAlloc := types.GenesisAlloc{
+		timeLockAcct: {
+			Balance: big.NewInt(1000000000000000000),
+			Code:    []byte{1, 2, 3, 4}, // Same length as genesis code
+			Nonce:   5,
+			Storage: timeLockStorage,
+		},
+	}
+
+	genesisAlloc := &types.GenesisAlloc{
+		common.HexToAddress("0x3333333333333333333333333333333333333333"): {
+			Balance: big.NewInt(5000000000000000000),
+			Code:    []byte{9, 10, 11, 12}, // Same length as db code
+			Nonce:   20,
+			Storage: map[common.Hash]common.Hash{ // Genesis has storage - should cause error
+				common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000005"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000006"),
+			},
+		},
+	}
+	migrateAlloc := generateMigrateAlloc(ctx, dbAlloc, make(map[common.Address]struct{}), genesisAlloc, big.NewInt(196))
+
+	assert.Equal(t,
+		common.HexToHash("0x00000000000000000000000000000000000000000000000000000000000d2f00"), dbAlloc[timeLockAcct].Storage[common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002")])
+	assert.Equal(t,
+		common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000e10"), migrateAlloc[timeLockAcct].Storage[common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002")])
+
+}
+
 // TestMergeConflictAccount tests the mergeConflictAccount function
 func TestMigrationMergeConflictAccount(t *testing.T) {
 	tests := []struct {
