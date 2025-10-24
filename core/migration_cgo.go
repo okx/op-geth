@@ -1361,3 +1361,19 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 
 	return cfg, hash, mergedGenesis, compatErr, setupErr
 }
+
+func GetTimelockAddress(l2ChainId *big.Int) common.Address {
+	if l2ChainId == nil {
+		log.Error("GetTimelockAddress: nil l2 chain id")
+		return common.Address{}
+	}
+
+	if l2ChainId.Cmp(big.NewInt(196)) == 0 { // mainnet
+		return common.HexToAddress("0xBBa0935Fa93Eb23de7990b47F0D96a8f75766d13")
+	} else if l2ChainId.Cmp(big.NewInt(0)) == 0 {
+		return common.HexToAddress("0xdbC6981a11fc2B000c635bFA7C47676b25C87D39")
+	} else if l2ChainId.Cmp(big.NewInt(195)) == 0 {
+		return common.HexToAddress("0x27284DBa79e6DF953Fbd232A9d8D87029F03BBf5")
+	}
+	return common.Address{}
+}
