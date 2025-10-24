@@ -264,7 +264,9 @@ func (payload *Payload) resolve(onlyFull bool) *engine.ExecutionPayloadEnvelope 
 	// and if it is an update, don't attempt to seal the block.
 	payload.interruptBuilding()
 
-	if payload.full == nil && (onlyFull || payload.empty == nil) || payload.realtimeEnabled.Load() {
+	// For X Layer, realtime
+	if payload.full == nil && (onlyFull || payload.empty == nil) ||
+		(payload.realtimeEnabled.Load() && !payload.stoppedFlag.Load()) {
 		select {
 		case <-payload.stop:
 			return nil
