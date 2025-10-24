@@ -33,20 +33,21 @@ type RealtimeBackend interface {
 // The EVM is not copied as it will be recreated when needed.
 func (env *environment) snapshot() *environment {
 	snap := &environment{
-		signer:   env.signer,
-		state:    env.state.Copy(),
-		tcount:   env.tcount,
-		gasPool:  new(core.GasPool).AddGas(env.gasPool.Gas()),
-		coinbase: env.coinbase,
-		evm:      nil,
-		header:   types.CopyHeader(env.header),
-		txs:      append([]*types.Transaction(nil), env.txs...),
-		receipts: append([]*types.Receipt(nil), env.receipts...),
-		sidecars: append([]*types.BlobTxSidecar(nil), env.sidecars...),
-		blobs:    env.blobs,
-		noTxs:    env.noTxs,
-		rpcCtx:   env.rpcCtx,
-		okPayTxs: env.okPayTxs,
+		signer:       env.signer,
+		state:        env.state.Copy(),
+		tcount:       env.tcount,
+		gasPool:      new(core.GasPool).AddGas(env.gasPool.Gas()),
+		coinbase:     env.coinbase,
+		evm:          nil,
+		header:       types.CopyHeader(env.header),
+		txs:          append([]*types.Transaction(nil), env.txs...),
+		receipts:     append([]*types.Receipt(nil), env.receipts...),
+		sidecars:     append([]*types.BlobTxSidecar(nil), env.sidecars...),
+		blobs:        env.blobs,
+		noTxs:        env.noTxs,
+		rpcCtx:       env.rpcCtx,
+		okPayTxs:     env.okPayTxs,
+		blockDaBytes: env.blockDaBytes,
 	}
 	if env.witness != nil {
 		snap.witness = env.witness.Copy()

@@ -88,7 +88,8 @@ type environment struct {
 	rpcCtx context.Context // context to control block-building RPC work. No RPC allowed if nil.
 
 	// For X Layer
-	okPayTxs int
+	okPayTxs     int
+	blockDaBytes *big.Int
 }
 
 // txFits reports whether the transaction fits into the block size limit.
@@ -455,7 +456,8 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 		evm:      vm.NewEVM(core.NewEVMBlockContext(header, miner.chain, &coinbase, miner.chainConfig, state), state, miner.chainConfig, vm.Config{EnableInnerTxs: miner.backend.RealtimeEnabled()}),
 		rpcCtx:   rpcCtx,
 		// For X Layer
-		okPayTxs: 0,
+		okPayTxs:     0,
+		blockDaBytes: new(big.Int),
 	}, nil
 }
 
@@ -621,6 +623,10 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
 	}
 	blockDABytes := new(big.Int)
+	// For X Layer, incremental building
+	if realtimeEnabled {
+		blockDABytes = env.blockDaBytes
+	}
 	for {
 		// Check interruption signal and abort building if it's fired.
 		if interrupt != nil {
@@ -754,6 +760,10 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 		case errors.Is(err, nil):
 			// Everything ok, collect the logs and shift in the next transaction from the same account
 			blockDABytes = daBytesAfter
+			// For X Layer, incremental building
+			if realtimeEnabled {
+				env.blockDaBytes = daBytesAfter
+			}
 			txs.Shift()
 
 		default:
