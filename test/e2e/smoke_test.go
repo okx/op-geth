@@ -362,7 +362,6 @@ func TestEthereumBlockRPC(t *testing.T) {
 		for _, receipt := range receiptsByNumber {
 			require.NoError(t, err)
 			require.NotNil(t, receipt)
-			log.Info(fmt.Sprintf("RealtimeGetBlockReceiptsByNumber result type: %T", receipt))
 		}
 
 		// Test getting receipts by hash
@@ -372,7 +371,6 @@ func TestEthereumBlockRPC(t *testing.T) {
 		for _, receipt := range receiptsByHash {
 			require.NoError(t, err)
 			require.NotNil(t, receipt)
-			log.Info(fmt.Sprintf("RealtimeGetBlockReceiptsByHash result type: %T", receipt))
 		}
 	})
 }
@@ -755,7 +753,10 @@ func TestInnerTx(t *testing.T) {
 		txHashes := TransTokenBatch(t, ctx, client, uint256.NewInt(params.GWei), operations.DefaultL2NewAcc1Address, 5, operations.DefaultRichPrivateKey)
 		require.Len(t, txHashes, 5, "Should have created 5 transactions")
 
-		blockNumbers := make(map[uint64][]int)
+		blockInfo := make(map[uint64]struct {
+			hash      common.Hash
+			txIndices []int
+		})
 
 		for i, txHashStr := range txHashes {
 			txHash := common.HexToHash(txHashStr)
@@ -763,42 +764,71 @@ func TestInnerTx(t *testing.T) {
 			require.NoError(t, err, "Failed to get receipt for tx %d", i)
 
 			blockNum := receipt.BlockNumber.Uint64()
-			blockNumbers[blockNum] = append(blockNumbers[blockNum], i)
+			blockHash := receipt.BlockHash
+
+			info := blockInfo[blockNum]
+			info.hash = blockHash
+			info.txIndices = append(info.txIndices, i)
+			blockInfo[blockNum] = info
 		}
 
 		totalValidatedTxs := 0
 
-		for blockNum, txIndices := range blockNumbers {
-			fmt.Printf("Testing block %d with %d transactions\n", blockNum, len(txIndices))
+		for blockNum, info := range blockInfo {
+			fmt.Printf("Testing block %d (hash %s) with %d transactions\n", blockNum, info.hash.Hex(), len(info.txIndices))
 
-			blockInnerTxs, err := operations.EthGetBlockInternalTransactions(rpc.BlockNumber(blockNum))
+			// Query by block number
+			blockNrOrHash_Num := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(blockNum))
+			blockInnerTxsByNum, err := operations.EthGetBlockInternalTransactions(blockNrOrHash_Num)
 			require.NoError(t, err, "Failed to get block internal transactions for block %d", blockNum)
-			require.NotNil(t, blockInnerTxs, "Block inner transactions should not be nil for block %d", blockNum)
+			require.NotNil(t, blockInnerTxsByNum, "Block inner transactions should not be nil for block %d", blockNum)
+
+			// Query by block hash
+			blockNrOrHash_Hash := rpc.BlockNumberOrHashWithHash(info.hash, false)
+			blockInnerTxsByHash, err := operations.EthGetBlockInternalTransactions(blockNrOrHash_Hash)
+			require.NoError(t, err, "Failed to get block internal transactions for block hash %s", info.hash.Hex())
+			require.NotNil(t, blockInnerTxsByHash, "Block inner transactions should not be nil for block hash %s", info.hash.Hex())
+
+			// Verify both queries return exactly the same results
+			require.Equal(t, blockInnerTxsByNum, blockInnerTxsByHash,
+				"Block number and block hash queries should return identical results for block %d", blockNum)
 
 			// Verify all transactions in this block are present in block internal transactions
 			batchTxsInBlock := 0
-			for _, txIdx := range txIndices {
+			for _, txIdx := range info.txIndices {
 				txHash := common.HexToHash(txHashes[txIdx])
-				blockInnerTxsForTx, exists := blockInnerTxs[txHash]
-				require.True(t, exists, "Transaction %d (%s) should be in block %d internal transactions", txIdx, txHashes[txIdx], blockNum)
-				require.Len(t, blockInnerTxsForTx, 1, "Transaction %d should have exactly 1 inner transaction", txIdx)
+
+				// Check transaction exists in results from block number query
+				blockInnerTxsForTxByNum, existsByNum := blockInnerTxsByNum[txHash]
+				require.True(t, existsByNum, "Transaction %d (%s) should be in block %d internal transactions (by number)", txIdx, txHashes[txIdx], blockNum)
+				require.Len(t, blockInnerTxsForTxByNum, 1, "Transaction %d should have exactly 1 inner transaction (by number)", txIdx)
+
+				// Check transaction exists in results from block hash query
+				blockInnerTxsForTxByHash, existsByHash := blockInnerTxsByHash[txHash]
+				require.True(t, existsByHash, "Transaction %d (%s) should be in block hash %s internal transactions", txIdx, txHashes[txIdx], info.hash.Hex())
+				require.Len(t, blockInnerTxsForTxByHash, 1, "Transaction %d should have exactly 1 inner transaction (by hash)", txIdx)
+
 				batchTxsInBlock++
 
-				innerTx := blockInnerTxsForTx[0]
+				innerTxByNum := blockInnerTxsForTxByNum[0]
+				innerTxByHash := blockInnerTxsForTxByHash[0]
+
+				// Verify inner transactions from both queries match
+				ValidateInnerTransactionMatch(t, innerTxByNum, innerTxByHash, fmt.Sprintf("batch tx %d: block number vs block hash", txIdx))
 
 				// Compare with individual transaction inner transactions
 				individualInnerTxs, err := operations.EthGetInternalTransactions(txHash)
 				require.NoError(t, err, "Failed to get individual inner transactions for tx %d", txIdx)
 				require.Len(t, individualInnerTxs, 1, "Individual inner transactions should have 1 entry for tx %d", txIdx)
 
-				ValidateInnerTransactionMatch(t, individualInnerTxs[0], innerTx, fmt.Sprintf("batch tx %d comparison", txIdx))
+				ValidateInnerTransactionMatch(t, individualInnerTxs[0], innerTxByNum, fmt.Sprintf("batch tx %d comparison", txIdx))
 			}
 
 			totalValidatedTxs += batchTxsInBlock
 		}
 
 		require.Equal(t, len(txHashes), totalValidatedTxs, "Should have validated all batch transactions")
-		fmt.Printf("Successfully validated all %d transactions across %d blocks\n", totalValidatedTxs, len(blockNumbers))
+		fmt.Printf("Successfully validated all %d transactions across %d blocks (by both number and hash)\n", totalValidatedTxs, len(blockInfo))
 	})
 
 	t.Run("GetInnerTransactions_FailedTransactions", func(t *testing.T) {
@@ -845,13 +875,15 @@ func TestInnerTx(t *testing.T) {
 
 	t.Run("SpecialBlockNumberFormats", func(t *testing.T) {
 		// Test "latest" format
-		latestResult, err := operations.EthGetBlockInternalTransactions(rpc.LatestBlockNumber)
+		latestBlockNrOrHash := rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
+		latestResult, err := operations.EthGetBlockInternalTransactions(latestBlockNrOrHash)
 		require.NoError(t, err)
 		require.NotNil(t, latestResult, "Latest block should return a valid map")
 		fmt.Printf("'latest' block contains %d transactions with inner transactions\n", len(latestResult))
 
 		// Test "earliest" format
-		earliestResult, err := operations.EthGetBlockInternalTransactions(rpc.EarliestBlockNumber)
+		earliestBlockNrOrHash := rpc.BlockNumberOrHashWithNumber(rpc.EarliestBlockNumber)
+		earliestResult, err := operations.EthGetBlockInternalTransactions(earliestBlockNrOrHash)
 		require.NoError(t, err)
 		require.NotNil(t, earliestResult, "Earliest block should return a valid map")
 		fmt.Printf("'earliest' block contains %d transactions with inner transactions\n", len(earliestResult))

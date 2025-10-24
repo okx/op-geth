@@ -476,13 +476,13 @@ func EthGetInternalTransactions(txHash common.Hash) ([]*types.InnerTx, error) {
 }
 
 // EthGetBlockInternalTransactions returns the internal transactions for a given block number
-func EthGetBlockInternalTransactions(blockNumber rpc.BlockNumber) (map[common.Hash][]*types.InnerTx, error) {
+func EthGetBlockInternalTransactions(blockNumberOrHash rpc.BlockNumberOrHash) (map[common.Hash][]*types.InnerTx, error) {
 
 	var result map[common.Hash][]*types.InnerTx
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	err := clientRPC.Client().CallContext(ctx, &result, "eth_getBlockInternalTransactions", blockNumber)
+	err := clientRPC.Client().CallContext(ctx, &result, "eth_getBlockInternalTransactions", blockNumberOrHash)
 	if err != nil {
 		return nil, err
 	}
