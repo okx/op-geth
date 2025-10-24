@@ -330,15 +330,25 @@ func generateMigrateAlloc(ctx *cli.Context, dbAlloc types.GenesisAlloc, ignoreAd
 	}
 	log.Info("mergeAlloc: merge completed", "status", "✅", "total_accounts", len(migrateAlloc), "elapsed", time.Since(start))
 
-	if l2ChainId != nil && l2ChainId.Cmp(big.NewInt(196)) == 0 { // override timelock.Mindelay for mainnet
-		polygonZkEVMTimelock := common.HexToAddress("0xBBa0935Fa93Eb23de7990b47F0D96a8f75766d13")
+	polygonZkEVMTimelock := GetTimelockAddress(l2ChainId)
+	if polygonZkEVMTimelock != (common.Address{}) {
 		if timeLockAcct, ok := migrateAlloc[polygonZkEVMTimelock]; ok {
 			minDelaySlot := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002")
 			curValue := timeLockAcct.Storage[minDelaySlot]
-			if curValue.Cmp(common.HexToHash("0x00000000000000000000000000000000000000000000000000000000000d2f00")) == 0 { // if current value is 86400
-				log.Warn("override polygonZkEVMTimelock.minDelay from 86400 to 3600")
-				timeLockAcct.Storage[minDelaySlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000E10") // 3600 in hex, which is 1h
 
+			needOverride := true
+			delayOverride := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000E10") // 3600 in hex, which is 1h
+			if l2ChainId != nil && l2ChainId.Cmp(big.NewInt(196)) == 0 && curValue.Cmp(common.HexToHash("0x00000000000000000000000000000000000000000000000000000000000d2f00")) != 0 {
+				log.Warn("mainnet current polygonZkEVMTimelock.minDelay is not 86400, skip override", "curValue", curValue.Hex())
+				needOverride = false
+			}
+			if l2ChainId != nil && l2ChainId.Cmp(big.NewInt(195)) == 0 {
+				delayOverride = common.HexToHash("0x000000000000000000000000000000000000000000000000000000000000003c")
+			}
+
+			if needOverride {
+				log.Warn("override polygonZkEVMTimelock.minDelay")
+				timeLockAcct.Storage[minDelaySlot] = delayOverride
 				// override proposer & executor
 				proposer := ctx.String("override-proposer")
 				if proposer != "" {
@@ -352,8 +362,6 @@ func generateMigrateAlloc(ctx *cli.Context, dbAlloc types.GenesisAlloc, ignoreAd
 					executorSlot, _ := GetExecutorSlot(common.HexToAddress(executor))
 					timeLockAcct.Storage[executorSlot] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")
 				}
-			} else {
-				log.Warn("current polygonZkEVMTimelock.minDelay is not 86400", "curValue", curValue.Hex())
 			}
 		} else {
 			log.Warn("no polygonZkEVMTimelock contract found", "address", polygonZkEVMTimelock)
@@ -1350,4 +1358,20 @@ func SetupGenesisBlockWithMigrationData(chaindb ethdb.Database, triedb *triedb.D
 	log.Info("Updated genesis alloc with migration data", "total_accounts", len(erigonAlloc), "migrate_accounts", len(mergedGenesis.Alloc), "updated_accounts", len(opGenesis.Alloc))
 
 	return cfg, hash, mergedGenesis, compatErr, setupErr
+}
+
+func GetTimelockAddress(l2ChainId *big.Int) common.Address {
+	if l2ChainId == nil {
+		log.Error("GetTimelockAddress: nil l2 chain id")
+		return common.Address{}
+	}
+
+	if l2ChainId.Cmp(big.NewInt(196)) == 0 { // mainnet
+		return common.HexToAddress("0xBBa0935Fa93Eb23de7990b47F0D96a8f75766d13")
+	} else if l2ChainId.Cmp(big.NewInt(0)) == 0 {
+		return common.HexToAddress("0xdbC6981a11fc2B000c635bFA7C47676b25C87D39")
+	} else if l2ChainId.Cmp(big.NewInt(195)) == 0 {
+		return common.HexToAddress("0x27284DBa79e6DF953Fbd232A9d8D87029F03BBf5")
+	}
+	return common.Address{}
 }
