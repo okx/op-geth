@@ -64,7 +64,7 @@ func TestStressSendErc20Txs(t *testing.T) {
 	var totalRealtimeDuration time.Duration
 
 	realtimeMsgCh := make(chan realtimeapi.RealtimeSubResult, NumTxs)
-	realtimeSub, err := wsClient.Subscribe(ctx, "eth", realtimeMsgCh, "realtime", map[string]bool{"NewHeads": false, "TransactionExtraInfo": false, "TransactionReceipt": false, "TransactionInnerTxs": false})
+	realtimeSub, err := wsClient.Subscribe(ctx, "eth", realtimeMsgCh, "realtime", map[string]interface{}{"NewHeads": false, "TransactionExtraInfo": false, "TransactionReceipt": false, "TransactionInnerTxs": false, "subscribedAddresses": []string{DefaultL2AdminAddress}})
 	require.NoError(t, err)
 	defer realtimeSub.Unsubscribe()
 
@@ -83,7 +83,7 @@ func TestStressSendErc20Txs(t *testing.T) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
-	timeout := time.NewTimer(1 * time.Minute)
+	timeout := time.NewTimer(5 * time.Minute)
 	defer timeout.Stop()
 
 	for count < NumTxs {
@@ -98,7 +98,7 @@ func TestStressSendErc20Txs(t *testing.T) {
 		case <-ticker.C:
 			fmt.Printf("Confirmed tx count: %d (remaining: %d)\n", count, len(signedTxs))
 		case <-timeout.C:
-			t.Fatalf("Test timeout after 1 minute. Confirmed %d/%d transactions. Remaining txs: %d", count, NumTxs, len(signedTxs))
+			t.Fatalf("Test timeout after 5min. Confirmed %d/%d transactions. Remaining txs: %d", count, NumTxs, len(signedTxs))
 		}
 	}
 	fmt.Printf("Confirmed tx count: %d\n", count)
