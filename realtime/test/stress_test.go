@@ -98,7 +98,7 @@ func TestStressSendErc20Txs(t *testing.T) {
 		case <-ticker.C:
 			fmt.Printf("Confirmed tx count: %d (remaining: %d)\n", count, len(signedTxs))
 		case <-timeout.C:
-			t.Fatalf("Test timeout after 5 minutes. Confirmed %d/%d transactions. Remaining txs: %d", count, NumTxs, len(signedTxs))
+			t.Fatalf("Test timeout after 1 minutes. Confirmed %d/%d transactions. Remaining txs: %d", count, NumTxs, len(signedTxs))
 		}
 	}
 	fmt.Printf("Confirmed tx count: %d\n", count)
