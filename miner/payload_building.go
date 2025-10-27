@@ -260,13 +260,15 @@ func (payload *Payload) resolve(onlyFull bool) *engine.ExecutionPayloadEnvelope 
 	payload.lock.Lock()
 	defer payload.lock.Unlock()
 
+	// For X Layer, realtime
+	shouldResolveRealtime := payload.realtimeEnabled.Load() && !payload.stoppedFlag.Load()
+
 	// We interrupt any active building block to prevent it from adding more transactions,
 	// and if it is an update, don't attempt to seal the block.
 	payload.interruptBuilding()
 
 	// For X Layer, realtime
-	if (payload.full == nil && (onlyFull || payload.empty == nil)) ||
-		(payload.realtimeEnabled.Load() && !payload.stoppedFlag.Load()) {
+	if (payload.full == nil && (onlyFull || payload.empty == nil)) || shouldResolveRealtime {
 		select {
 		case <-payload.stop:
 			return nil
