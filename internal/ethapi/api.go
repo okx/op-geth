@@ -113,6 +113,23 @@ func (api *EthereumAPI) getXLayerMaxPriorityFee(ctx context.Context) (*hexutil.B
 	return (*hexutil.Big)(tipcap), nil
 }
 
+// getXLayerMinGasPrice returns minimum gas price for XLayer
+func (api *EthereumAPI) getXLayerMinGasPrice(ctx context.Context) (*hexutil.Big, error) {
+	// RPC node means isXLayerRPCService is available, forward the request
+	if seqRPC := api.b.SequencerRPCService(); seqRPC != nil {
+		var result hexutil.Big
+		log.Debug("getXLayerMinGasPrice: forward the request to RPC node")
+		err := seqRPC.CallContext(ctx, &result, "eth_minGasPrice")
+		log.Debug("getXLayerMinGasPrice: received min gas price from RPC node", "minGasPrice", result.String())
+		return &result, err
+	}
+
+	// Sequencer get minimum raw gas price at local
+	minGP := api.b.XLayerGpricer().GetGasCache().GetMinRawGPMoreRecent()
+	log.Debug("getXLayerMinGasPrice: use XLayer min gas price", "minGasPrice", minGP.String())
+	return (*hexutil.Big)(minGP), nil
+}
+
 // GasPrice returns a suggestion for a gas price for legacy transactions.
 func (api *EthereumAPI) GasPrice(ctx context.Context) (*hexutil.Big, error) {
 	// For XLayer
@@ -143,6 +160,22 @@ func (api *EthereumAPI) MaxPriorityFeePerGas(ctx context.Context) (*hexutil.Big,
 		return nil, err
 	}
 	return (*hexutil.Big)(tipcap), err
+}
+
+// MinGasPrice returns the minimum gas price for XLayer transactions.
+func (api *EthereumAPI) MinGasPrice(ctx context.Context) (*hexutil.Big, error) {
+	// For XLayer
+	if api.b.XLayerGpricer() != nil && api.b.XLayerGpricer().GetConfig().XLayer.Type != "" {
+		return api.getXLayerMinGasPrice(ctx)
+	}
+
+	// For non-XLayer chains, return baseFee as minimum
+	head := api.b.CurrentHeader()
+	if head.BaseFee != nil {
+		return (*hexutil.Big)(head.BaseFee), nil
+	}
+	// For pre-EIP-1559 chains, return zero
+	return (*hexutil.Big)(big.NewInt(0)), nil
 }
 
 type feeHistoryResult struct {
