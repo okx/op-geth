@@ -31,6 +31,8 @@ func NewBatchProducer(ctx context.Context, config KafkaConfig, successChan chan 
 	saramaConfig.Producer.Flush.MaxMessages = 0
 	// Ensure fastest compression for sending realtime data
 	saramaConfig.Producer.Compression = sarama.CompressionLZ4
+	saramaConfig.Producer.Idempotent = true
+	saramaConfig.Net.MaxOpenRequests = 5
 
 	if err := verifyProducerConfig(saramaConfig); err != nil {
 		return nil, err
