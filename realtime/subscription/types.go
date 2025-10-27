@@ -1,6 +1,10 @@
 package subscription
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/ethereum/go-ethereum/log"
+)
 
 type Sub[T any] interface {
 	Send(T)
@@ -31,6 +35,7 @@ func (s *chan_sub[T]) Send(x T) {
 	select {
 	case s.ch <- x:
 	default: // the sub is overloaded, dispose message
+		log.Warn("[Realtime] subscription channel is overloaded, disposing message")
 	}
 }
 func (s *chan_sub[T]) Close() {
