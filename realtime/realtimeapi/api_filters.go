@@ -101,17 +101,15 @@ func (api *RealtimeSubAPIImpl) Realtime(ctx context.Context, criteria realtimeSu
 						}
 					}
 					toAddress := tx.To()
-					if len(criteria.SubscribedAddresses) != 0 {
-						found := false
-						for _, addr := range criteria.SubscribedAddresses {
-							if addr == txSender || addr == *toAddress {
-								found = true
-								break
-							}
+					found := false
+					for _, addr := range criteria.SubscribedAddresses {
+						if addr == txSender || addr == *toAddress {
+							found = true
+							break
 						}
-						if !found {
-							continue
-						}
+					}
+					if !found {
+						continue
 					}
 
 					result.TxHash = tx.Hash().Hex()
