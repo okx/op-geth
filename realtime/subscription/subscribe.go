@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/filters"
+	"github.com/ethereum/go-ethereum/log"
 	kafkaTypes "github.com/ethereum/go-ethereum/realtime/kafka/types"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
@@ -106,7 +107,11 @@ func (ff *RealtimeSubscription) BroadcastNewMsg(blockMsg *realtimeTypes.BlockInf
 		BlockMsg: blockMsg,
 		TxMsg:    txMsg,
 	}
-	ff.newMsgChan <- msg
+	select {
+	case ff.newMsgChan <- msg:
+	default:
+		log.Warn("[Realtime] subscription newMsgChan channel is overloaded, dropping message")
+	}
 }
 
 func (ff *RealtimeSubscription) SubscribeRealtime() (<-chan RealtimeSubMessage, SubID, error) {
