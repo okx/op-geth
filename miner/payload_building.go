@@ -319,6 +319,8 @@ func (payload *Payload) interruptBuilding() {
 		log.Debug("Payload building already interrupted.",
 			"id", payload.id, "interrupt", payload.interrupt.Load())
 	}
+	// For X Layer, realtime
+	payload.stoppedFlag.Store(true)
 }
 
 // stopBuilding signals to the block updating routine to stop. An ongoing payload
@@ -332,6 +334,8 @@ func (payload *Payload) stopBuilding() {
 		log.Debug("Stop payload building.", "id", payload.id)
 		close(payload.stop)
 	})
+	// For X Layer, realtime
+	payload.stoppedFlag.Store(true)
 }
 
 // buildPayload builds the payload according to the provided parameters.
@@ -359,7 +363,7 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 			// For X Layer, realtime
 			realtimeEnabled: args.RealtimeEnabled,
 		}
-		empty := miner.generateWork(emptyParams, witness, &atomic.Bool{})
+		empty := miner.generateWork(emptyParams, witness)
 		if empty.err != nil {
 			return nil, empty.err
 		}
@@ -433,11 +437,11 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 			var r *newPayloadResult
 			if !fullParams.realtimeEnabled {
 				// getSealingBlock is interrupted by shared interrupt
-				r = miner.generateWork(fullParams, witness, &payload.stoppedFlag)
+				r = miner.generateWork(fullParams, witness)
 			} else {
 				// For X Layer, realtime
 				if !payload.incrementalFlag.Load() {
-					r = miner.generateWork(fullParams, witness, &payload.stoppedFlag)
+					r = miner.generateWork(fullParams, witness)
 				} else {
 					// Incremental building
 					r = miner.tryIncrementalUpdate(payload, fullParams, witness)

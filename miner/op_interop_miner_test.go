@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"math/big"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -134,7 +133,7 @@ func testInteropTransaction(t *testing.T, failsafeEnabled bool, expectIncluded b
 		noTxs:      false,
 		forceTime:  true,
 		rpcCtx:     context.Background(), // Enable interop checks
-	}, false, &atomic.Bool{})
+	}, false)
 
 	// Check transaction inclusion in block
 	if expectIncluded {

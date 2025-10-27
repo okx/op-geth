@@ -113,10 +113,8 @@ func (miner *Miner) tryIncrementalUpdate(payload *Payload, genParam *generatePar
 		timer.Stop() // don't need timeout interruption any more
 		if errors.Is(err, errBlockInterruptedByTimeout) {
 			log.Warn("Incremental block building is interrupted", "allowance", common.PrettyDuration(miner.config.Recommit))
-			payload.stoppedFlag.Store(true)
 		} else if errors.Is(err, errBlockInterruptedByResolve) {
 			log.Info("Incremental block building got interrupted by payload resolution")
-			payload.stoppedFlag.Store(true)
 		}
 	}
 	if proposeStats != nil {

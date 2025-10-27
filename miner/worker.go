@@ -150,7 +150,7 @@ type generateParams struct {
 }
 
 // generateWork generates a sealing block based on the given parameters.
-func (miner *Miner) generateWork(genParam *generateParams, witness bool, stoppedFlag *atomic.Bool) *newPayloadResult {
+func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPayloadResult {
 	// Use per-call statistics to avoid shared state across concurrent builds
 	proposeStats := metrics.NewLogStatistics()
 
@@ -211,10 +211,8 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool, stopped
 		timer.Stop() // don't need timeout interruption any more
 		if errors.Is(err, errBlockInterruptedByTimeout) {
 			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(miner.config.Recommit))
-			stoppedFlag.Store(true)
 		} else if errors.Is(err, errBlockInterruptedByResolve) {
 			log.Info("Block building got interrupted by payload resolution")
-			stoppedFlag.Store(true)
 		}
 	}
 	proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
