@@ -57,7 +57,6 @@ func (ff *RealtimeSubscription) Start(ctx context.Context) {
 						ff.handleRealtimeLogMsgs(ctx, msg.TxMsg)
 					}()
 				}
-				wg.Wait()
 			}
 		}
 	}()
