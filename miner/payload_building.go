@@ -441,9 +441,11 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 			} else {
 				// For X Layer, realtime
 				if !payload.incrementalFlag.Load() {
+					log.Debug("[Realtime] Payload building, on generateWork")
 					r = miner.generateWork(fullParams, witness)
 				} else {
 					// Incremental building
+					log.Debug("[Realtime] Payload building, on tryIncrementalUpdate")
 					r = miner.tryIncrementalUpdate(payload, fullParams, witness)
 				}
 			}

@@ -242,6 +242,7 @@ func (miner *Miner) fillTransactions_XLayer(interrupt *atomic.Int32, env *enviro
 	var pendingPlainTxs, pendingBlobTxs map[common.Address][]*txpool.LazyTransaction
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
+	log.Debug("[Realtime] fillTransactions_XLayer: Getting pending transactions from pool")
 loop:
 	for {
 		select {
@@ -255,8 +256,10 @@ loop:
 			}
 		}
 	}
+	log.Debug(fmt.Sprintf("[Realtime] fillTransactions_XLayer: Retrieved pending txs from pool. pendingPlainTxs: %d, pendingBlobTxs: %d", len(pendingPlainTxs), len(pendingBlobTxs)))
 	pendingPlainTxs = filterNewTxs(pendingPlainTxs, existTxs)
 	pendingBlobTxs = filterNewTxs(pendingBlobTxs, existTxs)
+	log.Debug(fmt.Sprintf("[Realtime] fillTransactions_XLayer: Filtered pending txs from pool with already included txs. pendingPlainTxs: %d, pendingBlobTxs: %d", len(pendingPlainTxs), len(pendingBlobTxs)))
 
 	// Split the pending transactions into locals and remotes.
 	prioPlainTxs, normalPlainTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingPlainTxs
