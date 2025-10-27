@@ -60,7 +60,6 @@ func (api *RealtimeSubAPIImpl) Realtime(ctx context.Context, criteria realtimeSu
 
 	go func() {
 		defer api.subService.UnsubscribeRealtime(id)
-
 		for {
 			select {
 			case msg, ok := <-msgChan:

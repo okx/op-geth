@@ -1426,7 +1426,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy, nil)
 		if len(wrappedAPIs) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrappedAPIs))
 		}
@@ -1460,7 +1460,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy, nil)
 		if len(wrappedAPIs) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrappedAPIs))
 		}
@@ -1485,7 +1485,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy, nil)
 		if len(wrappedAPIs) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrappedAPIs))
 		}
@@ -1507,7 +1507,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy, nil)
 		if len(wrappedAPIs) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrappedAPIs))
 		}
@@ -1532,7 +1532,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy, nil)
 		if len(wrappedAPIs) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrappedAPIs))
 		}
@@ -1552,7 +1552,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			{Namespace: "debug", Service: &struct{}{}, Public: false},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy, nil)
 		if len(wrappedAPIs) != 5 {
 			t.Fatalf("expected 5 APIs, got %d", len(wrappedAPIs))
 		}
@@ -1584,7 +1584,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			{Namespace: "eth", Service: &ethapi.BlockChainAPI{}, Public: true},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, nil)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, nil, nil)
 		if len(wrappedAPIs) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrappedAPIs))
 		}
@@ -2042,7 +2042,7 @@ func TestNilLegacyService(t *testing.T) {
 			{Namespace: "eth", Service: originalAPI, Public: true},
 		}
 
-		wrapped := WrapAPIsForXlayer(apis, nil)
+		wrapped := WrapAPIsForXlayer(apis, nil, nil)
 		if len(wrapped) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrapped))
 		}

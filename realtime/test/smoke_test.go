@@ -445,7 +445,6 @@ func TestRealtimeRPC(t *testing.T) {
 
 			// realtime subscription
 			g.Go(func() error {
-
 				for {
 					select {
 					case msg := <-realtimeMsgCh:
@@ -501,7 +500,6 @@ func TestRealtimeRPC(t *testing.T) {
 
 			// realtime subscription
 			g.Go(func() error {
-
 				for {
 					select {
 					case msg := <-realtimeMsgCh:

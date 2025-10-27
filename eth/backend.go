@@ -560,7 +560,7 @@ func (s *Ethereum) APIs() []rpc.API {
 
 	// For X Layer, wrap APIs with migration routing if configured
 	if s.xlayerLegacyRPCService != nil {
-		apis = s.WrapAPIsForXlayer(apis, s.xlayerLegacyRPCService)
+		apis = WrapAPIsForXlayer(apis, s.xlayerLegacyRPCService, s)
 	}
 
 	// Append any Sequencer APIs as enabled

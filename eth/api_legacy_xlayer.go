@@ -781,7 +781,7 @@ func (api *XlayerHybridFilterAPI) GetLogs(ctx context.Context, crit filters.Filt
 }
 
 // WrapAPIsForXlayer wraps the standard APIs with migration-aware versions
-func (eth *Ethereum) WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API {
+func WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService, eth *Ethereum) []rpc.API {
 	if config == nil {
 		return apis // No migration configured, return original APIs
 	}
@@ -834,7 +834,7 @@ func (eth *Ethereum) WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCSe
 	}
 
 	// For X Layer, realtime
-	if eth.RealtimeEnabled() && eth.config.XLayer.Realtime.RealtimeRpc {
+	if eth != nil && eth.RealtimeEnabled() && eth.config.XLayer.Realtime.RealtimeRpc {
 		wrapped = append(wrapped, rpc.API{
 			Namespace: "eth",
 			Service:   realtimeapi.NewRealtimeAPI(eth.realtimeCache, eth.APIBackend, blockchainApi, txApi),
