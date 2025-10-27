@@ -482,6 +482,8 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 				// skip new update if we're too close to the timeout anyways.
 				if lastDuration > 0 && time.Now().Add(lastDuration).After(timeout) {
 					stopReason = "near-timeout"
+					// For X Layer, realtime
+					payload.stoppedFlag.Store(true)
 					return
 				}
 				lastDuration = updatePayload()
@@ -489,6 +491,8 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 				return
 			case <-endTimer.C:
 				stopReason = "timeout"
+				// For X Layer, realtime
+				payload.stoppedFlag.Store(true)
 				return
 			}
 		}
