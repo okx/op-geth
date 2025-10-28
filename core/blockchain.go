@@ -2113,9 +2113,6 @@ func (bc *BlockChain) processBlock(parentRoot common.Hash, block *types.Block, s
 	}
 	ptime := time.Since(pstart)
 
-	// Export to a fresh LogStatistics instance (no global singleton)
-	ls := metrics.NewLogStatistics()
-
 	vstart := time.Now()
 	if err := bc.validator.ValidateState(block, statedb, res, false); err != nil {
 		bc.reportBlock(block, res, err)
