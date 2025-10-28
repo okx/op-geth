@@ -26,13 +26,14 @@ func NewBatchProducer(ctx context.Context, config KafkaConfig, successChan chan 
 	saramaConfig.Producer.Return.Errors = true
 
 	// For AsyncProducer
-	saramaConfig.Producer.Flush.Messages = 100
+	saramaConfig.Producer.Flush.Messages = 10000
 	saramaConfig.Producer.Flush.Frequency = 3 * time.Millisecond
 	saramaConfig.Producer.Flush.MaxMessages = 0
 	// Ensure fastest compression for sending realtime data
 	saramaConfig.Producer.Compression = sarama.CompressionLZ4
-	saramaConfig.Producer.Idempotent = true
+	saramaConfig.Producer.Idempotent = false
 	saramaConfig.Net.MaxOpenRequests = 5
+	saramaConfig.ChannelBufferSize = 8192
 
 	if err := verifyProducerConfig(saramaConfig); err != nil {
 		return nil, err

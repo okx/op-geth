@@ -155,31 +155,32 @@ func TestStressTestKafkaProducer(t *testing.T) {
 	err := createKafkaTopics(cfg)
 	assert.NilError(t, err)
 
-	successChan := make(chan struct{}, 10000)
+	numMessages := 10000
+	successChan := make(chan struct{}, numMessages)
 	producer, err := kafka.NewKafkaProducer(cfg, context.Background(), successChan)
 	assert.NilError(t, err)
 
 	startTime := time.Now()
-	for i := 1; i <= 1000; i++ {
+	for i := 1; i <= numMessages; i++ {
 		err = producer.SendKafkaTransaction(uint64(i), blockTime, signedLegacyTx, txReceipt, txInnerTxs, txChangeset)
 		assert.NilError(t, err)
 	}
 
 	// Sending 1000 messages should not be blocking, and should take less than 50ms
 	elapsed := time.Since(startTime)
-	fmt.Printf("Batch producer send took %s to dispatch 1000 messages\n", elapsed)
-	require.Less(t, elapsed, 50*time.Millisecond)
+	fmt.Printf("Batch producer send took %s to dispatch 100000 messages\n", elapsed)
+	require.Less(t, elapsed, 200*time.Millisecond)
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < numMessages; i++ {
 		select {
 		case <-successChan:
-		case <-time.After(1 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatalf("Timeout waiting for success message %d", i)
 		}
 	}
 	elapsed = time.Since(startTime)
-	fmt.Printf("Producer took %s to send 1000 messages to kafka broker\n", elapsed)
-	require.Less(t, elapsed, 100*time.Millisecond)
+	fmt.Printf("Producer took %s to send numMessages messages to kafka broker\n", elapsed)
+	require.Less(t, elapsed, 200*time.Millisecond)
 
 	err = producer.Close()
 	assert.NilError(t, err)
