@@ -42,6 +42,9 @@ const (
 	DefaultL2NewAcc1PrivateKey = "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
 	DefaultL2NewAcc2Address    = "0xAed6892D56AAB5DA8FBcd85b924C3bE63c74Cc29"
 	DefaultL2NewAcc2PrivateKey = "bc362a16d3dedd6cdba639eb8fa91b2f6d9f929eb490ca2e5a748ba041c6a131"
+
+	DefaultOkPaySenderAddress    = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+	DefaultOkPaySenderPrivateKey = "2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"
 )
 
 var clientRPC *ethclient.Client
@@ -193,16 +196,36 @@ func GetClient(URL string) (*ethclient.Client, error) {
 
 func GetTestChainConfig(chainID uint64) *params.ChainConfig {
 	return &params.ChainConfig{
-		ChainID:             big.NewInt(int64(chainID)),
-		HomesteadBlock:      big.NewInt(0),
-		ByzantiumBlock:      big.NewInt(0),
-		ConstantinopleBlock: big.NewInt(0),
-		PetersburgBlock:     big.NewInt(0),
-		IstanbulBlock:       big.NewInt(0),
-		MuirGlacierBlock:    big.NewInt(0),
-		BerlinBlock:         big.NewInt(0),
-		Ethash:              new(params.EthashConfig),
+		ChainID:                 big.NewInt(int64(chainID)),
+		HomesteadBlock:          big.NewInt(0),
+		EIP150Block:             big.NewInt(0),
+		EIP155Block:             big.NewInt(0),
+		EIP158Block:             big.NewInt(0),
+		ByzantiumBlock:          big.NewInt(0),
+		ConstantinopleBlock:     big.NewInt(0),
+		PetersburgBlock:         big.NewInt(0),
+		IstanbulBlock:           big.NewInt(0),
+		MuirGlacierBlock:        big.NewInt(0),
+		BerlinBlock:             big.NewInt(0),
+		LondonBlock:             big.NewInt(0), // EIP-1559 support
+		ArrowGlacierBlock:       big.NewInt(0),
+		GrayGlacierBlock:        big.NewInt(0),
+		MergeNetsplitBlock:      big.NewInt(0),
+		ShanghaiTime:            newUint64(0), // Shanghai upgrade
+		CancunTime:              newUint64(0), // Cancun upgrade (EIP-4844 blob transactions)
+		PragueTime:              newUint64(0), // Prague upgrade
+		TerminalTotalDifficulty: big.NewInt(0),
+		Ethash:                  new(params.EthashConfig),
+		BlobScheduleConfig: &params.BlobScheduleConfig{
+			Cancun: params.DefaultCancunBlobConfig,
+			Prague: params.DefaultPragueBlobConfig,
+		},
 	}
+}
+
+// newUint64 is a helper to create a pointer to a uint64
+func newUint64(val uint64) *uint64 {
+	return &val
 }
 
 func GetRPCClient() (*ethclient.Client, error) {

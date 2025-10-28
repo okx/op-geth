@@ -285,8 +285,8 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	// For X Layer
 	initApollo(stack, &cfg)
 
-	// Initialize monitoring system
-	monitor.InitTraceLogger(cfg.Eth.Monitor.EnableTraceLog, cfg.Eth.Monitor.TraceLogPath)
+	// For X Layer, initialize monitoring system
+	monitor.InitTraceLogger(cfg.Eth.XLayer.Monitor.EnableTraceLog, cfg.Eth.XLayer.Monitor.TraceLogPath)
 
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
 

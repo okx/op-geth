@@ -10,23 +10,23 @@ GORUN = go run
 
 #? geth: Build geth.
 geth:
-	$(GORUN) build/ci.go install ./cmd/geth
+	$(GORUN) build/ci.go install -tags rocksdb ./cmd/geth
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/geth\" to launch geth."
 
 #? evm: Build evm.
 evm:
-	$(GORUN) build/ci.go install ./cmd/evm
+	$(GORUN) build/ci.go install -tags rocksdb ./cmd/evm
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/evm\" to launch evm."
 
 #? all: Build all packages and executables.
 all:
-	$(GORUN) build/ci.go install
+	$(GORUN) build/ci.go install -tags rocksdb
 
 #? test: Run the tests.
 test: all
-	$(GORUN) build/ci.go test $(shell go list ./... | grep -v "test/")
+	$(GORUN) build/ci.go test -tags rocksdb
 
 #? lint: Run certain pre-selected linters.
 lint: ## Run linters.

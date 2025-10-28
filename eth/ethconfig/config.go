@@ -70,8 +70,8 @@ var Defaults = Config{
 	RPCEVMTimeout:      5 * time.Second,
 	GPO:                FullNodeGPO,
 	RPCTxFeeCap:        1, // 1 ether
-	Monitor:            DefaultMonitorConfig(),
-	XLayer:             XLayerConfig{OkPay: OkPayConfig{}, Apollo: ApolloConfig{}},
+	// For X Layer
+	XLayer: DefaultXLayerConfig,
 }
 
 //go:generate go run github.com/fjl/gencodec -type Config -formats toml -out gen_config.go
@@ -147,10 +147,6 @@ type Config struct {
 	// Enables tracking of SHA3 preimages in the VM
 	EnablePreimageRecording bool
 
-	// For X Layer
-	// Enables inner transaction capture and storage
-	EnableInnerTx bool
-
 	// Enables VM tracing
 	VMTrace           string
 	VMTraceJsonConfig string
@@ -204,8 +200,6 @@ type Config struct {
 
 	// For X Layer
 	XLayer XLayerConfig `toml:",omitempty"`
-	// Transaction monitoring configuration
-	Monitor MonitorConfig `toml:",omitempty"`
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain config.

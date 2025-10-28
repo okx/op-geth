@@ -78,9 +78,6 @@ func beforeOp(
 	}
 
 	innerTxMeta := evm.GetInnerTxMeta()
-	if innerTxMeta == nil {
-		// TODO
-	}
 	depth := evm.depth
 	if depth == innerTxMeta.lastDepth {
 		innerTxMeta.index++

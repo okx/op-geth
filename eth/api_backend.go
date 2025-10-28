@@ -68,7 +68,7 @@ func (b *EthAPIBackend) ChainConfig() *params.ChainConfig {
 // For X Layer
 // IsInnerTxEnabled returns whether inner transaction capture is enabled.
 func (b *EthAPIBackend) IsInnerTxEnabled() bool {
-	return b.eth.config.EnableInnerTx
+	return b.eth.config.XLayer.EnableInnerTx
 }
 
 func (b *EthAPIBackend) CurrentBlock() *types.Header {

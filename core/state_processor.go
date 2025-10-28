@@ -97,7 +97,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	for i, tx := range block.Transactions() {
 		txHash := tx.Hash().Hex()
 
-		// Log transaction processing start
+		// For X Layer, log transaction processing start
 		monitor.LogTransactionStart(
 			txHash,
 			monitor.ServiceNameState,
@@ -218,7 +218,7 @@ func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, 
 		statedb.AccessEvents().Merge(evm.AccessEvents)
 	}
 
-	// Log receipt generation
+	// For X Layer, log receipt generation
 	monitor.LogTransactionProgress(txHash, monitor.ServiceNameState, monitor.StepStateGenerateReceipt.ID,
 		monitor.StepStateGenerateReceipt.Key, blockNumber.Uint64(), int8(tx.Type()), "generating_receipt", result.UsedGas)
 

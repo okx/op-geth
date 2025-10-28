@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/internal/monitor"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -37,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types/interoptypes"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
@@ -758,10 +758,10 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 
 	sortedOkPayTxs := common.OrderedList[okPayTx]{}
 	sortedOkPayTxs.SetCompareFunc(func(a, b okPayTx) int {
-		if a.tx.Time.Before(b.tx.Time) {
+		if a.tx.Tx.Nonce() < b.tx.Tx.Nonce() {
 			return -1
 		}
-		if a.tx.Time.After(b.tx.Time) {
+		if a.tx.Tx.Nonce() > b.tx.Tx.Nonce() {
 			return 1
 		}
 		return 0
@@ -812,7 +812,7 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 		}
 		// Note: execution timing is accumulated in caller scope (generateWork)
 	}
-	
+
 	for _, account := range prio {
 		if txs := normalPlainTxs[account]; len(txs) > 0 {
 			delete(normalPlainTxs, account)

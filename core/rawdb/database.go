@@ -17,6 +17,7 @@
 package rawdb
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -305,19 +306,18 @@ func Open(db ethdb.KeyValueStore, opts OpenOptions) (ethdb.Database, error) {
 			if ReadHeadHeaderHash(db) != common.BytesToHash(kvgenesis) {
 				// Key-value store contains more data than the genesis block, make sure we
 				// didn't freeze anything yet.
-				firstBlockNumber := getFirstBlockNumber(db)
-				var blockNumberShouldNotExistInAncientDb uint64
-				if firstBlockNumber == 0 {
-					blockNumberShouldNotExistInAncientDb = 1
-				} else {
-					blockNumberShouldNotExistInAncientDb = firstBlockNumber
+				ndb := NewDatabase(db)
+				genesisHash := ReadCanonicalHash(ndb, 0)
+				config := ReadChainConfig(ndb, genesisHash)
+				log.Info("check config", "legacy", config.LegacyXLayerBlock)
+				firstBlockMoveToAncient := uint64(1)
+				if config.LegacyXLayerBlock != nil {
+					firstBlockMoveToAncient = config.LegacyXLayerBlock.Uint64()
 				}
-
-				if kvblob, _ := db.Get(headerHashKey(blockNumberShouldNotExistInAncientDb)); len(kvblob) == 0 {
+				if kvblob, _ := db.Get(headerHashKey(firstBlockMoveToAncient)); len(kvblob) == 0 {
 					printChainMetadata(db)
 					return nil, errors.New("ancient chain segments already extracted, please set --datadir.ancient to the correct path")
 				}
-				// Block at firstBlockNumber is still in the database, we're allowed to init a new freezer
 			}
 			// Otherwise, the head header is still the genesis, we're allowed to init a new
 			// freezer.
@@ -347,7 +347,32 @@ func NewMemoryDatabase() ethdb.Database {
 const (
 	DBPebble  = "pebble"
 	DBLeveldb = "leveldb"
+	DBRocksdb = "rocksdb"
 )
+
+// checkFirstLineContains checks if the first line of a file contains a specific string
+func checkFirstLineContains(filename, searchString string) (bool, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return false, fmt.Errorf("failed to open file %s: %w", filename, err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	// Read the first line
+	if !scanner.Scan() {
+		// Check if there was an error or just empty file
+		if err := scanner.Err(); err != nil {
+			return false, fmt.Errorf("failed to read from file %s: %w", filename, err)
+		}
+		// Empty file
+		return false, nil
+	}
+
+	firstLine := scanner.Text()
+	return strings.Contains(firstLine, searchString), nil
+}
 
 // PreexistingDatabase checks the given data directory whether a database is already
 // instantiated at that location, and if so, returns the type of database (or the
@@ -356,12 +381,23 @@ func PreexistingDatabase(path string) string {
 	if _, err := os.Stat(filepath.Join(path, "CURRENT")); err != nil {
 		return "" // No pre-existing db
 	}
+
+	// Check for RocksDB database (has LOG file with RocksDB in the first line)
+	if _, err := os.Stat(filepath.Join(path, "LOG")); err == nil {
+		if contains, err := checkFirstLineContains(filepath.Join(path, "LOG"), "RocksDB"); err == nil && contains {
+			return DBRocksdb
+		}
+	}
+
+	// Check for Pebble database (has OPTIONS files)
 	if matches, err := filepath.Glob(filepath.Join(path, "OPTIONS*")); len(matches) > 0 || err != nil {
 		if err != nil {
 			panic(err) // only possible if the pattern is malformed
 		}
 		return DBPebble
 	}
+
+	// Default to LevelDB (CURRENT file exists but no OPTIONS or SST files)
 	return DBLeveldb
 }
 
@@ -785,20 +821,4 @@ func SafeDeleteRange(db ethdb.KeyValueStore, start, end []byte, hashScheme bool,
 		}
 	}
 	return batch.Write()
-}
-
-// getFirstBlockNumber returns the actual genesis block number from the database.
-// This is needed for custom genesis logic where the genesis block might not be at block 0.
-func getFirstBlockNumber(db ethdb.KeyValueStore) uint64 {
-	// First check if there's a genesis block at block 0
-	if genesisHashData, _ := db.Get(headerHashKey(0)); len(genesisHashData) > 0 {
-		genesisHash := common.BytesToHash(genesisHashData)
-		// Try to read chain config to get LegacyXLayerBlock
-		if config := ReadChainConfig(db, genesisHash); config != nil && config.LegacyXLayerBlock != nil {
-			return config.LegacyXLayerBlock.Uint64()
-		}
-	}
-
-	// If no custom number found, return 0 as default
-	return 0
 }
