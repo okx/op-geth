@@ -181,7 +181,7 @@ func (l *statisticsInstance) CombinedSummary(pstat Statistics) string {
 	}
 
 	line := fmt.Sprintf(
-		"Block<%d>, Txs<%d> GasUsed<%d>, BlockTime<%s> { Propose[%s] { Prepare[%s], execute[%s], Prague[%s], assemble[%s] , State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s] } }, Insert[%s] { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] , Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
+		"Block<%d>, Txs<%d> GasUsed<%d>, BlockTime<%s> { Mine[%s] { Prepare[%s], execute[%s], Prague[%s], assemble[%s] , State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s] } }, Insert[%s] { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] , Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
 		block,
 		tx,
 		gasUsed,
