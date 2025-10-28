@@ -1773,7 +1773,6 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 // is imported, but then new canon-head is added before the actual sidechain
 // completes, then the historic state could be pruned again
 func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness bool) (*stateless.Witness, int, error) {
-	log.Info("[Realtime] InsertChain started")
 	// If the chain is terminating, don't even bother starting up.
 	if bc.insertStopped() {
 		return nil, 0, nil
@@ -1790,8 +1789,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
 	SenderCacher().RecoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number(), chain[0].Time()), chain)
-
-	log.Info("[Realtime] InsertChain after RecoverFromBlocks")
 
 	var (
 		stats     = insertStats{startTime: mclock.Now()}
@@ -1810,8 +1807,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 	}
 	abort, results := bc.engine.VerifyHeaders(bc, headers)
 	defer close(abort)
-
-	log.Info("[Realtime] InsertChain after VerifyHeaders", "chain", len(chain))
 
 	// Peek the error for the first block to decide the directing import logic
 	it := newInsertIterator(chain, results, bc.validator)
@@ -1853,9 +1848,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		}
 		// Falls through to the block import
 	}
-
-	log.Info("[Realtime] InsertChain after left trimming")
-
 	switch {
 	// First block is pruned
 	case errors.Is(err, consensus.ErrPrunedAncestor):
@@ -1877,9 +1869,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		bc.reportBlock(block, nil, err)
 		return nil, it.index, err
 	}
-
-	log.Info("[Realtime] InsertChain after error check")
-
 	// Track the singleton witness from this chain insertion (if any)
 	var witness *stateless.Witness
 
@@ -1934,7 +1923,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 			lastCanon = block
 			continue
 		}
-		log.Info(fmt.Sprintf("[Realtime] InsertChain after skip block check, processing block, number: %d, hash: %s", block.Number(), block.Hash()))
 		// Retrieve the parent block and it's state to execute on top
 		start := time.Now()
 		parent := it.previous()
@@ -1943,12 +1931,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		}
 
 		// The traced section of block import.
-		log.Info(fmt.Sprintf("[Realtime] InsertChain after get parent header, number: %d, hash: %s", block.Number(), block.Hash()))
 		res, err := bc.processBlock(parent.Root, block, setHead, makeWitness && len(chain) == 1)
 		if err != nil {
 			return nil, it.index, err
 		}
-		log.Info(fmt.Sprintf("[Realtime] InsertChain after process block, number: %d, hash: %s", block.Number(), block.Hash()))
 		// Report the import stats before returning the various results
 		stats.processed++
 		stats.usedGas += res.usedGas
@@ -1962,7 +1948,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead)
 		// Print confirmation that a future fork is scheduled, but not yet active.
 		bc.logForkReadiness(block)
-		log.Info(fmt.Sprintf("[Realtime] InsertChain after process etc, number: %d, hash: %s", block.Number(), block.Hash()))
 
 		if !setHead {
 			// After merge we expect few side chains. Simply count
