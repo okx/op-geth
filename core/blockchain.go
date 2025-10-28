@@ -2211,12 +2211,6 @@ func (bc *BlockChain) processBlock(parentRoot common.Hash, block *types.Block, s
 		monitor.StepBlockchainFinalize.Key, blockHeight, blockHash, block.Time(),
 		0, "finalized", "", res.GasUsed)
 
-	// Try merge propose stats snapshot if exists (and add propose time into final block time)
-	if pstat, ok := metrics.GlobalStatsStore.GetAndDelete(block.Hash()); ok {
-		_ = ls.CombinedSummary(pstat)
-	} else {
-		ls.CombinedSummary(nil)
-	}
 	logStatistic(block, statedb, startTime, ptime, vtime, triehash, trieUpdate, xvtime, wstart, proctime)
 
 	return &blockProcessingResult{
