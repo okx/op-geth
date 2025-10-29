@@ -338,6 +338,23 @@ func (api *XlayerHybridBlockChainAPI) GetBlockReceipts(ctx context.Context, bloc
 		return localResult, nil
 	}
 
+	if err == nil && localResult != nil && len(localResult) == 0 {
+		// should get block and check if it is an empty block
+		if blockNr, ok := blockNrOrHash.Number(); ok {
+			block, err := api.BlockChainAPI.GetBlockByNumber(ctx, blockNr, false)
+			if err == nil && block != nil {
+				return localResult, nil
+			}
+		}
+
+		if hash, ok := blockNrOrHash.Hash(); ok {
+			block, err := api.BlockChainAPI.GetBlockByHash(ctx, hash, false)
+			if err == nil && block != nil {
+				return localResult, nil
+			}
+		}
+	}
+
 	// If not found locally and migration is configured, try erigon
 	var result []map[string]interface{}
 	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getBlockReceipts", blockNrOrHash)
