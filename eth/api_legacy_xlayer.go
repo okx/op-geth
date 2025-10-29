@@ -334,32 +334,8 @@ func (api *XlayerHybridBlockChainAPI) GetBlockReceipts(ctx context.Context, bloc
 
 	// For hash-based queries, try local first to determine the block number
 	localResult, err := api.BlockChainAPI.GetBlockReceipts(ctx, blockNrOrHash)
-	if err == nil && localResult != nil && len(localResult) > 0 {
+	if err == nil && localResult != nil {
 		return localResult, nil
-	}
-
-	if err == nil && localResult != nil && len(localResult) == 0 {
-		// should get block and check if it is an empty block
-
-		// try to get block by number
-		if blockNr, ok := blockNrOrHash.Number(); ok {
-			block, err := api.BlockChainAPI.GetBlockByNumber(ctx, blockNr, false)
-			if err == nil && block != nil {
-				// if get block by number is successful, return empty receipts
-				return localResult, nil
-			}
-		}
-
-		// try to get block by hash
-		if hash, ok := blockNrOrHash.Hash(); ok {
-			block, err := api.BlockChainAPI.GetBlockByHash(ctx, hash, false)
-			if err == nil && block != nil {
-				// if get block by hash is successful, return empty receipts
-				return localResult, nil
-			}
-		}
-
-		// otherwise, means the block is not found in op-geth, try to get it from erigon
 	}
 
 	// If not found locally and migration is configured, try erigon
