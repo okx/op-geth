@@ -575,6 +575,46 @@ func (api *XlayerHybridTransactionAPI) GetTransactionCount(ctx context.Context, 
 	return result, err
 }
 
+// XlayerHybridTxPreExecAPI wraps the TxPreExecAPI to add migration routing
+type XlayerHybridTxPreExecAPI struct {
+	*TxPreExecAPI
+	legacyRpc *XlayerLegacyRPCService
+}
+
+// NewXlayerHybridTxPreExecAPI creates a new migration-aware TxPreExecAPI
+func NewXlayerHybridTxPreExecAPI(original *TxPreExecAPI, config *XlayerLegacyRPCService) *XlayerHybridTxPreExecAPI {
+	return &XlayerHybridTxPreExecAPI{
+		TxPreExecAPI: original,
+		legacyRpc:    config,
+	}
+}
+
+// eth_transactionPreExec FORWARD
+func (api *XlayerHybridTxPreExecAPI) TransactionPreExec(ctx context.Context, origins []PreArgs, blockNrOrHash *rpc.BlockNumberOrHash, stateOverrides *override.StateOverride) ([]PreResult, error) {
+	bNrOrHash := rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
+	if blockNrOrHash != nil {
+		bNrOrHash = *blockNrOrHash
+	}
+	if blockNr, ok := bNrOrHash.Number(); ok && blockNr >= 0 {
+		if api.legacyRpc.shouldProxy(uint64(blockNr)) {
+			var result []PreResult
+			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_transactionPreExec", origins, &bNrOrHash, stateOverrides)
+			return result, err
+		} else {
+			return api.TxPreExecAPI.TransactionPreExec(ctx, origins, &bNrOrHash, stateOverrides)
+		}
+	}
+
+	localResult, err := api.TxPreExecAPI.TransactionPreExec(ctx, origins, &bNrOrHash, stateOverrides)
+	if err == nil && len(localResult) != 0 {
+		return localResult, nil
+	}
+
+	var result []PreResult
+	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_transactionPreExec", origins, &bNrOrHash, stateOverrides)
+	return result, err
+}
+
 type XlayerHybridFilterAPI struct {
 	*filters.FilterAPI
 	legacyRpc *XlayerLegacyRPCService
@@ -790,7 +830,7 @@ func WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API
 	for _, api := range apis {
 		switch api.Namespace {
 		case "eth":
-			// Check if this is a BlockChainAPI, TransactionAPI or FilterAPI and wrap it
+			// Check if this is a BlockChainAPI, TransactionAPI, TxPreExecAPI, or FilterAPI and wrap it
 			switch original := api.Service.(type) {
 			case *ethapi.BlockChainAPI:
 				wrapped = append(wrapped, rpc.API{
@@ -805,6 +845,14 @@ func WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API
 					Namespace:     api.Namespace,
 					Version:       api.Version,
 					Service:       NewXlayerHybridTransactionAPI(original, config),
+					Public:        api.Public,
+					Authenticated: api.Authenticated,
+				})
+			case *TxPreExecAPI:
+				wrapped = append(wrapped, rpc.API{
+					Namespace:     api.Namespace,
+					Version:       api.Version,
+					Service:       NewXlayerHybridTxPreExecAPI(original, config),
 					Public:        api.Public,
 					Authenticated: api.Authenticated,
 				})
