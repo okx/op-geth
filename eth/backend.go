@@ -538,6 +538,12 @@ func (s *Ethereum) APIs() []rpc.API {
 	//// Append any APIs exposed explicitly by the consensus engine
 	//apis = append(apis, s.engine.APIs(s.BlockChain())...)
 
+	// For XLayer, eth_transactionPreExec
+	apis = append(apis, rpc.API{
+		Namespace: "eth",
+		Service:   NewTxPreExecAPI(s),
+	})
+
 	// Xlayer: Wrap APIs with migration routing if configured
 	if s.xlayerLegacyRPCService != nil {
 		apis = WrapAPIsForXlayer(apis, s.xlayerLegacyRPCService)
@@ -567,10 +573,6 @@ func (s *Ethereum) APIs() []rpc.API {
 		}, {
 			Namespace: "net",
 			Service:   s.netRPCService,
-		}, {
-			// For X Layer
-			Namespace: "eth",
-			Service:   NewTxPreExecAPI(s),
 		},
 	}...)
 }

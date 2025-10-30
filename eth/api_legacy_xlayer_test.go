@@ -341,6 +341,84 @@ func (s *mockErigonService) EstimateGas(args map[string]interface{}, blockNrOrHa
 	return hexutil.Uint64(21000), nil
 }
 
+// TransactionPreExec mocks eth_transactionPreExec and returns mock pre-execution results
+func (s *mockErigonService) TransactionPreExec(origins []PreArgs, blockNrOrHash interface{}, stateOverrides interface{}) ([]PreResult, error) {
+	results := make([]PreResult, len(origins))
+	for i := range origins {
+		results[i] = PreResult{
+			InnerTxs: []interface{}{},
+			Logs:     []interface{}{},
+			StateDiff: map[string]interface{}{
+				"0x1234567890123456789012345678901234567890": map[string]interface{}{
+					"before": "0x3b9aca00",
+					"after":  "0x3b99f4b8",
+				},
+			},
+			GasUsed: 21000,
+		}
+	}
+	return results, nil
+}
+
+// mockTxPreExecAPI is a mock implementation for local execution
+type mockTxPreExecAPI struct {
+	results   map[uint64][]PreResult
+	hashFails bool
+	knownHash common.Hash
+}
+
+func (m *mockTxPreExecAPI) TransactionPreExec(ctx context.Context, origins []PreArgs, blockNrOrHash *rpc.BlockNumberOrHash, stateOverrides *override.StateOverride) ([]PreResult, error) {
+	if blockNr, ok := blockNrOrHash.Number(); ok {
+		if results, exists := m.results[uint64(blockNr)]; exists {
+			return results, nil
+		}
+		return nil, fmt.Errorf("no results for block %d", blockNr)
+	}
+
+	if blockHash, ok := blockNrOrHash.Hash(); ok {
+		if m.hashFails && blockHash != m.knownHash {
+			return nil, fmt.Errorf("block hash not found: %s", blockHash.Hex())
+		}
+		if results, exists := m.results[0]; exists {
+			return results, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no results available")
+}
+
+// mockTxPreExecAPIWrapper wraps the routing logic for testing
+type mockTxPreExecAPIWrapper struct {
+	mock      *mockTxPreExecAPI
+	legacyRpc *XlayerLegacyRPCService
+}
+
+func (w *mockTxPreExecAPIWrapper) TransactionPreExec(ctx context.Context, origins []PreArgs, blockNrOrHash *rpc.BlockNumberOrHash, stateOverrides *override.StateOverride) ([]PreResult, error) {
+	bNrOrHash := rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
+	if blockNrOrHash != nil {
+		bNrOrHash = *blockNrOrHash
+	}
+
+	// Route by block number
+	if blockNr, ok := bNrOrHash.Number(); ok && blockNr >= 0 {
+		if w.legacyRpc.shouldProxy(uint64(blockNr)) {
+			var result []PreResult
+			err := w.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_transactionPreExec", origins, &bNrOrHash, stateOverrides)
+			return result, err
+		}
+		return w.mock.TransactionPreExec(ctx, origins, &bNrOrHash, stateOverrides)
+	}
+
+	localResult, err := w.mock.TransactionPreExec(ctx, origins, &bNrOrHash, stateOverrides)
+	if err == nil && localResult != nil {
+		return localResult, nil
+	}
+
+	var result []PreResult
+	err = w.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_transactionPreExec", origins, &bNrOrHash, stateOverrides)
+	return result, err
+}
+
 // createMockErigonServer creates an httptest server that simulates an Erigon RPC endpoint
 func createMockErigonServer(t *testing.T) (*httptest.Server, *mockErigonService) {
 	service := newMockErigonService()
@@ -2104,6 +2182,195 @@ func TestInvalidBlockRanges(t *testing.T) {
 		_, err := api.GetLogs(ctx, crit)
 		if err == nil {
 			t.Error("expected error for invalid block range")
+		}
+	})
+}
+
+// Test XlayerHybridTxPreExecAPI routing for TransactionPreExec
+func TestHybridTxPreExecAPI_RoutingByBlockNumber(t *testing.T) {
+	t.Parallel()
+
+	// Setup mock Erigon server
+	legacy, server, _ := createTestLegacyService(t, 100)
+	defer server.Close()
+	defer legacy.Close()
+
+	// Create a mock local TxPreExecAPI
+	mockLocal := &mockTxPreExecAPI{
+		results: make(map[uint64][]PreResult),
+	}
+
+	// Add local results for blocks >= 100
+	mockLocal.results[100] = []PreResult{
+		{
+			InnerTxs: []interface{}{},
+			Logs:     []interface{}{},
+			StateDiff: map[string]interface{}{
+				"0xLOCAL": map[string]interface{}{
+					"before": "0x1388",
+					"after":  "0x1377",
+				},
+			},
+			GasUsed: 21000,
+		},
+	}
+	mockLocal.results[150] = mockLocal.results[100]
+
+	// Create hybrid API with wrapper
+	wrapperAPI := &mockTxPreExecAPIWrapper{
+		mock:      mockLocal,
+		legacyRpc: legacy,
+	}
+
+	ctx := context.Background()
+	sender := common.HexToAddress("0xSender")
+	receiver := common.HexToAddress("0xReceiver")
+	gas := hexutil.Uint64(21000)
+	testArgs := []PreArgs{
+		{
+			From:     &sender,
+			To:       &receiver,
+			Gas:      &gas,
+			GasPrice: (*hexutil.Big)(big.NewInt(1000000000)),
+			Value:    (*hexutil.Big)(big.NewInt(1000000000000000000)),
+		},
+	}
+
+	t.Run("Block below migration routes to Erigon", func(t *testing.T) {
+		blockNum := rpc.BlockNumber(50)
+		blockNrOrHash := rpc.BlockNumberOrHashWithNumber(blockNum)
+
+		results, err := wrapperAPI.TransactionPreExec(ctx, testArgs, &blockNrOrHash, nil)
+		if err != nil {
+			t.Fatalf("TransactionPreExec failed: %v", err)
+		}
+		if len(results) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(results))
+		}
+
+		// Verify it came from Erigon
+		stateDiff, ok := results[0].StateDiff.(map[string]interface{})
+		if !ok {
+			t.Fatal("expected StateDiff to be map[string]interface{}")
+		}
+		if _, ok := stateDiff["0x1234567890123456789012345678901234567890"]; !ok {
+			t.Error("expected state diff from Erigon mock")
+		}
+		t.Log("Successfully fell back to Erigon, stateDiff: ", stateDiff)
+	})
+
+	t.Run("Block at migration threshold routes to local", func(t *testing.T) {
+		blockNum := rpc.BlockNumber(100)
+		blockNrOrHash := rpc.BlockNumberOrHashWithNumber(blockNum)
+
+		results, err := wrapperAPI.TransactionPreExec(ctx, testArgs, &blockNrOrHash, nil)
+		if err != nil {
+			t.Fatalf("TransactionPreExec failed: %v", err)
+		}
+		if len(results) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(results))
+		}
+
+		stateDiff, ok := results[0].StateDiff.(map[string]interface{})
+		if !ok {
+			t.Fatal("expected StateDiff to be map[string]interface{}")
+		}
+		if _, ok := stateDiff["0xLOCAL"]; !ok {
+			t.Error("expected state diff from local mock")
+		}
+		t.Log("Successfully fell back to local, stateDiff: ", stateDiff)
+	})
+
+	t.Run("Block above migration routes to local", func(t *testing.T) {
+		blockNum := rpc.BlockNumber(150)
+		blockNrOrHash := rpc.BlockNumberOrHashWithNumber(blockNum)
+
+		results, err := wrapperAPI.TransactionPreExec(ctx, testArgs, &blockNrOrHash, nil)
+		if err != nil {
+			t.Fatalf("TransactionPreExec failed: %v", err)
+		}
+		if len(results) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(results))
+		}
+
+		// Verify it came from local
+		stateDiff, ok := results[0].StateDiff.(map[string]interface{})
+		if !ok {
+			t.Fatal("expected StateDiff to be map[string]interface{}")
+		}
+		if _, ok := stateDiff["0xLOCAL"]; !ok {
+			t.Error("expected state diff from local mock")
+		}
+		t.Log("Successfully fell back to local, stateDiff: ", stateDiff)
+	})
+}
+
+// Test XlayerHybridTxPreExecAPI routing for block hash
+func TestHybridTxPreExecAPI_RoutingByBlockHash(t *testing.T) {
+	t.Parallel()
+
+	// Setup mock Erigon server
+	legacy, server, _ := createTestLegacyService(t, 100)
+	defer server.Close()
+	defer legacy.Close()
+
+	mockLocal := &mockTxPreExecAPI{
+		results:   make(map[uint64][]PreResult),
+		hashFails: true,
+		knownHash: common.HexToHash("0xLOCAL_HASH"),
+	}
+
+	mockLocal.results[0] = []PreResult{
+		{
+			InnerTxs: []interface{}{},
+			Logs:     []interface{}{},
+			StateDiff: map[string]interface{}{
+				"0xLOCAL": map[string]interface{}{
+					"before": "0x1388",
+					"after":  "0x1377",
+				},
+			},
+			GasUsed: 21000,
+		},
+	}
+
+	wrapperAPI := &mockTxPreExecAPIWrapper{
+		mock:      mockLocal,
+		legacyRpc: legacy,
+	}
+
+	ctx := context.Background()
+	sender := common.HexToAddress("0xSender")
+	receiver := common.HexToAddress("0xReceiver")
+	gas := hexutil.Uint64(21000)
+	testArgs := []PreArgs{
+		{
+			From:     &sender,
+			To:       &receiver,
+			Gas:      &gas,
+			GasPrice: (*hexutil.Big)(big.NewInt(1000000000)),
+			Value:    (*hexutil.Big)(big.NewInt(1000000000000000000)),
+		},
+	}
+
+	t.Run("BlockHash test", func(t *testing.T) {
+		blockHash := mockLocal.knownHash
+		blockNrOrHash := rpc.BlockNumberOrHashWithHash(blockHash, false)
+
+		results, err := wrapperAPI.TransactionPreExec(ctx, testArgs, &blockNrOrHash, nil)
+		if err != nil {
+			t.Fatalf("TransactionPreExec failed: %v", err)
+		}
+		if len(results) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(results))
+		}
+
+		stateDiff, ok := results[0].StateDiff.(map[string]interface{})
+		if !ok {
+			t.Fatal("expected StateDiff to be map[string]interface{}")
+		}
+		if _, ok := stateDiff["0xLOCAL"]; !ok {
+			t.Error("expected state diff from local mock")
 		}
 	})
 }

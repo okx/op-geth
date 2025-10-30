@@ -606,7 +606,7 @@ func (api *XlayerHybridTxPreExecAPI) TransactionPreExec(ctx context.Context, ori
 	}
 
 	localResult, err := api.TxPreExecAPI.TransactionPreExec(ctx, origins, &bNrOrHash, stateOverrides)
-	if err == nil && len(localResult) != 0 {
+	if err == nil && localResult != nil {
 		return localResult, nil
 	}
 
