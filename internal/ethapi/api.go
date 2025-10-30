@@ -809,6 +809,12 @@ func (api *BlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rp
 		if err != nil {
 			return nil, err
 		}
+		// Xlayer:
+		// Handle empty blocks where receipts might be nil
+		// For blocks with no transactions, receipts can be nil from database
+		if receipts == nil && len(block.Transactions()) == 0 {
+			receipts = types.Receipts{}
+		}
 	}
 	txs := block.Transactions()
 	if len(txs) != len(receipts) {
