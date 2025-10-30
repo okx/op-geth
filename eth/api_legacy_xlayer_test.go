@@ -648,7 +648,7 @@ func TestHybridTransactionAPI_ProxiesByNumber(t *testing.T) {
 		t.Fatalf("failed to create legacy service: %v", err)
 	}
 	defer legacy.Close()
-	api := NewXlayerHybridTransactionAPI(nil, legacy)
+	api := NewXlayerHybridTransactionAPI(nil, nil, legacy)
 
 	ctx := context.Background()
 
@@ -1043,7 +1043,7 @@ func TestLocalStrategy_TransactionAPIs(t *testing.T) {
 	}
 	defer legacy.Close()
 
-	_ = NewXlayerHybridTransactionAPI(nil, legacy)
+	_ = NewXlayerHybridTransactionAPI(nil, nil, legacy)
 
 	t.Run("GetTransactionByHash - fallback to Erigon", func(t *testing.T) {
 		// Direct call to Erigon to verify it works
@@ -1504,7 +1504,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, nil, legacy)
 		if len(wrappedAPIs) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrappedAPIs))
 		}
@@ -1538,7 +1538,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, nil, legacy)
 		if len(wrappedAPIs) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrappedAPIs))
 		}
@@ -1563,7 +1563,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, nil, legacy)
 		if len(wrappedAPIs) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrappedAPIs))
 		}
@@ -1585,7 +1585,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, nil, legacy)
 		if len(wrappedAPIs) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrappedAPIs))
 		}
@@ -1610,7 +1610,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, nil, legacy)
 		if len(wrappedAPIs) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrappedAPIs))
 		}
@@ -1630,7 +1630,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			{Namespace: "debug", Service: &struct{}{}, Public: false},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, legacy)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, nil, legacy)
 		if len(wrappedAPIs) != 5 {
 			t.Fatalf("expected 5 APIs, got %d", len(wrappedAPIs))
 		}
@@ -1662,7 +1662,7 @@ func TestWrapAPIsForXlayer(t *testing.T) {
 			{Namespace: "eth", Service: &ethapi.BlockChainAPI{}, Public: true},
 		}
 
-		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, nil)
+		wrappedAPIs := WrapAPIsForXlayer(originalAPIs, nil, nil)
 		if len(wrappedAPIs) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrappedAPIs))
 		}
@@ -1699,7 +1699,7 @@ func TestTransactionAPI_AdditionalMethods(t *testing.T) {
 	}
 	defer legacy.Close()
 
-	api := NewXlayerHybridTransactionAPI(nil, legacy)
+	api := NewXlayerHybridTransactionAPI(nil, nil, legacy)
 	ctx := context.Background()
 
 	t.Run("GetTransactionCount - FORWARD strategy", func(t *testing.T) {
@@ -2120,7 +2120,7 @@ func TestNilLegacyService(t *testing.T) {
 			{Namespace: "eth", Service: originalAPI, Public: true},
 		}
 
-		wrapped := WrapAPIsForXlayer(apis, nil)
+		wrapped := WrapAPIsForXlayer(apis, nil, nil)
 		if len(wrapped) != 1 {
 			t.Fatalf("expected 1 API, got %d", len(wrapped))
 		}

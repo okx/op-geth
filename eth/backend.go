@@ -539,14 +539,16 @@ func (s *Ethereum) APIs() []rpc.API {
 	//apis = append(apis, s.engine.APIs(s.BlockChain())...)
 
 	// For XLayer, eth_transactionPreExec
-	apis = append(apis, rpc.API{
-		Namespace: "eth",
-		Service:   NewTxPreExecAPI(s),
-	})
+	txPreExecAPI := NewTxPreExecAPI(s)
 
 	// Xlayer: Wrap APIs with migration routing if configured
 	if s.xlayerLegacyRPCService != nil {
-		apis = WrapAPIsForXlayer(apis, s.xlayerLegacyRPCService)
+		apis = WrapAPIsForXlayer(apis, txPreExecAPI, s.xlayerLegacyRPCService)
+	} else {
+		apis = append(apis, rpc.API{
+			Namespace: "eth",
+			Service:   txPreExecAPI,
+		})
 	}
 
 	// Append any Sequencer APIs as enabled
