@@ -15,7 +15,6 @@ import (
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/ethapi/override"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -334,12 +333,8 @@ func (api *XlayerHybridBlockChainAPI) GetBlockReceipts(ctx context.Context, bloc
 
 	// For hash-based queries, try local first to determine the block number
 	localResult, err := api.BlockChainAPI.GetBlockReceipts(ctx, blockNrOrHash)
-	if err == nil {
-		if localResult != nil {
-			return localResult, nil
-		}
-	} else {
-		log.Warn("XlayerHybridBlockChainAPI GetBlockReceipts local error", err, "blockNrOrHash", blockNrOrHash)
+	if err == nil && localResult != nil {
+		return localResult, nil
 	}
 
 	// If not found locally and migration is configured, try erigon
