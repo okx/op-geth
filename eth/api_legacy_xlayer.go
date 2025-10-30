@@ -8,14 +8,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/internal/ethapi/override"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
+	"github.com/ethereum/go-ethereum/internal/ethapi/override"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -334,8 +334,12 @@ func (api *XlayerHybridBlockChainAPI) GetBlockReceipts(ctx context.Context, bloc
 
 	// For hash-based queries, try local first to determine the block number
 	localResult, err := api.BlockChainAPI.GetBlockReceipts(ctx, blockNrOrHash)
-	if err == nil && localResult != nil {
-		return localResult, nil
+	if err == nil {
+		if localResult != nil {
+			return localResult, nil
+		}
+	} else {
+		log.Warn("XlayerHybridBlockChainAPI GetBlockReceipts local error", err, "blockNrOrHash", blockNrOrHash)
 	}
 
 	// If not found locally and migration is configured, try erigon
