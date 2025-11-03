@@ -33,10 +33,12 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 	_ "github.com/olekukonko/tablewriter"
 	"golang.org/x/sync/errgroup"
 )
@@ -234,6 +236,13 @@ func Open(db ethdb.KeyValueStore, opts OpenOptions) (ethdb.Database, error) {
 		printChainMetadata(db)
 		return nil, err
 	}
+
+	// Restore genesis block from freezer to leveldb if it's missing from leveldb
+	// This needs to happen before validation to ensure genesis block exists in leveldb
+	if err := restoreGenesisBlockFromFreezerForXLayer(opts.Ancient, db, frdb); err != nil {
+		return nil, fmt.Errorf("failed to restore genesis block from freezer: %v", err)
+	}
+
 	// Since the freezer can be stored separately from the user's key-value database,
 	// there's a fairly high probability that the user requests invalid combinations
 	// of the freezer and database. Ensure that we don't shoot ourselves in the foot
@@ -280,10 +289,9 @@ func Open(db ethdb.KeyValueStore, opts OpenOptions) (ethdb.Database, error) {
 					return nil, fmt.Errorf("could not read header number, hash %v", ReadHeadHeaderHash(db))
 				}
 
-				config, err := frdb.GetChainConfig(db)
-				if err != nil {
-					return nil, fmt.Errorf("failed to get chain config: %v", err)
-				}
+				ndb := NewDatabase(db)
+				genesisHash := ReadCanonicalHash(ndb, 0)
+				config := ReadChainConfig(ndb, genesisHash)
 
 				if head > frozen-1 && (!config.IsXLayer() || frozen >= config.LegacyXLayerBlock.Uint64()) {
 					// Find the smallest block stored in the key-value store
@@ -312,10 +320,9 @@ func Open(db ethdb.KeyValueStore, opts OpenOptions) (ethdb.Database, error) {
 			if ReadHeadHeaderHash(db) != common.BytesToHash(kvgenesis) {
 				// Key-value store contains more data than the genesis block, make sure we
 				// didn't freeze anything yet.
-				config, err := frdb.GetChainConfig(db)
-				if err != nil {
-					return nil, fmt.Errorf("failed to get chain config: %v", err)
-				}
+				ndb := NewDatabase(db)
+				genesisHash := ReadCanonicalHash(ndb, 0)
+				config := ReadChainConfig(ndb, genesisHash)
 				log.Info("check config", "legacy", config.LegacyXLayerBlock)
 				firstBlockMoveToAncient := uint64(1)
 				if config.LegacyXLayerBlock != nil {
@@ -828,4 +835,130 @@ func SafeDeleteRange(db ethdb.KeyValueStore, start, end []byte, hashScheme bool,
 		}
 	}
 	return batch.Write()
+}
+
+// Only for fixing the data from testnet. Move genesis block from ancientdb to db if it's missing from db.
+func restoreGenesisBlockFromFreezerForXLayer(ancientRoot string, kvdb ethdb.KeyValueStore, chainFreezer *chainFreezer) error {
+	// Construct freezerdb from parameters
+	chainDb := &freezerdb{
+		ancientRoot:   ancientRoot,
+		KeyValueStore: kvdb,
+		chainFreezer:  chainFreezer,
+	}
+
+	// Create a nofreezedb wrapper to check leveldb only (same as freezeRange does)
+	nfdb := &nofreezedb{KeyValueStore: chainDb}
+
+	// Check if block 0 exists in leveldb (not freezer)
+	genesisHashFromLeveldb := ReadCanonicalHash(nfdb, 0)
+	if genesisHashFromLeveldb != (common.Hash{}) {
+		// Block 0 hash exists in leveldb, check if we can read the full block from leveldb
+		genesisBlock := ReadBlock(nfdb, genesisHashFromLeveldb, 0)
+		if genesisBlock != nil {
+			// Also check if chain config exists in leveldb
+			config := ReadChainConfig(nfdb, genesisHashFromLeveldb)
+			if config != nil {
+				log.Info("restoreGenesisBlockFromFreezer: block 0 exists in leveldb, no need to restore")
+				return nil
+			}
+		}
+	}
+
+	log.Info("restoreGenesisBlockFromFreezer: block 0 is missing from db, recover from ancientdb")
+
+	// Block 0 is missing from leveldb, check if it exists in freezer
+	var (
+		hashInFreezer     []byte
+		headerInFreezer   []byte
+		bodyInFreezer     []byte
+		receiptsInFreezer []byte
+		hasDataInFreezer  bool
+	)
+
+	err := chainDb.ReadAncients(func(reader ethdb.AncientReaderOp) error {
+		var err error
+		hashInFreezer, err = reader.Ancient(ChainFreezerHashTable, 0)
+		if err != nil || len(hashInFreezer) == 0 {
+			return nil // No data in freezer
+		}
+
+		headerInFreezer, err = reader.Ancient(ChainFreezerHeaderTable, 0)
+		if err != nil || len(headerInFreezer) == 0 {
+			return nil
+		}
+
+		// Read body and receipts (they might be empty for genesis block)
+		bodyInFreezer, _ = reader.Ancient(ChainFreezerBodiesTable, 0)
+		receiptsInFreezer, _ = reader.Ancient(ChainFreezerReceiptTable, 0)
+
+		hasDataInFreezer = true
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to read from freezer: %v", err)
+	}
+
+	if !hasDataInFreezer {
+		// No data in freezer, nothing to restore
+		return nil
+	}
+
+	// We have data in freezer, restore it to leveldb
+	log.Info("restoreGenesisBlockFromFreezer: restoring block 0 from freezer to leveldb")
+
+	genesisHash := common.BytesToHash(hashInFreezer)
+
+	// Decode header
+	var header types.Header
+	if err := rlp.DecodeBytes(headerInFreezer, &header); err != nil {
+		return fmt.Errorf("failed to decode genesis header: %v", err)
+	}
+
+	// Verify the header hash matches the canonical hash
+	if header.Hash() != genesisHash {
+		return fmt.Errorf("header hash mismatch: expected %v, got %v", genesisHash, header.Hash())
+	}
+
+	// Decode body
+	var body types.Body
+	if len(bodyInFreezer) > 0 {
+		if err := rlp.DecodeBytes(bodyInFreezer, &body); err != nil {
+			return fmt.Errorf("failed to decode genesis body: %v", err)
+		}
+	}
+
+	// Reconstruct the block
+	genesisBlock := types.NewBlockWithHeader(&header).WithBody(body)
+
+	// Write to leveldb
+	batch := chainDb.NewBatch()
+	WriteBlock(batch, genesisBlock)
+	WriteCanonicalHash(batch, genesisHash, 0)
+
+	// Write receipts if available
+	if len(receiptsInFreezer) > 0 {
+		WriteRawReceipts(batch, genesisHash, 0, receiptsInFreezer)
+	}
+
+	// Check if chain config exists in leveldb, if not, try to get it from the full database
+	config := ReadChainConfig(nfdb, genesisHash)
+	if config == nil {
+		// Try to read from full database (which can access freezer if needed)
+		config = ReadChainConfig(chainDb, genesisHash)
+		if config != nil {
+			// Write chain config to leveldb
+			WriteChainConfig(batch, genesisHash, config)
+			log.Info("restoreGenesisBlockFromFreezer: restored chain config to leveldb")
+		} else {
+			log.Warn("restoreGenesisBlockFromFreezer: chain config not found, may need to be set separately")
+		}
+	}
+
+	if err := batch.Write(); err != nil {
+		return fmt.Errorf("failed to write genesis block to leveldb: %v", err)
+	}
+
+	log.Info("restoreGenesisBlockFromFreezer: successfully restored block 0", "hash", genesisHash)
+	return nil
 }
