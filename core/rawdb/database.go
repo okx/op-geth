@@ -37,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	_ "github.com/olekukonko/tablewriter"
 	"golang.org/x/sync/errgroup"
 )
@@ -279,7 +280,13 @@ func Open(db ethdb.KeyValueStore, opts OpenOptions) (ethdb.Database, error) {
 					printChainMetadata(db)
 					return nil, fmt.Errorf("could not read header number, hash %v", ReadHeadHeaderHash(db))
 				}
-				if head > frozen-1 {
+
+				config, err := getChainConfig(db, frdb)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get chain config: %v", err)
+				}
+
+				if head > frozen-1 && (!config.IsXLayer() || frozen >= config.LegacyXLayerBlock.Uint64()) {
 					// Find the smallest block stored in the key-value store
 					// in range of [frozen, head]
 					var number uint64
@@ -306,9 +313,10 @@ func Open(db ethdb.KeyValueStore, opts OpenOptions) (ethdb.Database, error) {
 			if ReadHeadHeaderHash(db) != common.BytesToHash(kvgenesis) {
 				// Key-value store contains more data than the genesis block, make sure we
 				// didn't freeze anything yet.
-				ndb := NewDatabase(db)
-				genesisHash := ReadCanonicalHash(ndb, 0)
-				config := ReadChainConfig(ndb, genesisHash)
+				config, err := getChainConfig(db, frdb)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get chain config: %v", err)
+				}
 				log.Info("check config", "legacy", config.LegacyXLayerBlock)
 				firstBlockMoveToAncient := uint64(1)
 				if config.LegacyXLayerBlock != nil {
@@ -336,6 +344,21 @@ func Open(db ethdb.KeyValueStore, opts OpenOptions) (ethdb.Database, error) {
 		KeyValueStore: db,
 		chainFreezer:  frdb,
 	}, nil
+}
+
+func getChainConfig(db ethdb.KeyValueStore, frdb *chainFreezer) (*params.ChainConfig, error) {
+	ndb := NewDatabase(db)
+	genesisHash := ReadCanonicalHash(ndb, 0)
+	if genesisHash == (common.Hash{}) {
+		data, err := frdb.ancients.Ancient(ChainFreezerHashTable, 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read genesis hash from ancientdb: %v", err)
+		}
+		if len(data) > 0 {
+			genesisHash = common.BytesToHash(data)
+		}
+	}
+	return ReadChainConfig(ndb, genesisHash), nil
 }
 
 // NewMemoryDatabase creates an ephemeral in-memory key-value database without a

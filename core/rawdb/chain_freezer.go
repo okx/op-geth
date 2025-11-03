@@ -310,19 +310,10 @@ func (f *chainFreezer) freezeRange(nfdb *nofreezedb, number, limit uint64) (hash
 
 	_, err = f.ModifyAncients(func(op ethdb.AncientWriteOp) error {
 
-		hash := ReadCanonicalHash(nfdb, 0)
-		// if could not get hash, read from ancientdb
-		if hash == (common.Hash{}) {
-			log.Trace("freezeRange: hash not found from db, reading from ancientdb")
-			data, err := f.ancients.Ancient(ChainFreezerHashTable, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read genesis hash from ancientdb: %v", err)
-			}
-			if len(data) > 0 {
-				hash = common.BytesToHash(data)
-			}
+		config, err := getChainConfig(nfdb, f)
+		if err != nil {
+			return fmt.Errorf("failed to get chain config: %v", err)
 		}
-		config := ReadChainConfig(nfdb, hash)
 
 		for ; number <= limit; number++ {
 			// save empty data for legacy blocks
