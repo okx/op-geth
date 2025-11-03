@@ -367,11 +367,12 @@ func convertCallToInnerTxsRecursive(callTx CallTracerResult, depth int64, index 
 		Input:         callTx.Input,
 		Output:        output,
 		IsError:       isError,
-		GasUsed:       gasUsedUint64,
-		Value:         valueWei,
-		ValueWei:      valueWei,
-		Error:         errorMsg,
-		ReturnGas:     returnGas,
+		// GasUsed:       gasUsedUint64,  // For historical reason, we use gasUint64 here
+		GasUsed:   gasUint64,
+		Value:     valueWei,
+		ValueWei:  valueWei,
+		Error:     errorMsg,
+		ReturnGas: returnGas,
 	}
 
 	// Handle root vs nested call differences
