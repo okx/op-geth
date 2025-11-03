@@ -207,6 +207,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		if err := core.CommitXLayerFirstBlock(chainDb, chainConfig); err != nil {
 			return nil, err
 		}
+		if err := core.RestoreGenesisBlockFromFreezer(chainDb); err != nil {
+			return nil, err
+		}
 	}
 
 	engine, err := ethconfig.CreateConsensusEngine(chainConfig, chainDb)
