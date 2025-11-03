@@ -32,13 +32,24 @@ func (api *TransactionAPI) GetInternalTransactions(ctx context.Context, txHash c
 }
 
 // GetBlockInternalTransactions returns all inner transactions for all transactions in a block
-func (api *TransactionAPI) GetBlockInternalTransactions(ctx context.Context, blockNr rpc.BlockNumber) (map[common.Hash][]*types.InnerTx, error) {
+func (api *TransactionAPI) GetBlockInternalTransactions(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (map[common.Hash][]*types.InnerTx, error) {
 	// Check if inner transaction feature is enabled
 	if xlayerBackend, ok := api.b.(XLayerBackend); ok && !xlayerBackend.IsInnerTxEnabled() {
 		return nil, errors.New("unsupported internal transaction method")
 	}
 
-	block, err := api.b.BlockByNumber(ctx, blockNr)
+	// Get block by number or hash
+	var block *types.Block
+	var err error
+
+	if blockNum, ok := blockNrOrHash.Number(); ok {
+		block, err = api.b.BlockByNumber(ctx, blockNum)
+	} else if blockHash, ok := blockNrOrHash.Hash(); ok {
+		block, err = api.b.BlockByHash(ctx, blockHash)
+	} else {
+		return nil, errors.New("invalid block number or hash")
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block: %w", err)
 	}

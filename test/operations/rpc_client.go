@@ -126,32 +126,6 @@ func GetInternalTransactions(hash common.Hash) ([]interface{}, error) {
 	return result, nil
 }
 
-func GetBlockInternalTransactions(block *big.Int) (map[common.Hash][]interface{}, error) {
-	var result map[common.Hash][]interface{}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	err := clientRPC.Client().CallContext(ctx, &result, "eth_getBlockInternalTransactions", hexutil.EncodeBig(block))
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-func GetTransactionByHash(hash common.Hash) (*types.Transaction, error) {
-	var result types.Transaction
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	err := clientRPC.Client().CallContext(ctx, &result, "eth_getTransactionByHash", hash)
-	if err != nil {
-		return nil, err
-	}
-
-	return &result, nil
-}
-
 func GetGasPrice() (uint64, error) {
 	var result string
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

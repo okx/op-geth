@@ -396,13 +396,15 @@ func (api *XlayerHybridBlockChainAPI) GetCode(ctx context.Context, address commo
 type XlayerHybridTransactionAPI struct {
 	*ethapi.TransactionAPI
 	legacyRpc *XlayerLegacyRPCService
+	backend   ethapi.Backend
 }
 
 // NewXlayerHybridTransactionAPI creates a new migration-aware TransactionAPI
-func NewXlayerHybridTransactionAPI(original *ethapi.TransactionAPI, config *XlayerLegacyRPCService) *XlayerHybridTransactionAPI {
+func NewXlayerHybridTransactionAPI(original *ethapi.TransactionAPI, config *XlayerLegacyRPCService, backend ethapi.Backend) *XlayerHybridTransactionAPI {
 	return &XlayerHybridTransactionAPI{
 		TransactionAPI: original,
 		legacyRpc:      config,
+		backend:        backend,
 	}
 }
 
@@ -461,15 +463,56 @@ func (api *XlayerHybridTransactionAPI) GetBlockTransactionCountByNumber(ctx cont
 }
 
 // eth_getBlockInternalTransactions FORWARD
-func (api *XlayerHybridTransactionAPI) GetBlockInternalTransactions(ctx context.Context, blockNr rpc.BlockNumber) (map[common.Hash][]*types.InnerTx, error) {
+func (api *XlayerHybridTransactionAPI) GetBlockInternalTransactions(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (map[common.Hash][]*types.InnerTx, error) {
+	var blockNum uint64
+	var shouldProxyToErigon bool
+
+	// Extract block number for proxy decision
+	if num, ok := blockNrOrHash.Number(); ok {
+		// Block number provided directly
+		blockNum = uint64(num)
+		shouldProxyToErigon = api.legacyRpc.shouldProxy(blockNum)
+	} else if blockHash, ok := blockNrOrHash.Hash(); ok {
+		// Try to get block from local database first
+		block, err := api.backend.BlockByHash(ctx, blockHash)
+		if err != nil || block == nil {
+			// Block not found locally - query Erigon to get block number
+			var blockInfo map[string]interface{}
+			err := api.legacyRpc.ErigonClient.CallContext(ctx, &blockInfo, "eth_getBlockByHash", blockHash, false)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get block from Erigon: %w", err)
+			}
+			if blockInfo == nil {
+				return nil, fmt.Errorf("block not found")
+			}
+			// Extract block number from the response
+			if numberHex, ok := blockInfo["number"].(string); ok {
+				blockNumBig, err := hexutil.DecodeBig(numberHex)
+				if err != nil {
+					return nil, fmt.Errorf("failed to decode block number: %w", err)
+				}
+				blockNum = blockNumBig.Uint64()
+			} else {
+				return nil, fmt.Errorf("block number not found in response")
+			}
+			shouldProxyToErigon = true
+		} else {
+			// Block found locally
+			blockNum = block.NumberU64()
+			shouldProxyToErigon = api.legacyRpc.shouldProxy(blockNum)
+		}
+	} else {
+		return nil, errors.New("invalid block number or hash")
+	}
+
 	// Check if we should proxy to erigon
-	if api.legacyRpc.shouldProxy(uint64(blockNr)) {
+	if shouldProxyToErigon {
 		var result map[common.Hash][]*types.InnerTx
-		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getBlockInternalTransactions", hexutil.Uint64(blockNr))
+		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getBlockInternalTransactions", hexutil.Uint64(blockNum))
 		return result, err
 	}
-	// Handle locally
-	return api.TransactionAPI.GetBlockInternalTransactions(ctx, blockNr)
+
+	return api.TransactionAPI.GetBlockInternalTransactions(ctx, blockNrOrHash)
 }
 
 // eth_getInternalTransactions TransactionAPI LOCAL
@@ -779,7 +822,7 @@ func (api *XlayerHybridFilterAPI) GetLogs(ctx context.Context, crit filters.Filt
 }
 
 // WrapAPIsForXlayer wraps the standard APIs with migration-aware versions
-func WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API {
+func WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService, backend ethapi.Backend) []rpc.API {
 	if config == nil {
 		return apis // No migration configured, return original APIs
 	}
@@ -804,7 +847,7 @@ func WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API
 				wrapped = append(wrapped, rpc.API{
 					Namespace:     api.Namespace,
 					Version:       api.Version,
-					Service:       NewXlayerHybridTransactionAPI(original, config),
+					Service:       NewXlayerHybridTransactionAPI(original, config, backend),
 					Public:        api.Public,
 					Authenticated: api.Authenticated,
 				})
