@@ -310,7 +310,7 @@ func (f *chainFreezer) freezeRange(nfdb *nofreezedb, number, limit uint64) (hash
 
 	_, err = f.ModifyAncients(func(op ethdb.AncientWriteOp) error {
 
-		config, err := getChainConfig(nfdb, f)
+		config, err := f.GetChainConfig(nfdb.KeyValueStore)
 		if err != nil {
 			return fmt.Errorf("failed to get chain config: %v", err)
 		}
@@ -368,6 +368,22 @@ func (f *chainFreezer) freezeRange(nfdb *nofreezedb, number, limit uint64) (hash
 		return nil
 	})
 	return hashes, err
+}
+
+// GetChainConfig retrieves the chain configuration from the database or freezer.
+func (f *chainFreezer) GetChainConfig(db ethdb.KeyValueStore) (*params.ChainConfig, error) {
+	ndb := NewDatabase(db)
+	genesisHash := ReadCanonicalHash(ndb, 0)
+	if genesisHash == (common.Hash{}) {
+		data, err := f.ancients.Ancient(ChainFreezerHashTable, 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read genesis hash from ancientdb: %v", err)
+		}
+		if len(data) > 0 {
+			genesisHash = common.BytesToHash(data)
+		}
+	}
+	return ReadChainConfig(ndb, genesisHash), nil
 }
 
 // Ancient retrieves an ancient binary blob from the append-only immutable files.
