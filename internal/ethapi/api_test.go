@@ -51,6 +51,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
+	"github.com/ethereum/go-ethereum/eth/gasprice/xlayer"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/blocktest"
@@ -807,6 +808,14 @@ func (b testBackend) HistoricalRPCService() *rpc.Client {
 }
 func (b testBackend) Genesis() *types.Block {
 	panic("implement me")
+}
+
+func (b testBackend) XLayerGpricer() xlayer.L2GasPricer {
+	return nil
+}
+
+func (b testBackend) SequencerRPCService() *rpc.Client {
+	return nil
 }
 
 func TestEstimateGas(t *testing.T) {

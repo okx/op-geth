@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/ethereum/go-ethereum/eth/gasprice/xlayer"
 )
 
 // TestSetFeeDefaults tests the logic for filling in default fee values works as expected.
@@ -415,3 +416,5 @@ func (b *backendMock) HistoryPruningCutoff() uint64 { return 0 }
 // OP-Stack additions
 func (b *backendMock) HistoricalRPCService() *rpc.Client { return nil }
 func (b *backendMock) Genesis() *types.Block             { return nil }
+func (b *backendMock) XLayerGpricer() xlayer.L2GasPricer { return nil }
+func (b *backendMock) SequencerRPCService() *rpc.Client { return nil }

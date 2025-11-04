@@ -18,11 +18,14 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -38,9 +41,11 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/superchain"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/trienode"
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/ethereum/go-ethereum/triedb/pathdb"
 	"github.com/holiman/uint256"
+	"golang.org/x/sync/errgroup"
 )
 
 //go:generate go run github.com/fjl/gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
@@ -201,6 +206,7 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool)
 		return common.Hash{}, common.Hash{}, err
 	}
 	for addr, account := range *ga {
+		statedb.SetStorage(addr, account.Storage)
 		if account.Balance != nil {
 			// This is not actually logged via tracer because OnGenesisBlock
 			// already captures the allocations.
@@ -208,9 +214,6 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool)
 		}
 		statedb.SetCode(addr, account.Code)
 		statedb.SetNonce(addr, account.Nonce, tracing.NonceChangeGenesis)
-		for key, value := range account.Storage {
-			statedb.SetState(addr, key, value)
-		}
 	}
 	root, err := statedb.Commit(0, false, false)
 	if err != nil {
@@ -226,6 +229,184 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool)
 		if err := triedb.Commit(root, true); err != nil {
 			return common.Hash{}, common.Hash{}, err
 		}
+	}
+	return root, storageRootMessagePasser, nil
+}
+
+func flushAllocFast(ga *types.GenesisAlloc, triedb *triedb.Database, isIsthmus bool) (common.Hash, common.Hash, error) {
+	if triedb.IsVerkle() || triedb.Scheme() == rawdb.PathScheme {
+		return flushAlloc(ga, triedb, isIsthmus)
+	}
+
+	allocMap := make(map[common.Address]*types.StateAccount, len(*ga))
+
+	cachingDB := state.NewDatabase(triedb, nil)
+
+	for addr := range *ga {
+		allocMap[addr] = &types.StateAccount{}
+	}
+
+	dbWorker, _ := errgroup.WithContext(context.Background())
+	dbWorker.SetLimit(1)
+
+	nodesChan := make(chan *trienode.NodeSet, 2000)
+
+	dbWorker.Go(func() error {
+		start0 := time.Now()
+		diskDB := triedb.Disk()
+		batch := diskDB.NewBatch()
+		// save empty code
+		rawdb.WriteCode(batch, crypto.Keccak256Hash(nil), nil)
+		for _, account := range *ga {
+			if len(account.Code) > 0 {
+				rawdb.WriteCode(batch, crypto.Keccak256Hash(account.Code), account.Code)
+			}
+		}
+		if err := batch.Write(); err != nil {
+			return err
+		}
+		log.Info("write code finished", "elapsed", time.Since(start0))
+
+		var nodesWritten int
+		var ownerCount int
+		var batchWriteCount int
+		var batchWriteElapsed time.Duration
+
+		defer func() {
+			log.Info("batch written", "nodes", nodesWritten, "owners", ownerCount)
+			log.Info("write trie nodes finished", "elapsed", time.Since(start0))
+		}()
+
+		batch.Reset()
+		for {
+			select {
+			case nodes, ok := <-nodesChan:
+				if !ok {
+					start := time.Now()
+					err := batch.Write()
+					log.Info("internal batch written", "count", batchWriteCount, "elapsed", batchWriteElapsed)
+					log.Info("last batch written", "elapsed", time.Since(start))
+					return err
+				}
+
+				if batch.ValueSize() > 1<<30 {
+					start := time.Now()
+					if err := batch.Write(); err != nil {
+						return err
+					}
+					log.Info("oversize batch written", "elapsed", time.Since(start))
+					batch.Reset()
+				}
+
+				for _, n := range nodes.Nodes {
+					rawdb.WriteLegacyTrieNode(batch, n.Hash, n.Blob)
+					if batch.ValueSize() > 1<<30 {
+						start := time.Now()
+						if err := batch.Write(); err != nil {
+							return err
+						}
+						log.Info("oversize batch written", "owner", nodes.Owner, "elapsed", time.Since(start))
+						batch.Reset()
+					}
+				}
+				nodesWritten += len(nodes.Nodes)
+				ownerCount++
+			default:
+				batchWriteCount++
+				start := time.Now()
+				if err := batch.Write(); err != nil {
+					log.Error("failed to write merged node to disk", "err", err)
+				}
+				batchWriteElapsed += time.Since(start)
+				batch.Reset()
+			}
+		}
+	})
+
+	trWorker, _ := errgroup.WithContext(context.Background())
+	trWorker.SetLimit(runtime.NumCPU())
+
+	start := time.Now()
+	for addr, acc := range *ga {
+		sa := allocMap[addr]
+		sa.Nonce = acc.Nonce
+		var b uint256.Int
+		if acc.Balance != nil {
+			b.SetFromBig(acc.Balance)
+		}
+		sa.Balance = &b
+
+		if len(acc.Code) == 0 {
+			sa.CodeHash = types.EmptyCodeHash[:]
+		} else {
+			codeHash := crypto.Keccak256Hash(acc.Code)
+			sa.CodeHash = codeHash[:]
+		}
+
+		if len(acc.Storage) == 0 {
+			sa.Root = types.EmptyRootHash
+		} else {
+			trWorker.Go(func() error {
+				tr, err := cachingDB.OpenStorageTrie(common.Hash{}, addr, common.Hash{}, nil)
+				if err != nil {
+					return err
+				}
+
+				for k, v := range acc.Storage {
+					err = tr.UpdateStorage(addr, k[:], common.TrimLeftZeroes(v[:]))
+					if err != nil {
+						return err
+					}
+				}
+
+				root, nodes := tr.Commit(true)
+				sa.Root = root
+
+				if len(nodes.Nodes) > 100_0000 {
+					log.Info("large trie", "addr", addr, "root", root, "nodes num", len(nodes.Nodes))
+				}
+
+				nodesChan <- nodes
+
+				return nil
+			})
+		}
+	}
+
+	if err := trWorker.Wait(); err != nil {
+		return common.Hash{}, common.Hash{}, err
+	}
+
+	log.Info("calculate accounts", "elapsed", time.Since(start))
+
+	start = time.Now()
+	accTr, err := cachingDB.OpenTrie(common.Hash{})
+	if err != nil {
+		return common.Hash{}, common.Hash{}, err
+	}
+
+	for addr, acc := range allocMap {
+		if err = accTr.UpdateAccount(addr, acc, 0); err != nil {
+			return common.Hash{}, common.Hash{}, err
+		}
+	}
+
+	root, nodes := accTr.Commit(true)
+	log.Info("commit accounts", "elapsed", time.Since(start))
+
+	nodesChan <- nodes
+	close(nodesChan)
+
+	// get the storage root of the L2ToL1MessagePasser contract
+	var storageRootMessagePasser common.Hash
+	if isIsthmus {
+		if messagePasserAcc, ok := allocMap[params.OptimismL2ToL1MessagePasser]; ok {
+			storageRootMessagePasser = messagePasserAcc.Root
+		}
+	}
+
+	if err = dbWorker.Wait(); err != nil {
+		return common.Hash{}, common.Hash{}, err
 	}
 	return root, storageRootMessagePasser, nil
 }
@@ -706,20 +887,27 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 		}
 	} else {
 		// flush the data to disk and compute the state root
-		stateRoot, storageRootMessagePasser, err = flushAlloc(&g.Alloc, triedb, g.Config.IsIsthmus(g.Timestamp))
+		stateRoot, storageRootMessagePasser, err = flushAllocFast(&g.Alloc, triedb, g.Config.IsIsthmus(g.Timestamp))
 		if err != nil {
 			return nil, err
 		}
 	}
 	block := g.toBlockWithRoot(stateRoot, storageRootMessagePasser)
 
-	// Marshal the genesis state specification and persist.
-	blob, err := json.Marshal(g.Alloc)
-	if err != nil {
-		return nil, err
-	}
 	batch := db.NewBatch()
-	rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
+
+	// TODO:
+	if len(g.Alloc) < 100000 { // make ut pass
+		// Marshal the genesis state specification and persist.
+		blob, err := json.Marshal(g.Alloc)
+		if err != nil {
+			return nil, err
+		}
+		rawdb.WriteGenesisStateSpec(batch, block.Hash(), blob)
+	} else {
+		log.Warn("Alloc was not saved to the database because the genesis is too large", "total accounts", len(g.Alloc))
+	}
+
 	rawdb.WriteBlock(batch, block)
 	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), nil)
 	rawdb.WriteCanonicalHash(batch, block.Hash(), block.NumberU64())

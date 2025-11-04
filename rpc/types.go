@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -100,10 +101,15 @@ func (bn *BlockNumber) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	blckNum, err := hexutil.DecodeUint64(input)
+	// Pass as uint64 first, then as hex if it fails
+	blckNum, err := strconv.ParseUint(input, 10, 64)
 	if err != nil {
-		return err
+		blckNum, err = hexutil.DecodeUint64(input)
+		if err != nil {
+			return err
+		}
 	}
+
 	if blckNum > math.MaxInt64 {
 		return errors.New("block number larger than int64")
 	}

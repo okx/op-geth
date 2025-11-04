@@ -43,6 +43,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/gasestimator"
 	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/internal/ethapi/override"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
@@ -67,8 +68,76 @@ func NewEthereumAPI(b Backend) *EthereumAPI {
 	return &EthereumAPI{b}
 }
 
+// getXLayerGasPrice returns gas price for XLayer
+func (api *EthereumAPI) getXLayerGasPrice(ctx context.Context) (*hexutil.Big, error) {
+	// RPC node means isXLayerRPCService is available, forward the request
+	if seqRPC := api.b.SequencerRPCService(); seqRPC != nil {
+		var result hexutil.Big
+		log.Debug("getXLayerGasPrice: forward the request to RPC node")
+		err := seqRPC.CallContext(ctx, &result, "eth_gasPrice")
+		log.Debug("getXLayerGasPrice: received gas price from RPC node", "gasPrice", result.String())
+		return &result, err
+	}
+
+	// Sequencer get gas price at local
+	gasPrice := api.b.XLayerGpricer().GetGasCache().GetLatest()
+	log.Debug("getXLayerGasPrice: use XLayer gas price", "gasPrice", gasPrice.String())
+	return (*hexutil.Big)(gasPrice), nil
+}
+
+// getXLayerMaxPriorityFee returns max priority fee for XLayer
+func (api *EthereumAPI) getXLayerMaxPriorityFee(ctx context.Context) (*hexutil.Big, error) {
+	// RPC node means isXLayerRPCService is available, forward the request
+	if seqRPC := api.b.SequencerRPCService(); seqRPC != nil {
+		var result hexutil.Big
+		log.Debug("getXLayerMaxPriorityFee: forward the request to RPC node")
+		err := seqRPC.CallContext(ctx, &result, "eth_maxPriorityFeePerGas")
+		log.Debug("getXLayerMaxPriorityFee: received max priority fee from RPC node", "maxPriorityFee", result.String())
+		return &result, err
+	}
+
+	// Sequencer get gas price at local
+	gasPrice := api.b.XLayerGpricer().GetGasCache().GetLatest()
+
+	// sub baseFee
+	tipcap := new(big.Int).Set(gasPrice)
+	head := api.b.CurrentHeader()
+	if head.BaseFee != nil {
+		tipcap = tipcap.Sub(tipcap, head.BaseFee)
+		if tipcap.Cmp(big.NewInt(0)) < 0 {
+			tipcap = big.NewInt(0)
+		}
+	}
+
+	log.Debug("getXLayerMaxPriorityFee: use XLayer max priority fee", "maxPriorityFee", tipcap.String())
+	return (*hexutil.Big)(tipcap), nil
+}
+
+// getXLayerMinGasPrice returns minimum gas price for XLayer
+func (api *EthereumAPI) getXLayerMinGasPrice(ctx context.Context) (*hexutil.Big, error) {
+	// RPC node means isXLayerRPCService is available, forward the request
+	if seqRPC := api.b.SequencerRPCService(); seqRPC != nil {
+		var result hexutil.Big
+		log.Debug("getXLayerMinGasPrice: forward the request to RPC node")
+		err := seqRPC.CallContext(ctx, &result, "eth_minGasPrice")
+		log.Debug("getXLayerMinGasPrice: received min gas price from RPC node", "minGasPrice", result.String())
+		return &result, err
+	}
+
+	// Sequencer get minimum raw gas price at local
+	minGP := api.b.XLayerGpricer().GetGasCache().GetMinRawGPMoreRecent()
+	log.Debug("getXLayerMinGasPrice: use XLayer min gas price", "minGasPrice", minGP.String())
+	return (*hexutil.Big)(minGP), nil
+}
+
 // GasPrice returns a suggestion for a gas price for legacy transactions.
 func (api *EthereumAPI) GasPrice(ctx context.Context) (*hexutil.Big, error) {
+	// For XLayer
+	if api.b.XLayerGpricer() != nil && api.b.XLayerGpricer().GetConfig().XLayer.Type != "" {
+		return api.getXLayerGasPrice(ctx)
+	}
+
+	// Original logic for non-XLayer
 	tipcap, err := api.b.SuggestGasTipCap(ctx)
 	if err != nil {
 		return nil, err
@@ -81,11 +150,32 @@ func (api *EthereumAPI) GasPrice(ctx context.Context) (*hexutil.Big, error) {
 
 // MaxPriorityFeePerGas returns a suggestion for a gas tip cap for dynamic fee transactions.
 func (api *EthereumAPI) MaxPriorityFeePerGas(ctx context.Context) (*hexutil.Big, error) {
+	// For XLayer
+	if api.b.XLayerGpricer() != nil && api.b.XLayerGpricer().GetConfig().XLayer.Type != "" {
+		return api.getXLayerMaxPriorityFee(ctx)
+	}
+
 	tipcap, err := api.b.SuggestGasTipCap(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return (*hexutil.Big)(tipcap), err
+}
+
+// MinGasPrice returns the minimum gas price for XLayer transactions.
+func (api *EthereumAPI) MinGasPrice(ctx context.Context) (*hexutil.Big, error) {
+	// For XLayer
+	if api.b.XLayerGpricer() != nil && api.b.XLayerGpricer().GetConfig().XLayer.Type != "" {
+		return api.getXLayerMinGasPrice(ctx)
+	}
+
+	// For non-XLayer chains, return baseFee as minimum
+	head := api.b.CurrentHeader()
+	if head.BaseFee != nil {
+		return (*hexutil.Big)(head.BaseFee), nil
+	}
+	// For pre-EIP-1559 chains, return zero
+	return (*hexutil.Big)(big.NewInt(0)), nil
 }
 
 type feeHistoryResult struct {
@@ -116,6 +206,23 @@ func (api *EthereumAPI) FeeHistory(ctx context.Context, blockCount math.HexOrDec
 			}
 		}
 	}
+
+	// For XLayer
+	if api.b.XLayerGpricer() != nil && api.b.XLayerGpricer().GetConfig().XLayer.Type != "" && results.Reward != nil {
+		xlayerMaxPriorityFee, err := api.getXLayerMaxPriorityFee(ctx)
+		if err != nil {
+			return nil, err
+		}
+		// for each results.Reward[i][j], if lower than xlayerMaxPriorityFee, set it to xlayerMaxPriorityFee
+		for i := range results.Reward {
+			for j := range results.Reward[i] {
+				if results.Reward[i][j].ToInt().Cmp(xlayerMaxPriorityFee.ToInt()) < 0 {
+					results.Reward[i][j] = xlayerMaxPriorityFee
+				}
+			}
+		}
+	}
+
 	if baseFee != nil {
 		results.BaseFee = make([]*hexutil.Big, len(baseFee))
 		for i, v := range baseFee {
@@ -1786,31 +1893,67 @@ func (api *TransactionAPI) sign(addr common.Address, tx *types.Transaction) (*ty
 
 // SubmitTransaction is a helper function that submits tx to txPool and logs a message.
 func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (common.Hash, error) {
+	txHash := tx.Hash().Hex()
+	head := b.CurrentBlock()
+
+	// Log transaction start
+	monitor.LogTransactionStart(
+		txHash,
+		monitor.ServiceNameRPC,
+		monitor.StepRPCReceiveTx.ID,
+		monitor.StepRPCReceiveTx.Key,
+		head.Number.Uint64(),
+		int8(tx.Type()),
+		"", "", "", 0, // from, to, value, nonce will be filled after sender recovery
+	)
+
 	// If the transaction fee cap is already specified, ensure the
 	// fee of the given transaction is _reasonable_.
 	if err := checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
+		monitor.LogTransactionEnd(txHash, monitor.ServiceNameRPC, monitor.StepRPCReceiveTx.ID,
+			monitor.StepRPCReceiveTx.Key, head.Number.Uint64(), "", 0, int8(tx.Type()),
+			"failed", err.Error(), 0)
 		return common.Hash{}, err
 	}
 	if !b.UnprotectedAllowed() && !tx.Protected() {
 		// Ensure only eip155 signed transactions are submitted if EIP155Required is set.
-		return common.Hash{}, errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
-	}
-	if err := b.SendTx(ctx, tx); err != nil {
-		return common.Hash{}, err
-	}
-	// Print a log with full tx details for manual investigations and interventions
-	head := b.CurrentBlock()
-	signer := types.MakeSigner(b.ChainConfig(), head.Number, head.Time)
-	from, err := types.Sender(signer, tx)
-	if err != nil {
+		err := errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
+		monitor.LogTransactionEnd(txHash, monitor.ServiceNameRPC, monitor.StepRPCReceiveTx.ID,
+			monitor.StepRPCReceiveTx.Key, head.Number.Uint64(), "", 0, int8(tx.Type()),
+			"failed", err.Error(), 0)
 		return common.Hash{}, err
 	}
 
+	// Log before sending to tx pool
+	monitor.LogTransactionProgress(txHash, monitor.ServiceNameRPC, monitor.StepRPCSendTx.ID,
+		monitor.StepRPCSendTx.Key, head.Number.Uint64(), int8(tx.Type()), "sending", 0)
+
+	if err := b.SendTx(ctx, tx); err != nil {
+		monitor.LogTransactionEnd(txHash, monitor.ServiceNameRPC, monitor.StepRPCSendTx.ID,
+			monitor.StepRPCSendTx.Key, head.Number.Uint64(), "", 0, int8(tx.Type()),
+			"failed", err.Error(), 0)
+		return common.Hash{}, err
+	}
+	// Print a log with full tx details for manual investigations and interventions
+	signer := types.MakeSigner(b.ChainConfig(), head.Number, head.Time)
+	from, err := types.Sender(signer, tx)
+	if err != nil {
+		monitor.LogTransactionEnd(txHash, monitor.ServiceNameRPC, monitor.StepRPCSendTx.ID,
+			monitor.StepRPCSendTx.Key, head.Number.Uint64(), "", 0, int8(tx.Type()),
+			"failed", err.Error(), 0)
+		return common.Hash{}, err
+	}
+
+	// Log successful submission
+	monitor.LogTransactionEnd(txHash, monitor.ServiceNameRPC, monitor.StepRPCSendTx.ID,
+		monitor.StepRPCSendTx.Key, head.Number.Uint64(), "", 0, int8(tx.Type()),
+		"success", "", 0)
+
 	if tx.To() == nil {
 		addr := crypto.CreateAddress(from, tx.Nonce())
-		log.Info("Submitted contract creation", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "contract", addr.Hex(), "value", tx.Value())
+		log.Debug("Submitted contract creation", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "contract", addr.Hex(), "value", tx.Value())
 	} else {
-		log.Info("Submitted transaction", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "recipient", tx.To(), "value", tx.Value())
+		log.Debug("Submitted transaction", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "recipient", tx.To(), "value", tx.Value())
 	}
 	return tx.Hash(), nil
 }
