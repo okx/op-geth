@@ -22,6 +22,8 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/ethereum/go-ethereum/eth/gasprice/xlayer"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -91,6 +93,10 @@ type Backend interface {
 	HistoricalRPCService() *rpc.Client
 	Genesis() *types.Block
 
+	// XLayer additions
+	XLayerGpricer() xlayer.L2GasPricer
+	SequencerRPCService() *rpc.Client
+
 	// This is copied from filters.Backend
 	// eth/filters needs to be initialized from this backend type, so methods needed by
 	// it must also be included here.
@@ -101,6 +107,12 @@ type Backend interface {
 
 	CurrentView() *filtermaps.ChainView
 	NewMatcherBackend() filtermaps.MatcherBackend
+}
+
+// For X Layer - InnerTxBackend extends Backend with inner transaction support
+type XLayerBackend interface {
+	Backend
+	IsInnerTxEnabled() bool
 }
 
 func GetAPIs(apiBackend Backend) []rpc.API {

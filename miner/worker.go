@@ -36,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types/interoptypes"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
@@ -142,10 +143,15 @@ type generateParams struct {
 
 // generateWork generates a sealing block based on the given parameters.
 func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPayloadResult {
+	// Use per-call statistics to avoid shared state across concurrent builds
+	proposeStats := metrics.NewLogStatistics()
+
+	startBuildTime := time.Now()
 	work, err := miner.prepareWork(genParam, witness)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
+	proposeStats.CumulativeTiming(metrics.ProposePrepareMs, time.Since(startBuildTime))
 
 	// Check withdrawals fit max block size.
 	// Due to the cap on withdrawal count, this can actually never happen, but we still need to
@@ -173,7 +179,7 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 	}
 
 	misc.EnsureCreate2Deployer(miner.chainConfig, work.header.Time, work.state)
-
+	execStart := time.Now()
 	for _, tx := range genParam.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
@@ -200,6 +206,7 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 			log.Info("Block building got interrupted by payload resolution")
 		}
 	}
+	proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
 
 	body := types.Body{Transactions: work.txs, Withdrawals: genParam.withdrawals}
 
@@ -219,6 +226,7 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 	if miner.chainConfig.IsPrague(work.header.Number, work.header.Time) && !isIsthmus {
 		requests = [][]byte{}
 		// EIP-6110 deposits
+		xstart := time.Now()
 		if err := core.ParseDepositLogs(&requests, allLogs, miner.chainConfig); err != nil {
 			return &newPayloadResult{err: err}
 		}
@@ -230,6 +238,7 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 		if err := core.ProcessConsolidationQueue(&requests, work.evm); err != nil {
 			return &newPayloadResult{err: err}
 		}
+		proposeStats.CumulativeTiming(metrics.ProposePragueMs, time.Since(xstart))
 	}
 
 	if isIsthmus {
@@ -241,10 +250,36 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 		work.header.RequestsHash = &reqHash
 	}
 
+	assembleStart := time.Now()
 	block, err := miner.engine.FinalizeAndAssemble(miner.chain, work.header, work.state, &body, work.receipts)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
+	proposeStats.CumulativeTiming(metrics.ProposeAssembleMs, time.Since(assembleStart))
+
+	// Include StateDB internal timings
+	if work != nil && work.state != nil {
+		sdb := work.state
+		proposeStats.CumulativeTiming(metrics.AccountReadMs, sdb.AccountReads)
+		proposeStats.CumulativeTiming(metrics.AccountHashMs, sdb.AccountHashes)
+		proposeStats.CumulativeTiming(metrics.AccountUpdateMs, sdb.AccountUpdates)
+		proposeStats.CumulativeTiming(metrics.StorageReadMs, sdb.StorageReads)
+		proposeStats.CumulativeTiming(metrics.StorageUpdateMs, sdb.StorageUpdates)
+	}
+
+	// Counters and total time
+	// Set block number and counters
+	proposeStats.CumulativeValue(metrics.BlockNumberTag, int64(block.NumberU64()))
+	proposeStats.CumulativeValue(metrics.TxCounter, int64(len(work.txs)))
+	proposeStats.CumulativeValue(metrics.GasUsedCounter, int64(block.GasUsed()))
+	proposeStats.CumulativeTiming(metrics.ProposeTotalMs, time.Since(startBuildTime))
+
+	// store propose stats snapshot keyed by block hash; output will be merged at insertChain
+	if block != nil {
+		// Store the statistics instance directly; it is local and no longer written after this point
+		metrics.GlobalStatsStore.Put(block.Hash(), proposeStats)
+	}
+
 	return &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),
@@ -414,6 +449,20 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 }
 
 func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) error {
+	txHash := tx.Hash().Hex()
+	blockHeight := env.header.Number.Uint64()
+
+	// Log transaction selection
+	monitor.LogTransactionStart(
+		txHash,
+		monitor.ServiceNameMiner,
+		monitor.StepMinerSelectTx.ID,
+		monitor.StepMinerSelectTx.Key,
+		blockHeight,
+		int8(tx.Type()),
+		"", "", "", tx.Nonce(),
+	)
+
 	// OP-Stack addition
 	interopAccessList := interoptypes.TxToInteropAccessList(tx)
 	if len(interopAccessList) > 0 {
@@ -426,7 +475,17 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 	}
 
 	if tx.Type() == types.BlobTxType {
-		return miner.commitBlobTransaction(env, tx)
+		err := miner.commitBlobTransaction(env, tx)
+		if err != nil {
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+				int8(tx.Type()), "failed", err.Error(), 0)
+		} else {
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+				int8(tx.Type()), "success", "", 0)
+		}
+		return err
 	}
 
 	// If a conditional is set, check prior to applying
@@ -435,21 +494,43 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 
 		// check the conditional
 		if err := env.header.CheckTransactionConditional(conditional); err != nil {
-			return fmt.Errorf("failed header check: %s: %w", err, errTxConditionalInvalid)
+			err := fmt.Errorf("failed header check: %s: %w", err, errTxConditionalInvalid)
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+				int8(tx.Type()), "failed", err.Error(), 0)
+			return err
 		}
 		if err := env.state.CheckTransactionConditional(conditional); err != nil {
-			return fmt.Errorf("failed state check: %s: %w", err, errTxConditionalInvalid)
+			err := fmt.Errorf("failed state check: %s: %w", err, errTxConditionalInvalid)
+			monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+				monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+				int8(tx.Type()), "failed", err.Error(), 0)
+			return err
 		}
 	}
 
-	receipt, err := miner.applyTransaction(env, tx)
+	// Log transaction execution start
+	monitor.LogTransactionProgress(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+		monitor.StepMinerExecuteTx.Key, blockHeight, int8(tx.Type()), "executing", 0)
+
+	receipt, err := miner.applyTransaction_okx(env, tx)
 	if err != nil {
+		monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+			monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+			int8(tx.Type()), "failed", err.Error(), 0)
 		return err
 	}
+
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
 	env.size += tx.Size()
 	env.tcount++
+
+	// Log successful execution
+	monitor.LogTransactionEnd(txHash, monitor.ServiceNameMiner, monitor.StepMinerExecuteTx.ID,
+		monitor.StepMinerExecuteTx.Key, blockHeight, env.header.Hash().Hex(), env.header.Time,
+		int8(tx.Type()), "success", "", receipt.GasUsed)
+
 	return nil
 }
 
@@ -466,7 +547,7 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 	if env.blobs+len(sc.Blobs) > maxBlobs {
 		return errors.New("max data blobs reached")
 	}
-	receipt, err := miner.applyTransaction(env, tx)
+	receipt, err := miner.applyTransaction_okx(env, tx)
 	if err != nil {
 		return err
 	}
@@ -713,6 +794,71 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	// Split the pending transactions into locals and remotes.
 	prioPlainTxs, normalPlainTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingPlainTxs
 	prioBlobTxs, normalBlobTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingBlobTxs
+
+	// For X Layer
+	type okPayTx struct {
+		account common.Address
+		tx      *txpool.LazyTransaction
+	}
+
+	okPayTxs := make(map[common.Address][]*txpool.LazyTransaction)
+
+	sortedOkPayTxs := common.OrderedList[okPayTx]{}
+	sortedOkPayTxs.SetCompareFunc(func(a, b okPayTx) int {
+		if a.tx.Tx.Nonce() < b.tx.Tx.Nonce() {
+			return -1
+		}
+		if a.tx.Tx.Nonce() > b.tx.Tx.Nonce() {
+			return 1
+		}
+		return 0
+	})
+
+	accounts := miner.config.OkPaySenderAccounts
+
+	// Skip the entire loop if OkPay priority feature is disabled
+	if miner.config.OkPayPriorityEnable && len(accounts) > 0 {
+		for _, account := range accounts {
+			if txs := normalPlainTxs[account]; len(txs) > 0 {
+				for _, tx := range txs {
+					sortedOkPayTxs.Add(okPayTx{account: account, tx: tx})
+				}
+				delete(normalPlainTxs, account)
+			}
+		}
+
+		if sortedOkPayTxs.Size() > 0 {
+			sortedOkPayTxs.Sort()
+			items := sortedOkPayTxs.Items()
+
+			limit := int(miner.config.OkPayBlockPriorityTxsLimit)
+			if len(items) > limit {
+				// Process priority transactions
+				for _, item := range items[:limit] {
+					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
+				}
+				// Put back unselected transactions
+				for _, item := range items[limit:] {
+					normalPlainTxs[item.account] = append(normalPlainTxs[item.account], item.tx)
+				}
+			} else {
+				// All transactions get priority
+				for _, item := range items {
+					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
+				}
+			}
+		}
+	}
+	// Process OkPay transactions first (highest priority)
+	if len(okPayTxs) > 0 {
+		okpayPlainTxs := newTransactionsByPriceAndNonce(env.signer, okPayTxs, env.header.BaseFee)
+		emptyBlobTxs := newTransactionsByPriceAndNonce(env.signer, nil, env.header.BaseFee)
+		// execStart removed: caller accumulates timings
+		if err := miner.commitTransactions(env, okpayPlainTxs, emptyBlobTxs, interrupt); err != nil {
+			return err
+		}
+		// Note: execution timing is accumulated in caller scope (generateWork)
+	}
 
 	for _, account := range prio {
 		if txs := normalPlainTxs[account]; len(txs) > 0 {
