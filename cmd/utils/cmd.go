@@ -188,6 +188,14 @@ func ImportChain(chain *core.BlockChain, fn string) error {
 	}
 	stream := rlp.NewStream(reader, 0)
 
+	// For X Layer
+	// Use custom first block number instead of 0
+	firstBlockNumber := uint64(0)
+	if chain.Config().LegacyXLayerBlock != nil {
+		firstBlockNumber = chain.Config().LegacyXLayerBlock.Uint64()
+		log.Info("LegacyXLayerBlock detected, using it as the first block number", "firstBlockNumber", firstBlockNumber)
+	}
+
 	// Run actual the import.
 	blocks := make(types.Blocks, importBatchSize)
 	n := 0
@@ -204,8 +212,8 @@ func ImportChain(chain *core.BlockChain, fn string) error {
 			} else if err != nil {
 				return fmt.Errorf("at block %d: %v", n, err)
 			}
-			// don't import first block
-			if b.NumberU64() == 0 {
+			// don't import first block (for X Layer this may not be 0)
+			if b.NumberU64() == firstBlockNumber {
 				i--
 				continue
 			}

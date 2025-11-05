@@ -2400,6 +2400,14 @@ func MakeChain(ctx *cli.Context, stack *node.Node, readonly bool) (*core.BlockCh
 	if err != nil {
 		Fatalf("%v", err)
 	}
+
+	// For X Layer
+	if config.IsXLayer() {
+		if err := core.CommitXLayerFirstBlock(chainDb, config); err != nil {
+			Fatalf("%v", err)
+		}
+	}
+
 	engine, err := ethconfig.CreateConsensusEngine(config, chainDb)
 	if err != nil {
 		Fatalf("%v", err)

@@ -1195,7 +1195,13 @@ func (bc *BlockChain) ResetWithGenesisBlock(genesis *types.Block) error {
 
 // Export writes the active chain to the given writer.
 func (bc *BlockChain) Export(w io.Writer) error {
-	return bc.ExportN(w, uint64(0), bc.CurrentBlock().Number.Uint64())
+	// For X Layer
+	// Use custom first block number instead of 0
+	first := uint64(0)
+	if bc.chainConfig.LegacyXLayerBlock != nil {
+		first = bc.chainConfig.LegacyXLayerBlock.Uint64()
+	}
+	return bc.ExportN(w, first, bc.CurrentBlock().Number.Uint64())
 }
 
 // ExportN writes a subset of the active chain to the given writer.
@@ -1203,7 +1209,7 @@ func (bc *BlockChain) ExportN(w io.Writer, first uint64, last uint64) error {
 	if first > last {
 		return fmt.Errorf("export failed: first (%d) is greater than last (%d)", first, last)
 	}
-	log.Info("Exporting batch of blocks", "count", last-first+1)
+	log.Info("Exporting batch of blocks", "count", last-first+1, "first", first, "last", last)
 
 	var (
 		parentHash common.Hash
