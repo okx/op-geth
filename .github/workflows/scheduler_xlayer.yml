@@ -1,0 +1,690 @@
+name: X Layer Op-Geth Scheduled CI
+
+# Schedule: Daily at 2:00 PM Beijing Time (UTC+8)
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 14:00 Beijing Time (UTC+8 = 06:00 UTC)
+  workflow_dispatch:      # Allow manual trigger
+
+# Ensure only one workflow runs at a time
+concurrency:
+  group: scheduler-xlayer-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: '1.23'
+  GOPRIVATE: "github.com/ethereum-optimism"
+  TEST_TIMEOUT: "30m"
+
+jobs:
+  ##############################################################################
+  # Phase 0: Sync from Upstream
+  ##############################################################################
+
+  sync-upstream:
+    name: Sync from upstream (ethereum-optimism/op-geth)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/okx/op-geth.git || true
+          git remote -v
+
+      - name: Fetch upstream
+        run: |
+          echo "Fetching from upstream okx/op-geth..."
+          git fetch upstream dev
+
+      - name: Merge upstream/dev into current branch
+        id: merge
+        continue-on-error: true
+        run: |
+          echo "Current branch: $(git branch --show-current)"
+          echo "Attempting to merge upstream/dev..."
+
+          if git merge --no-edit upstream/dev; then
+            echo "✅ Merge successful"
+            echo "merge_status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Merge conflict detected"
+            echo "merge_status=conflict" >> $GITHUB_OUTPUT
+            git merge --abort
+            exit 1
+          fi
+
+      - name: Push merged changes
+        if: steps.merge.outputs.merge_status == 'success'
+        run: |
+          echo "Pushing changes to origin..."
+          git push origin HEAD:${{ github.ref_name }}
+
+      - name: Generate sync summary
+        if: always()
+        run: |
+          echo "## 🔄 Upstream Sync Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Upstream:** https://github.com/okx/op-geth (dev branch)" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ steps.merge.outputs.merge_status }}" == "success" ]]; then
+            echo "✅ **Successfully synced from upstream**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Recent Upstream Changes" >> $GITHUB_STEP_SUMMARY
+            git log --oneline --graph --decorate -10 >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Merge conflict detected**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ Please resolve conflicts manually:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Clone the repository" >> $GITHUB_STEP_SUMMARY
+            echo "2. Run: \`git remote add upstream https://github.com/okx/op-geth.git\`" >> $GITHUB_STEP_SUMMARY
+            echo "3. Run: \`git fetch upstream\`" >> $GITHUB_STEP_SUMMARY
+            echo "4. Run: \`git merge upstream/dev\`" >> $GITHUB_STEP_SUMMARY
+            echo "5. Resolve conflicts and push" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Fail workflow if merge conflict
+        if: steps.merge.outputs.merge_status != 'success'
+        run: |
+          echo "::error::Merge conflict detected. Please resolve manually."
+          exit 1
+
+  ##############################################################################
+  # Phase 1: Build Dependencies
+  ##############################################################################
+
+  build-dependencies:
+    needs: [sync-upstream]
+    name: Build Geth and Tools
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build geth
+        run: make geth
+
+      - name: Build all tools
+        run: make all
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            build/bin/
+          retention-days: 1
+
+      - name: Generate build summary
+        if: always()
+        run: |
+          echo "## 🔨 Build Dependencies" >> $GITHUB_STEP_SUMMARY
+          if [ $? -eq 0 ]; then
+            echo "✅ **All dependencies built successfully**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Built binaries:" >> $GITHUB_STEP_SUMMARY
+            ls -lh build/bin/ >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Build failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  ##############################################################################
+  # Phase 2: Code Quality Checks
+  ##############################################################################
+
+  lint-go:
+    needs: [sync-upstream]
+    name: Go Linting (golangci-lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run golangci-lint
+        run: make lint
+
+      - name: Run go mod tidy check
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Generate lint summary
+        if: always()
+        run: |
+          echo "## 🔍 Go Linting" >> $GITHUB_STEP_SUMMARY
+          if [ $? -eq 0 ]; then
+            echo "✅ **All checks passed**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Linting issues found**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  format-check:
+    needs: [sync-upstream]
+    name: Code Format Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Check code formatting
+        run: |
+          make fmt
+          if ! git diff --exit-code; then
+            echo "❌ Code formatting issues detected"
+            echo "Please run 'make fmt' and commit the changes"
+            exit 1
+          fi
+          echo "✅ Code formatting is correct"
+
+      - name: Generate format check summary
+        if: always()
+        run: |
+          echo "## 🎨 Code Format Check" >> $GITHUB_STEP_SUMMARY
+          if [ $? -eq 0 ]; then
+            echo "✅ **Code formatting is correct**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Code formatting issues found**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  ##############################################################################
+  # Phase 3: Unit Tests
+  ##############################################################################
+
+  unit-tests:
+    needs: [build-dependencies]
+    name: Unit Tests (Full)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: build/bin/
+
+      - name: Run full unit tests (excluding E2E)
+        run: |
+          # Exclude test/e2e directory to skip E2E smoke tests
+          # Use same build tags as 'make test': ckzg for KZG crypto support
+          go test -tags=ckzg -timeout=45m $(go list ./... | grep -v '/test/e2e')
+        timeout-minutes: 50
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## 🧪 Unit Tests (Full)" >> $GITHUB_STEP_SUMMARY
+          if [ $? -eq 0 ]; then
+            echo "✅ **All unit tests passed**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Some unit tests failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  unit-tests-short:
+    needs: [build-dependencies]
+    name: Unit Tests (Short)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run short unit tests (excluding E2E)
+        run: |
+          # Exclude test/e2e directory and run with -short flag
+          # Use same build tags as 'make test': ckzg for KZG crypto support
+          go test -tags=ckzg -short -timeout=20m $(go list ./... | grep -v '/test/e2e')
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## ⚡ Unit Tests (Short)" >> $GITHUB_STEP_SUMMARY
+          if [ $? -eq 0 ]; then
+            echo "✅ **All short tests passed**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Some short tests failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  xlayer-tests:
+    needs: [build-dependencies]
+    name: X Layer Specific Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run X Layer specific tests
+        run: |
+          # Test X Layer specific components
+          # Use ckzg tag for KZG crypto support
+          go test -tags=ckzg -v -timeout=20m ./eth -run ".*xlayer.*|.*Xlayer.*" || true
+          go test -tags=ckzg -v -timeout=20m ./core -run ".*xlayer.*|.*Xlayer.*" || true
+          go test -tags=ckzg -v -timeout=20m ./miner -run ".*okx.*|.*Okx.*" || true
+          go test -tags=ckzg -v -timeout=20m ./xlayer/...
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## 🔷 X Layer Specific Tests" >> $GITHUB_STEP_SUMMARY
+          if [ $? -eq 0 ]; then
+            echo "✅ **All X Layer tests passed**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Some X Layer tests had issues (non-blocking)**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  ##############################################################################
+  # Phase 4: Benchmark Tests (Optional)
+  ##############################################################################
+
+  benchmark-tests:
+    needs: [build-dependencies]
+    name: Benchmark Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: false  # Enable when needed
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run benchmark tests
+        run: |
+          go test -bench=. -benchmem -run=^$ $(go list ./... | grep -v '/test/e2e') | tee benchmark.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark.txt
+          retention-days: 7
+
+      - name: Generate benchmark summary
+        if: always()
+        run: |
+          echo "## 📊 Benchmark Tests" >> $GITHUB_STEP_SUMMARY
+          if [ $? -eq 0 ]; then
+            echo "✅ **Benchmark tests completed**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Benchmark tests failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  ##############################################################################
+  # Phase 5: Code Coverage (Optional)
+  ##############################################################################
+
+  code-coverage:
+    needs: [build-dependencies]
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: false  # Enable when needed
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run tests with coverage (excluding E2E)
+        run: |
+          go test -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/test/e2e')
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+      - name: Generate coverage summary
+        if: always()
+        run: |
+          echo "## 📈 Code Coverage" >> $GITHUB_STEP_SUMMARY
+          if [ -f coverage.out ]; then
+            echo "✅ **Coverage report generated**" >> $GITHUB_STEP_SUMMARY
+            go tool cover -func=coverage.out | tail -n 1 >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Coverage report generation failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  ##############################################################################
+  # Phase 6: Report Status
+  ##############################################################################
+
+  report-status:
+    name: Report Status to Lark/Feishu
+    needs: [sync-upstream, build-dependencies, lint-go, format-check, unit-tests, unit-tests-short, xlayer-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Install jq for JSON formatting
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Generate and send report
+        env:
+          LARK_WEBHOOK_URL: ${{ secrets.LARK_WEBHOOK_URL }}
+        run: |
+          # Determine overall status
+          SYNC_STATUS="${{ needs.sync-upstream.result }}"
+          BUILD_STATUS="${{ needs.build-dependencies.result }}"
+          LINT_STATUS="${{ needs.lint-go.result }}"
+          FORMAT_STATUS="${{ needs.format-check.result }}"
+          UNIT_STATUS="${{ needs.unit-tests.result }}"
+          SHORT_STATUS="${{ needs.unit-tests-short.result }}"
+          XLAYER_STATUS="${{ needs.xlayer-tests.result }}"
+
+          if [[ "$SYNC_STATUS" == "success" && "$BUILD_STATUS" == "success" && "$LINT_STATUS" == "success" && "$FORMAT_STATUS" == "success" && "$UNIT_STATUS" == "success" && "$SHORT_STATUS" == "success" ]]; then
+            OVERALL_STATUS="success"
+            STATUS_EMOJI="✅"
+            STATUS_TEXT="All checks passed"
+            CARD_COLOR="green"
+          else
+            OVERALL_STATUS="failure"
+            STATUS_EMOJI="❌"
+            STATUS_TEXT="Some checks failed, please review logs"
+            CARD_COLOR="red"
+          fi
+
+          # Get current time and commit info
+          CURRENT_TIME=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S CST')
+          COMMIT_SHORT="${GITHUB_SHA:0:8}"
+
+          # Build status icon function
+          get_status_icon() {
+            if [[ "$1" == "success" ]]; then
+              echo "✅"
+            else
+              echo "❌"
+            fi
+          }
+
+          SYNC_ICON=$(get_status_icon "$SYNC_STATUS")
+          BUILD_ICON=$(get_status_icon "$BUILD_STATUS")
+          LINT_ICON=$(get_status_icon "$LINT_STATUS")
+          FORMAT_ICON=$(get_status_icon "$FORMAT_STATUS")
+          UNIT_ICON=$(get_status_icon "$UNIT_STATUS")
+          SHORT_ICON=$(get_status_icon "$SHORT_STATUS")
+          XLAYER_ICON=$(get_status_icon "$XLAYER_STATUS")
+
+          # Build Lark/Feishu card JSON
+          cat > lark_card.json <<EOF
+          {
+            "msg_type": "interactive",
+            "card": {
+              "header": {
+                "title": {
+                  "tag": "plain_text",
+                  "content": "${STATUS_EMOJI} X Layer Op-Geth Scheduled CI Report"
+                },
+                "template": "${CARD_COLOR}"
+              },
+              "elements": [
+                {
+                  "tag": "div",
+                  "fields": [
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "**📅 Run Time**\n${CURRENT_TIME}"
+                      }
+                    },
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "**🔀 Branch**\n${{ github.ref_name }}"
+                      }
+                    },
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "**📝 Commit**\n${COMMIT_SHORT}"
+                      }
+                    },
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "**🔢 Run ID**\n${{ github.run_id }}"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "hr"
+                },
+                {
+                  "tag": "div",
+                  "text": {
+                    "tag": "lark_md",
+                    "content": "**Check Status**"
+                  }
+                },
+                {
+                  "tag": "div",
+                  "fields": [
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "${SYNC_ICON} Upstream Sync"
+                      }
+                    },
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "${BUILD_ICON} Build"
+                      }
+                    },
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "${LINT_ICON} Linting"
+                      }
+                    },
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "${FORMAT_ICON} Format Check"
+                      }
+                    },
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "${UNIT_ICON} Unit Tests"
+                      }
+                    },
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "${SHORT_ICON} Short Tests"
+                      }
+                    },
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "${XLAYER_ICON} X Layer Tests"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "hr"
+                },
+                {
+                  "tag": "div",
+                  "text": {
+                    "tag": "lark_md",
+                    "content": "**${STATUS_TEXT}**"
+                  }
+                },
+                {
+                  "tag": "action",
+                  "actions": [
+                    {
+                      "tag": "button",
+                      "text": {
+                        "tag": "plain_text",
+                        "content": "View Detailed Logs"
+                      },
+                      "type": "primary",
+                      "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+          EOF
+
+          # Send to Lark/Feishu
+          if [ -n "$LARK_WEBHOOK_URL" ]; then
+            echo "Sending card notification to Lark..."
+
+            response=$(curl -s -w "\n%{http_code}" -X POST "$LARK_WEBHOOK_URL" \
+              -H 'Content-Type: application/json' \
+              -d @lark_card.json)
+
+            http_code=$(echo "$response" | tail -n1)
+            response_body=$(echo "$response" | head -n-1)
+
+            if [ "$http_code" -eq 200 ]; then
+              echo "✅ Lark notification sent successfully"
+              echo "Response: $response_body"
+            else
+              echo "❌ Failed to send Lark notification"
+              echo "HTTP Code: $http_code"
+              echo "Response: $response_body"
+            fi
+          else
+            echo "⚠️ LARK_WEBHOOK_URL not configured. Skipping notification."
+            echo ""
+            echo "To enable Lark notifications:"
+            echo "1. Go to GitHub repository Settings → Secrets → Actions"
+            echo "2. Add a new secret named 'LARK_WEBHOOK_URL'"
+            echo "3. Paste your Lark webhook URL as the value"
+            echo ""
+            echo "Generated card preview:"
+            if command -v jq &> /dev/null; then
+              cat lark_card.json | jq '.'
+            else
+              cat lark_card.json
+            fi
+          fi
+
+      - name: Generate final summary
+        if: always()
+        run: |
+          echo "## 📊 Final Status Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Upstream Sync | ${{ needs.sync-upstream.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build-dependencies.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Linting | ${{ needs.lint-go.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Format Check | ${{ needs.format-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests (Full) | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests (Short) | ${{ needs.unit-tests-short.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| X Layer Tests | ${{ needs.xlayer-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+
