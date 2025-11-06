@@ -11,6 +11,10 @@ concurrency:
   group: scheduler-xlayer-${{ github.ref }}
   cancel-in-progress: true
 
+# Default permissions: read-only
+permissions:
+  contents: read
+
 env:
   GO_VERSION: '1.23'
   GOPRIVATE: "github.com/ethereum-optimism"
@@ -22,14 +26,14 @@ jobs:
   ##############################################################################
 
   sync-upstream:
-    name: Sync from upstream (ethereum-optimism/op-geth)
+    name: Sync from upstream (okx/op-geth)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: write  # Required for pushing merged changes
     steps:
       - name: Checkout current branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
@@ -115,18 +119,18 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
         with:
           ref: ${{ github.ref }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32  # v5.0.2
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
       - name: Cache Go modules
-        uses: actions/cache@v4
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9  # v4.0.2
         with:
           path: |
             ~/.cache/go-build
@@ -142,7 +146,7 @@ jobs:
         run: make all
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874  # v4.4.0
         with:
           name: build-artifacts
           path: |
@@ -173,12 +177,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
         with:
           ref: ${{ github.ref }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32  # v5.0.2
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -208,12 +212,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
         with:
           ref: ${{ github.ref }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32  # v5.0.2
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -248,18 +252,18 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
         with:
           ref: ${{ github.ref }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32  # v5.0.2
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
         with:
           name: build-artifacts
           path: build/bin/
@@ -288,12 +292,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
         with:
           ref: ${{ github.ref }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32  # v5.0.2
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -321,12 +325,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
         with:
           ref: ${{ github.ref }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32  # v5.0.2
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -362,12 +366,12 @@ jobs:
     if: false  # Enable when needed
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
         with:
           ref: ${{ github.ref }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32  # v5.0.2
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -377,7 +381,7 @@ jobs:
           go test -bench=. -benchmem -run=^$ $(go list ./... | grep -v '/test/e2e') | tee benchmark.txt
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874  # v4.4.0
         with:
           name: benchmark-results
           path: benchmark.txt
@@ -405,12 +409,12 @@ jobs:
     if: false  # Enable when needed
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
         with:
           ref: ${{ github.ref }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32  # v5.0.2
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -420,7 +424,7 @@ jobs:
           go test -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/test/e2e')
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@e28ff129e5465c2c0671cb543804426f6e8c6906  # v4.0.1
         with:
           files: ./coverage.out
           flags: unittests
@@ -647,15 +651,12 @@ jobs:
               -d @lark_card.json)
 
             http_code=$(echo "$response" | tail -n1)
-            response_body=$(echo "$response" | head -n-1)
 
             if [ "$http_code" -eq 200 ]; then
               echo "✅ Lark notification sent successfully"
-              echo "Response: $response_body"
             else
-              echo "❌ Failed to send Lark notification"
-              echo "HTTP Code: $http_code"
-              echo "Response: $response_body"
+              echo "❌ Failed to send Lark notification (HTTP $http_code)"
+              # Do not output response body to avoid leaking sensitive info
             fi
           else
             echo "⚠️ LARK_WEBHOOK_URL not configured. Skipping notification."
