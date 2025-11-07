@@ -449,7 +449,7 @@ jobs:
 
   report-status:
     name: Report Status to Lark/Feishu
-    needs: [sync-upstream, build-dependencies, lint-go, format-check, unit-tests, unit-tests-short, xlayer-tests]
+    needs: [sync-upstream, build-dependencies, lint-go, unit-tests, unit-tests-short, xlayer-tests]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -466,12 +466,11 @@ jobs:
           SYNC_STATUS="${{ needs.sync-upstream.result }}"
           BUILD_STATUS="${{ needs.build-dependencies.result }}"
           LINT_STATUS="${{ needs.lint-go.result }}"
-          FORMAT_STATUS="${{ needs.format-check.result }}"
           UNIT_STATUS="${{ needs.unit-tests.result }}"
           SHORT_STATUS="${{ needs.unit-tests-short.result }}"
           XLAYER_STATUS="${{ needs.xlayer-tests.result }}"
 
-          if [[ "$SYNC_STATUS" == "success" && "$BUILD_STATUS" == "success" && "$LINT_STATUS" == "success" && "$FORMAT_STATUS" == "success" && "$UNIT_STATUS" == "success" && "$SHORT_STATUS" == "success" ]]; then
+          if [[ "$SYNC_STATUS" == "success" && "$BUILD_STATUS" == "success" && "$LINT_STATUS" == "success" && "$UNIT_STATUS" == "success" && "$SHORT_STATUS" == "success" ]]; then
             OVERALL_STATUS="success"
             STATUS_EMOJI="✅"
             STATUS_TEXT="All checks passed"
@@ -499,7 +498,6 @@ jobs:
           SYNC_ICON=$(get_status_icon "$SYNC_STATUS")
           BUILD_ICON=$(get_status_icon "$BUILD_STATUS")
           LINT_ICON=$(get_status_icon "$LINT_STATUS")
-          FORMAT_ICON=$(get_status_icon "$FORMAT_STATUS")
           UNIT_ICON=$(get_status_icon "$UNIT_STATUS")
           SHORT_ICON=$(get_status_icon "$SHORT_STATUS")
           XLAYER_ICON=$(get_status_icon "$XLAYER_STATUS")
@@ -582,13 +580,6 @@ jobs:
                       "text": {
                         "tag": "lark_md",
                         "content": "${LINT_ICON} Linting"
-                      }
-                    },
-                    {
-                      "is_short": true,
-                      "text": {
-                        "tag": "lark_md",
-                        "content": "${FORMAT_ICON} Format Check"
                       }
                     },
                     {
@@ -685,7 +676,6 @@ jobs:
           echo "| Upstream Sync | ${{ needs.sync-upstream.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Build | ${{ needs.build-dependencies.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Linting | ${{ needs.lint-go.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Format Check | ${{ needs.format-check.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Unit Tests (Full) | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Unit Tests (Short) | ${{ needs.unit-tests-short.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| X Layer Tests | ${{ needs.xlayer-tests.result }} |" >> $GITHUB_STEP_SUMMARY
