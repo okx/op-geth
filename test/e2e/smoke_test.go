@@ -430,7 +430,6 @@ func TestEthereumTransactionRPC(t *testing.T) {
 
 			fmt.Printf("EthEstimateGas ContractCall result: %d gas\n", gas)
 		})
-
 	})
 
 	t.Run("EthCall", func(t *testing.T) {
@@ -1510,7 +1509,6 @@ func TestNewTransactionTypes(t *testing.T) {
 		t.Logf("Block gas used: %s", blockGasUsed)
 		t.Logf("Block excess blob gas: %s", excessBlobGas)
 	})
-
 }
 
 // Run with: RUN_OKPAY_PRIORITY_TEST=1 go test -v ./test/e2e/ -run TestOkPayPriority

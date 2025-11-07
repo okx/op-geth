@@ -629,9 +629,7 @@ func NewXlayerHybridFilterAPI(original *filters.FilterAPI, config *XlayerLegacyR
 // eth_getFilterChanges
 // eth_getFilterLogs
 // If range overlaps the migration_block, return error, else FORWARD
-
 func (api *XlayerHybridFilterAPI) NewFilter(crit filters.FilterCriteria) (rpc.ID, error) {
-
 	// Determine the block range
 	begin := rpc.LatestBlockNumber.Int64()
 	if crit.FromBlock != nil {

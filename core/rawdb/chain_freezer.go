@@ -309,7 +309,6 @@ func (f *chainFreezer) freezeRange(nfdb *nofreezedb, number, limit uint64) (hash
 	hashes = make([]common.Hash, 0, limit-number+1)
 
 	_, err = f.ModifyAncients(func(op ethdb.AncientWriteOp) error {
-
 		config := ReadChainConfig(nfdb, ReadCanonicalHash(nfdb, 0))
 
 		for ; number <= limit; number++ {

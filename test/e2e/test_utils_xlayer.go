@@ -499,7 +499,6 @@ func EnsureContractsDeployed(t *testing.T) {
 	ContractsDeployed = true
 	fmt.Println("ContractAAddr:", ContractAAddr.Hex())
 	fmt.Println("ContractBAddr:", ContractBAddr.Hex())
-
 }
 
 // EncodeTransferCall encodes an ERC20 transfer function call
