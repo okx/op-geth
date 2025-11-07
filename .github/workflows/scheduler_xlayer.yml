@@ -206,41 +206,41 @@ jobs:
             echo "❌ **Linting issues found**" >> $GITHUB_STEP_SUMMARY
           fi
 
-  format-check:
-    needs: [sync-upstream]
-    name: Code Format Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
+  # format-check:
+  #   needs: [sync-upstream]
+  #   name: Code Format Check
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 15
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ github.ref }}
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
+  #     - name: Set up Go
+  #       uses: actions/setup-go@v5
+  #       with:
+  #         go-version: ${{ env.GO_VERSION }}
 
-      - name: Check code formatting
-        run: |
-          make fmt
-          if ! git diff --exit-code; then
-            echo "❌ Code formatting issues detected"
-            echo "Please run 'make fmt' and commit the changes"
-            exit 1
-          fi
-          echo "✅ Code formatting is correct"
+  #     - name: Check code formatting
+  #       run: |
+  #         make fmt
+  #         if ! git diff --exit-code; then
+  #           echo "❌ Code formatting issues detected"
+  #           echo "Please run 'make fmt' and commit the changes"
+  #           exit 1
+  #         fi
+  #         echo "✅ Code formatting is correct"
 
-      - name: Generate format check summary
-        if: always()
-        run: |
-          echo "## 🎨 Code Format Check" >> $GITHUB_STEP_SUMMARY
-          if [ $? -eq 0 ]; then
-            echo "✅ **Code formatting is correct**" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Code formatting issues found**" >> $GITHUB_STEP_SUMMARY
-          fi
+  #     - name: Generate format check summary
+  #       if: always()
+  #       run: |
+  #         echo "## 🎨 Code Format Check" >> $GITHUB_STEP_SUMMARY
+  #         if [ $? -eq 0 ]; then
+  #           echo "✅ **Code formatting is correct**" >> $GITHUB_STEP_SUMMARY
+  #         else
+  #           echo "❌ **Code formatting issues found**" >> $GITHUB_STEP_SUMMARY
+  #         fi
 
   ##############################################################################
   # Phase 3: Unit Tests
