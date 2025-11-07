@@ -1622,8 +1622,8 @@ func testOkPayBasicPriority(t *testing.T, ctx context.Context, client *ethclient
 	okPayReceipt := waitForReceipt(t, ctx, client, signedOkPayTx.Hash(), 120*time.Second)
 	normalReceipt := waitForReceipt(t, ctx, client, signedNormalTx.Hash(), 120*time.Second)
 
-	require.Equal(t, uint64(types.ReceiptStatusSuccessful), okPayReceipt.Status)
-	require.Equal(t, uint64(types.ReceiptStatusSuccessful), normalReceipt.Status)
+	require.Equal(t, types.ReceiptStatusSuccessful, okPayReceipt.Status)
+	require.Equal(t, types.ReceiptStatusSuccessful, normalReceipt.Status)
 
 	verifyTransactionPriority(t, ctx, client, okPayReceipt, normalReceipt, signedOkPayTx.Hash(), signedNormalTx.Hash(), "OkPay", "Normal")
 }

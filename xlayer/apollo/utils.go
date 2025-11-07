@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/urfave/cli/v2"
 )
 
@@ -40,15 +39,6 @@ func getNamespaceSuffix(namespace string) (string, error) {
 		return "", fmt.Errorf("invalid namespace: %s, no separator \"-\" present, please configure apollo namespace in the correct format \"item-suffix\"", namespace)
 	}
 	return items[len(items)-1], nil
-}
-
-func containsAddressOldImpl(addresses []string, addr common.Address) bool {
-	for _, item := range addresses {
-		if common.HexToAddress(item) == addr {
-			return true
-		}
-	}
-	return false
 }
 
 func SanitizeFlags(flags []cli.Flag) []cli.Flag {

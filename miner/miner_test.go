@@ -264,7 +264,6 @@ func TestOkPayPrioritization(t *testing.T) {
 	t.Run("MixedPriorities", testOkPayMixedPriorities)
 	t.Run("TimeOrdering", testOkPayTimeOrdering)
 	t.Run("NonceOrdering", testOkPayNonceOrdering)
-
 }
 
 // testOkPayPriorityOrder tests that transactions are included in order: OkPay → Priority → Normal

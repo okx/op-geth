@@ -80,9 +80,9 @@ func TestCombinedSummaryFormatting(t *testing.T) {
 		t.Fatalf("expected GasUsed<21000> in line: %s", line)
 	}
 
-	// BlockTime should reflect insert+propose in pretty string; just ensure presence of both sections
-	if matched, _ := regexp.MatchString(`Propose\[`, line); !matched {
-		t.Fatalf("expected Propose section in line: %s", line)
+	// BlockTime should reflect insert+mine in pretty string; just ensure presence of both sections
+	if matched, _ := regexp.MatchString(`Mine\[`, line); !matched {
+		t.Fatalf("expected Mine section in line: %s", line)
 	}
 	if matched, _ := regexp.MatchString(`Insert\[`, line); !matched {
 		t.Fatalf("expected Insert section in line: %s", line)
