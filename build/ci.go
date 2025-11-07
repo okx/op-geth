@@ -442,7 +442,7 @@ func doLint(cmdline []string) {
 	}
 
 	linter := downloadLinter(*cachedir)
-	lflags := []string{"run", "--config", ".golangci.yml"}
+	lflags := []string{"run", "--config", ".golangci.yml", "--enable-all", "--timeout", "10m", "--verbose"}
 	build.MustRunCommandWithOutput(linter, append(lflags, packages...)...)
 	fmt.Println("You have achieved perfection.")
 }
