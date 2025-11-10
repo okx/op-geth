@@ -120,7 +120,6 @@ func (tl *TraceLogger) initFile() error {
 func LogTrace(txHash, serviceName string, processID uint64, processWord string,
 	blockHeight uint64, blockHash string, blockTime uint64, txType int8,
 	status string, errMsg string, gasUsed uint64, gasPrice, from, to, value string, nonce uint64) {
-
 	if globalLogger == nil || !globalLogger.enabled {
 		return
 	}

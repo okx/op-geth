@@ -46,7 +46,6 @@ func NewL2GasPriceSuggester(ctx context.Context, cfg gasprice.Config) L2GasPrice
 func GetL1GasPrice(blockchain *core.BlockChain) (*big.Int, error) {
 	statedb, err := blockchain.State()
 	if err != nil {
-
 		return nil, fmt.Errorf("failed to get current state: %v", err)
 	}
 	// Get L1 base fee from state instead of network RPC

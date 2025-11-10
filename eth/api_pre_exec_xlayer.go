@@ -524,7 +524,7 @@ func applyMessageWithTracer(ctx context.Context, api *TxPreExecAPI, state *coreS
 
 	evm.Context.BaseFee = big.NewInt(0)
 
-	// blocknumber and time are random to simulate real transactions with propogation delay
+	// blocknumber and time are random to simulate real transactions with propagation delay
 	evm.Context.BlockNumber.Add(evm.Context.BlockNumber, big.NewInt(rand.Int63n(6)+6))
 	evm.Context.Time += uint64(rand.Int63n(60) + 30)
 	gp := new(core.GasPool).AddGas(MaxGasLimit)

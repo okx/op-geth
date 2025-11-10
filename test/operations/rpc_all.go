@@ -2,7 +2,6 @@ package operations
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -45,7 +44,6 @@ func DebugTraceBlockByNumber(blockNumber uint64) (interface{}, error) {
 
 // DebugTraceBatchByNumber traces all transactions in a batch given by batch number
 func DebugTraceBatchByNumber(batchNumber uint64) (interface{}, error) {
-
 	batchNumberHex := fmt.Sprintf("0x%x", batchNumber)
 	var result interface{}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -61,7 +59,6 @@ func DebugTraceBatchByNumber(batchNumber uint64) (interface{}, error) {
 
 // DebugTraceTransaction traces a transaction with specified options
 func DebugTraceTransaction(txHash common.Hash) (interface{}, error) {
-
 	var result interface{}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -132,7 +129,6 @@ func EthEstimateGas(from, to common.Address, gas string, gasPrice string, value 
 
 // EthGetBalance returns the balance of an account
 func EthGetBalance(address common.Address, block string) (*big.Int, error) {
-
 	var result string
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -147,7 +143,6 @@ func EthGetBalance(address common.Address, block string) (*big.Int, error) {
 
 // EthGetBlockByHash returns information about a block by hash
 func EthGetBlockByHash(blockHash common.Hash, fullTx bool) (interface{}, error) {
-
 	var result interface{}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -162,7 +157,6 @@ func EthGetBlockByHash(blockHash common.Hash, fullTx bool) (interface{}, error) 
 
 // EthGetBlockByNumber returns information about a block by number
 func EthGetBlockByNumber(blockNumber string, fullTx bool) (interface{}, error) {
-
 	var result interface{}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -339,7 +333,6 @@ func EthCall(from, to common.Address, gas string, gasPrice string, value string,
 
 // EthGasPrice returns the current price per gas in wei
 func EthGasPrice() (*big.Int, error) {
-
 	var result string
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -417,7 +410,6 @@ func EthTransactionPreExec(txRequest interface{}, blockParameter string, stateOv
 
 // EthGetTransactionByBlockHashAndIndex returns information about a transaction by block hash and transaction index position
 func EthGetTransactionByBlockHashAndIndex(blockHash common.Hash, index string) (interface{}, error) {
-
 	var result interface{}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -432,7 +424,6 @@ func EthGetTransactionByBlockHashAndIndex(blockHash common.Hash, index string) (
 
 // EthGetTransactionByBlockNumberAndIndex returns information about a transaction by block number and transaction index position
 func EthGetTransactionByBlockNumberAndIndex(blockNumber string, index string) (interface{}, error) {
-
 	var result interface{}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -447,7 +438,6 @@ func EthGetTransactionByBlockNumberAndIndex(blockNumber string, index string) (i
 
 // EthGetTransactionByHash returns the information about a transaction requested by transaction hash
 func EthGetTransactionByHash(txHash common.Hash) (interface{}, error) {
-
 	var result interface{}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -462,7 +452,6 @@ func EthGetTransactionByHash(txHash common.Hash) (interface{}, error) {
 
 // EthGetInternalTransactions returns the internal transactions for a given transaction hash
 func EthGetInternalTransactions(txHash common.Hash) ([]*types.InnerTx, error) {
-
 	var result []*types.InnerTx
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -477,7 +466,6 @@ func EthGetInternalTransactions(txHash common.Hash) ([]*types.InnerTx, error) {
 
 // EthGetBlockInternalTransactions returns the internal transactions for a given block number
 func EthGetBlockInternalTransactions(blockNumber rpc.BlockNumber) (map[common.Hash][]*types.InnerTx, error) {
-
 	var result map[common.Hash][]*types.InnerTx
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -492,7 +480,6 @@ func EthGetBlockInternalTransactions(blockNumber rpc.BlockNumber) (map[common.Ha
 
 // EthGetTransactionReceipt returns the receipt of a transaction by transaction hash
 func EthGetTransactionReceipt(txHash common.Hash) (interface{}, error) {
-
 	var result interface{}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -507,7 +494,6 @@ func EthGetTransactionReceipt(txHash common.Hash) (interface{}, error) {
 
 // TxPoolLimbo returns the transactions that are in the limbo state
 func TxPoolLimbo() (interface{}, error) {
-
 	var result interface{}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -582,7 +568,6 @@ func TxPoolLimbo() (interface{}, error) {
 
 // SyncGetOffChainData returns off-chain data for a given hash
 func SyncGetOffChainData(hash common.Hash) (interface{}, error) {
-
 	var result interface{}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -617,27 +602,6 @@ func transHexStringToBigInt(hexStr string) (*big.Int, error) {
 	value, ok := value.SetString(hexStr, 16)
 	if !ok {
 		return nil, fmt.Errorf("failed to convert hex to big.Int: %s", hexStr)
-	}
-
-	return value, nil
-}
-
-// transHexToBigInt converts a hex string to a big.Int
-func transHexToBigInt(hexStr json.RawMessage) (*big.Int, error) {
-	var hexString string
-	err := json.Unmarshal(hexStr, &hexString)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(hexString) > 2 && (hexString[:2] == "0x" || hexString[:2] == "0X") {
-		hexString = hexString[2:]
-	}
-
-	value := new(big.Int)
-	value, ok := value.SetString(hexString, 16)
-	if !ok {
-		return nil, fmt.Errorf("failed to convert hex to big.Int: %s", hexString)
 	}
 
 	return value, nil

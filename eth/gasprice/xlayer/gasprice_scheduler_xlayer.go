@@ -181,7 +181,6 @@ func (s *XLayerScheduler) updateDynamicGP(ctx context.Context) {
 
 	s.gpricer.GetGasCache().SetLatest(gasResult)
 	log.Info(fmt.Sprintf("Updated gas price: %s", gasResult.String()))
-
 }
 
 // isCongested checks if the network is congested

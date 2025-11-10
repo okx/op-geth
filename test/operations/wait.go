@@ -205,14 +205,6 @@ func NodeUpCondition(target string) (bool, error) {
 // ConditionFunc is a generic function
 type ConditionFunc func() (done bool, err error)
 
-func networkUpCondition() (bool, error) {
-	return NodeUpCondition(DefaultL1NetworkURL)
-}
-
-func nodeUpCondition() (done bool, err error) {
-	return NodeUpCondition(DefaultL2NetworkURL)
-}
-
 // WaitSignal blocks until an Interrupt or Kill signal is received, then it
 // executes the given cleanup functions and returns.
 func WaitSignal(cleanupFuncs ...func()) {

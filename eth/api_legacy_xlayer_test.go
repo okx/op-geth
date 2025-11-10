@@ -1471,7 +1471,6 @@ func TestErrorHandling_TimeoutAndCancellation(t *testing.T) {
 			t.Logf("Got error (may not be context error): %v", err)
 		}
 	})
-
 }
 
 // Test WrapAPIsForXlayer integration
