@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -482,6 +483,14 @@ func (api *ConsensusAPI) getPayload(payloadID engine.PayloadID, full bool) (*eng
 	if data == nil {
 		return nil, engine.UnknownPayload
 	}
+
+	// X Layer: Log block send start
+	if data.ExecutionPayload != nil {
+		blockHash := data.ExecutionPayload.BlockHash.Hex()
+		blockNumber := data.ExecutionPayload.Number
+		monitor.LogBlock(blockHash, blockNumber, monitor.SeqBlockSendStart)
+	}
+
 	return data, nil
 }
 
@@ -742,6 +751,12 @@ func (api *ConsensusAPI) newPayload(params engine.ExecutableData, versionedHashe
 
 		return api.invalid(err, parent.Header()), nil
 	}
+
+	// X Layer: Log block receive end (matching reth implementation)
+	blockHash := block.Hash().Hex()
+	blockNumber := block.NumberU64()
+	monitor.LogBlock(blockHash, blockNumber, monitor.RpcBlockReceiveEnd)
+
 	hash := block.Hash()
 
 	// If witness collection was requested, inject that into the result too

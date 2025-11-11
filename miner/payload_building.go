@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -141,7 +142,7 @@ func newPayload(lifeCtx context.Context, empty *types.Block, emptyRequests [][]b
 var errInterruptedUpdate = errors.New("interrupted payload update")
 
 // update updates the full-block with latest built version.
-func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration) {
+func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration, buildStartTimestamp uint64) {
 	payload.lock.Lock()
 	defer payload.lock.Unlock()
 
@@ -162,6 +163,17 @@ func (payload *Payload) update(r *newPayloadResult, elapsed time.Duration) {
 		return
 	}
 	log.Debug("New payload update", "id", payload.id, "elapsed", common.PrettyDuration(elapsed))
+
+	// X Layer: Log block build start and end
+	// Only log on first successful build (when payload.full is nil)
+	if r.block != nil && buildStartTimestamp > 0 && payload.full == nil {
+		blockHash := r.block.Hash().Hex()
+		blockNumber := r.block.NumberU64()
+		// Log block build start using saved timestamp
+		monitor.LogBlockWithTimestamp(blockHash, blockNumber, monitor.SeqBlockBuildStart, buildStartTimestamp)
+		// Log block build end
+		monitor.LogBlock(blockHash, blockNumber, monitor.SeqBlockBuildEnd)
+	}
 
 	// Ensure the newly provided full block has a higher transaction fee.
 	// In post-merge stage, there is no uncle reward anymore and transaction
@@ -317,16 +329,29 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 			// No RPC requests allowed.
 			rpcCtx: nil,
 		}
+		// X Layer: Save block build start timestamp (matching reth implementation)
+		buildStartTimestamp := uint64(time.Now().UnixNano() / 1000000)
+
 		empty := miner.generateWork(emptyParams, witness)
 		if empty.err != nil {
 			return nil, empty.err
 		}
 		payload := newPayload(miner.lifeCtx, empty.block, empty.requests, empty.witness, args.Id())
+
 		// make sure to make it appear as full, otherwise it will wait indefinitely for payload building to complete.
 		payload.full = empty.block
 		payload.fullFees = empty.fees
 		payload.fullWitness = empty.witness
 		payload.requests = empty.requests
+
+		// X Layer: Log block build start and end for empty block (matching reth implementation)
+		if empty.block != nil {
+			blockHash := empty.block.Hash().Hex()
+			blockNumber := empty.block.NumberU64()
+			monitor.LogBlockWithTimestamp(blockHash, blockNumber, monitor.SeqBlockBuildStart, buildStartTimestamp)
+			monitor.LogBlock(blockHash, blockNumber, monitor.SeqBlockBuildEnd)
+		}
+
 		payload.cond.Broadcast() // unblocks Resolve
 		return payload, nil
 	}
@@ -354,6 +379,10 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 	}
 
 	payload := newPayload(miner.lifeCtx, nil, nil, nil, args.Id())
+	// X Layer: Save block build start timestamp (matching reth implementation)
+	// Capture in closure to avoid storing in struct
+	buildStartTimestamp := uint64(time.Now().UnixNano() / 1000000)
+
 	// set shared interrupt
 	fullParams.interrupt = payload.interrupt
 	fullParams.rpcCtx = payload.rpcCtx
@@ -387,8 +416,8 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 			// getSealingBlock is interrupted by shared interrupt
 			r := miner.generateWork(fullParams, witness)
 			dur := time.Since(start)
-			// update handles error case
-			payload.update(r, dur)
+			// update handles error case, pass buildStartTimestamp from closure
+			payload.update(r, dur, buildStartTimestamp)
 			if r.err == nil {
 				// after first successful pass, we're updating
 				fullParams.isUpdate = true

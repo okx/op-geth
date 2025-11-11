@@ -1,11 +1,13 @@
 package monitor
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -14,38 +16,22 @@ import (
 const (
 	// DepositTxType is the transaction type for deposit transactions (system transactions)
 	DepositTxType = 0x7E
-)
 
-// TraceLogEntry represents a single trace log entry
-type TraceLogEntry struct {
-	Timestamp       int64  `json:"timestamp"`
-	Hash            string `json:"hash"`
-	ServiceName     string `json:"serviceName"`
-	ProcessID       uint64 `json:"processId"`
-	ProcessWord     string `json:"processWord"`
-	Phase           string `json:"phase"`
-	Step            string `json:"step"`
-	BlockHeight     uint64 `json:"blockHeight"`
-	BlockHash       string `json:"blockHash"`
-	BlockTime       uint64 `json:"blockTime"`
-	TransactionType int8   `json:"transactionType"`
-	Status          string `json:"status"`
-	Error           string `json:"error,omitempty"`
-	GasUsed         uint64 `json:"gasUsed,omitempty"`
-	GasPrice        string `json:"gasPrice,omitempty"`
-	From            string `json:"from,omitempty"`
-	To              string `json:"to,omitempty"`
-	Value           string `json:"value,omitempty"`
-	Nonce           uint64 `json:"nonce,omitempty"`
-	Duration        int64  `json:"duration,omitempty"`
-}
+	// Number of log entries to write before forcing a flush
+	FLUSH_INTERVAL_WRITES = 100
+
+	// Time interval between flushes (in seconds)
+	FLUSH_INTERVAL_SECONDS = 1
+)
 
 // TraceLogger handles transaction trace logging
 type TraceLogger struct {
-	enabled bool
-	logPath string
-	file    *os.File
-	mutex   sync.Mutex
+	enabled       bool
+	logPath       string
+	file          *os.File
+	mutex         sync.Mutex
+	writeCount    uint64
+	lastFlushTime time.Time
 }
 
 var (
@@ -53,36 +39,13 @@ var (
 	once         sync.Once
 )
 
-func getPhaseFromServiceName(serviceName string) string {
-	switch serviceName {
-	case ServiceNameRPC:
-		return "rpc"
-	case ServiceNameTxPool:
-		return "txpool"
-	case ServiceNameMiner:
-		return "miner"
-	case ServiceNameState:
-		return "state"
-	case ServiceNameBlockchain:
-		return "blockchain"
-	default:
-		return "unknown"
-	}
-}
-
-func getStepFromProcessWord(processWord string) string {
-	if len(processWord) > 11 && processWord[:11] == "op_geth_" {
-		return processWord[11:]
-	}
-	return processWord
-}
-
 // InitTraceLogger initializes the global trace logger
 func InitTraceLogger(enabled bool, logPath string) {
 	once.Do(func() {
 		globalLogger = &TraceLogger{
-			enabled: enabled,
-			logPath: logPath,
+			enabled:       enabled,
+			logPath:       logPath,
+			lastFlushTime: time.Now(),
 		}
 
 		if enabled {
@@ -116,49 +79,66 @@ func (tl *TraceLogger) initFile() error {
 	return nil
 }
 
-// LogTrace logs a transaction trace entry
-func LogTrace(txHash, serviceName string, processID uint64, processWord string,
-	blockHeight uint64, blockHash string, blockTime uint64, txType int8,
-	status string, errMsg string, gasUsed uint64, gasPrice, from, to, value string, nonce uint64) {
-	if globalLogger == nil || !globalLogger.enabled {
-		return
+// escapeCSV escapes CSV special characters
+func escapeCSV(s string) string {
+	if s == "" {
+		return ""
 	}
-
-	// Filter out deposit transactions (system transactions)
-	if txType == DepositTxType {
-		return
+	if strings.Contains(s, ",") || strings.Contains(s, "\"") || strings.Contains(s, "\n") {
+		return fmt.Sprintf("\"%s\"", strings.ReplaceAll(s, "\"", "\"\""))
 	}
-
-	timestamp := time.Now().UnixNano() / 1000000 // milliseconds
-	step := getStepFromProcessWord(processWord)
-
-	entry := TraceLogEntry{
-		Timestamp:       timestamp,
-		Hash:            txHash,
-		ServiceName:     serviceName,
-		ProcessID:       processID,
-		ProcessWord:     processWord,
-		Phase:           getPhaseFromServiceName(serviceName),
-		Step:            step,
-		BlockHeight:     blockHeight,
-		BlockHash:       blockHash,
-		BlockTime:       blockTime,
-		TransactionType: txType,
-		Status:          status,
-		Error:           errMsg,
-		GasUsed:         gasUsed,
-		GasPrice:        gasPrice,
-		From:            from,
-		To:              to,
-		Value:           value,
-		Nonce:           nonce,
-	}
-
-	globalLogger.logEntry(entry)
+	return s
 }
 
-// logEntry writes a log entry to file
-func (tl *TraceLogger) logEntry(entry TraceLogEntry) {
+// formatCSVLine formats a CSV line with 23 fields matching reth implementation
+// Format: chain,trace,status,serviceName,business,client,chainld,process,processWord,index,innerIndex,currentTime,referld,contractAddress,blockHeight,blockHash,blockTime,depositConfirmHeight,tokenID,mevSupplier,businessHash,transactionType,extJson
+func formatCSVLine(
+	traceHash string,
+	processID TransactionProcessId,
+	currentTime uint64,
+	blockHash string,
+	blockNumber uint64,
+) string {
+	chain := CHAIN_NAME
+	trace := strings.ToLower(traceHash)
+	status := ""
+	serviceName := processID.ServiceName()
+	business := BUSINESS_NAME
+	client := ""
+	chainld := CHAIN_ID
+	processStr := strconv.FormatUint(uint64(processID), 10)
+	processWordStr := processID.String()
+	index := ""
+	innerIndex := ""
+	currentTimeStr := strconv.FormatUint(currentTime, 10)
+	referld := ""
+	contractAddress := ""
+	blockHeight := ""
+	if blockNumber > 0 {
+		blockHeight = strconv.FormatUint(blockNumber, 10)
+	}
+	blockHashStr := strings.ToLower(blockHash)
+	blockTime := ""
+	depositConfirmHeight := ""
+	tokenID := ""
+	mevSupplier := ""
+	businessHash := ""
+	transactionType := ""
+	extJson := ""
+
+	return fmt.Sprintf(
+		"%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s",
+		escapeCSV(chain), escapeCSV(trace), escapeCSV(status), escapeCSV(serviceName),
+		escapeCSV(business), escapeCSV(client), escapeCSV(chainld), escapeCSV(processStr),
+		escapeCSV(processWordStr), escapeCSV(index), escapeCSV(innerIndex), escapeCSV(currentTimeStr),
+		escapeCSV(referld), escapeCSV(contractAddress), escapeCSV(blockHeight), escapeCSV(blockHashStr),
+		escapeCSV(blockTime), escapeCSV(depositConfirmHeight), escapeCSV(tokenID), escapeCSV(mevSupplier),
+		escapeCSV(businessHash), escapeCSV(transactionType), escapeCSV(extJson),
+	)
+}
+
+// writeToFile writes a CSV line to the trace file with periodic flush
+func (tl *TraceLogger) writeToFile(csvLine string) {
 	tl.mutex.Lock()
 	defer tl.mutex.Unlock()
 
@@ -166,44 +146,101 @@ func (tl *TraceLogger) logEntry(entry TraceLogEntry) {
 		return
 	}
 
-	// Convert to JSON
-	data, err := json.Marshal(entry)
-	if err != nil {
+	if _, err := tl.file.WriteString(csvLine + "\n"); err != nil {
+		log.Warn("Failed to write to transaction trace file", "error", err)
 		return
 	}
 
-	// Write to file with newline
-	tl.file.WriteString(string(data) + "\n")
-	tl.file.Sync()
+	count := atomic.AddUint64(&tl.writeCount, 1)
+	now := time.Now()
+	timeSinceFlush := now.Sub(tl.lastFlushTime)
+
+	shouldFlush := count%FLUSH_INTERVAL_WRITES == 0 || timeSinceFlush.Seconds() >= FLUSH_INTERVAL_SECONDS
+
+	if shouldFlush {
+		tl.lastFlushTime = now
+		if err := tl.file.Sync(); err != nil {
+			log.Warn("Failed to flush transaction trace file", "error", err)
+		}
+	}
 }
 
-// Close closes the trace logger
+// LogTransaction logs a transaction event at current time point
+// This matches the reth implementation: log_transaction(tx_hash, process_id, block_number)
+func LogTransaction(txHash string, processID TransactionProcessId, blockNumber uint64) {
+	if globalLogger == nil || !globalLogger.enabled {
+		return
+	}
+
+	// Get current time in milliseconds since Unix epoch
+	timestampMs := uint64(time.Now().UnixNano() / 1000000)
+
+	// Format hash to match reth format (0x prefix, lowercase)
+	traceHash := strings.ToLower(txHash)
+	if !strings.HasPrefix(traceHash, "0x") {
+		traceHash = "0x" + traceHash
+	}
+
+	csvLine := formatCSVLine(traceHash, processID, timestampMs, "", blockNumber)
+	globalLogger.writeToFile(csvLine)
+}
+
+// LogBlock logs a block event at current time point
+// This matches the reth implementation: log_block(block_hash, block_number, process_id)
+func LogBlock(blockHash string, blockNumber uint64, processID TransactionProcessId) {
+	if globalLogger == nil || !globalLogger.enabled {
+		return
+	}
+
+	// Get current time in milliseconds since Unix epoch
+	timestampMs := uint64(time.Now().UnixNano() / 1000000)
+
+	// Format hash to match reth format (0x prefix, lowercase)
+	traceHash := strings.ToLower(blockHash)
+	if !strings.HasPrefix(traceHash, "0x") {
+		traceHash = "0x" + traceHash
+	}
+
+	csvLine := formatCSVLine(traceHash, processID, timestampMs, traceHash, blockNumber)
+	globalLogger.writeToFile(csvLine)
+}
+
+// LogBlockWithTimestamp logs a block event with a specific timestamp
+// This matches the reth implementation: log_block_with_timestamp(block_hash, block_number, process_id, timestamp_ms)
+func LogBlockWithTimestamp(blockHash string, blockNumber uint64, processID TransactionProcessId, timestampMs uint64) {
+	if globalLogger == nil || !globalLogger.enabled {
+		return
+	}
+
+	// Format hash to match reth format (0x prefix, lowercase)
+	traceHash := strings.ToLower(blockHash)
+	if !strings.HasPrefix(traceHash, "0x") {
+		traceHash = "0x" + traceHash
+	}
+
+	csvLine := formatCSVLine(traceHash, processID, timestampMs, traceHash, blockNumber)
+	globalLogger.writeToFile(csvLine)
+}
+
+// Flush forces a flush of the trace file
+func Flush() {
+	if globalLogger != nil && globalLogger.enabled {
+		globalLogger.mutex.Lock()
+		defer globalLogger.mutex.Unlock()
+
+		if globalLogger.file != nil {
+			if err := globalLogger.file.Sync(); err != nil {
+				log.Warn("Failed to flush transaction trace file", "error", err)
+			}
+		}
+	}
+}
+
+// CloseTraceLogger closes the trace logger
 func CloseTraceLogger() {
 	if globalLogger != nil && globalLogger.file != nil {
 		globalLogger.mutex.Lock()
 		defer globalLogger.mutex.Unlock()
 		globalLogger.file.Close()
 	}
-}
-
-// LogTransactionStart logs the start of transaction processing
-func LogTransactionStart(txHash, serviceName string, processID uint64, processWord string,
-	blockHeight uint64, txType int8, from, to, value string, nonce uint64) {
-	LogTrace(txHash, serviceName, processID, processWord, blockHeight, "", 0, txType,
-		"start", "", 0, "", from, to, value, nonce)
-}
-
-// LogTransactionEnd logs the end of transaction processing
-func LogTransactionEnd(txHash, serviceName string, processID uint64, processWord string,
-	blockHeight uint64, blockHash string, blockTime uint64, txType int8,
-	status string, errMsg string, gasUsed uint64) {
-	LogTrace(txHash, serviceName, processID, processWord, blockHeight, blockHash, blockTime,
-		txType, status, errMsg, gasUsed, "", "", "", "", 0)
-}
-
-// LogTransactionProgress logs transaction progress
-func LogTransactionProgress(txHash, serviceName string, processID uint64, processWord string,
-	blockHeight uint64, txType int8, status string, gasUsed uint64) {
-	LogTrace(txHash, serviceName, processID, processWord, blockHeight, "", 0, txType,
-		status, "", gasUsed, "", "", "", "", 0)
 }

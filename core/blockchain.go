@@ -2012,17 +2012,6 @@ func (bc *BlockChain) processBlock(parentRoot common.Hash, block *types.Block, s
 	blockHash := block.Hash().Hex()
 	blockHeight := block.NumberU64()
 
-	// Log block insertion start
-	monitor.LogTransactionStart(
-		blockHash,
-		monitor.ServiceNameBlockchain,
-		monitor.StepBlockchainInsert.ID,
-		monitor.StepBlockchainInsert.Key,
-		blockHeight,
-		0, // block type
-		"", "", "", 0,
-	)
-
 	if bc.cfg.NoPrefetch {
 		statedb, err = state.New(parentRoot, bc.statedb)
 		if err != nil {
@@ -2209,10 +2198,11 @@ func (bc *BlockChain) processBlock(parentRoot common.Hash, block *types.Block, s
 	mgasps := float64(res.GasUsed) * 1000 / float64(elapsed)
 	chainMgaspsMeter.Update(time.Duration(mgasps))
 
-	// Log successful block finalization
-	monitor.LogTransactionEnd(blockHash, monitor.ServiceNameBlockchain, monitor.StepBlockchainFinalize.ID,
-		monitor.StepBlockchainFinalize.Key, blockHeight, blockHash, block.Time(),
-		0, "finalized", "", res.GasUsed)
+	// X Layer: Log block insert end
+	// Only log for canonical blocks (when setHead is true)
+	if setHead {
+		monitor.LogBlock(blockHash, blockHeight, monitor.RpcBlockInsertEnd)
+	}
 
 	logStatistic(block, statedb, startTime, ptime, vtime, triehash, trieUpdate, xvtime, wstart, proctime)
 

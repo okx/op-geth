@@ -318,19 +318,6 @@ func (p *TxPool) GetMetadata(hash common.Hash) *TxMetadata {
 // Note, if sync is set the method will block until all internal maintenance
 // related to the add is finished. Only use this during tests for determinism.
 func (p *TxPool) Add(txs []*types.Transaction, sync bool) []error {
-	// Log transaction start for each transaction
-	for _, tx := range txs {
-		txHash := tx.Hash().Hex()
-		monitor.LogTransactionStart(
-			txHash,
-			monitor.ServiceNameTxPool,
-			monitor.StepTxPoolAdd.ID,
-			monitor.StepTxPoolAdd.Key,
-			0, // block height not available at this stage
-			int8(tx.Type()),
-			"", "", "", tx.Nonce(),
-		)
-	}
 	// Split the input transactions between the subpools. It shouldn't really
 	// happen that we receive merged batches, but better graceful than strange
 	// errors.
@@ -366,24 +353,15 @@ func (p *TxPool) Add(txs []*types.Transaction, sync bool) []error {
 		// If the transaction was rejected by all subpools, mark it unsupported
 		if split == -1 {
 			errs[i] = fmt.Errorf("%w: received type %d", core.ErrTxTypeNotSupported, txs[i].Type())
-			// For X Layer, monitor
-			monitor.LogTransactionEnd(txHash, monitor.ServiceNameTxPool, monitor.StepTxPoolReject.ID,
-				monitor.StepTxPoolReject.Key, 0, "", 0, int8(txs[i].Type()),
-				"rejected", errs[i].Error(), 0)
 			continue
 		}
 		// Find which subpool handled it and pull in the corresponding error
 		errs[i] = errsets[split][0]
 		errsets[split] = errsets[split][1:]
-		// For X Layer, log transaction end based on result
-		if errs[i] == nil {
-			monitor.LogTransactionEnd(txHash, monitor.ServiceNameTxPool, monitor.StepTxPoolAccept.ID,
-				monitor.StepTxPoolAccept.Key, 0, "", 0, int8(txs[i].Type()),
-				"accepted", "", 0)
-		} else {
-			monitor.LogTransactionEnd(txHash, monitor.ServiceNameTxPool, monitor.StepTxPoolReject.ID,
-				monitor.StepTxPoolReject.Key, 0, "", 0, int8(txs[i].Type()),
-				"rejected", errs[i].Error(), 0)
+		// For X Layer, log sequencer receive end (matching reth implementation)
+		// Only log if transaction was successfully added (no error)
+		if errs[i] == nil && int8(txs[i].Type()) != monitor.DepositTxType {
+			monitor.LogTransaction(txHash, monitor.SeqReceiveTxEnd, 0)
 		}
 	}
 	return errs
