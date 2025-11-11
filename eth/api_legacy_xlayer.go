@@ -108,10 +108,6 @@ func (api *XlayerHybridBlockChainAPI) shouldProxy(ctx context.Context, bNrOrHash
 	return false
 }
 
-type headerByHashGetter interface {
-	GetHeaderByHash(ctx context.Context, hash common.Hash) map[string]interface{}
-}
-
 // XlayerHybridBlockChainAPI wraps the standard BlockChainAPI to add migration routing
 type XlayerHybridBlockChainAPI struct {
 	*ethapi.BlockChainAPI
