@@ -40,6 +40,8 @@ var (
 )
 
 // InitTraceLogger initializes the global trace logger
+// When enabled is true, logPath should be provided (default path is set if not specified).
+// All trace logs are written to file only, not to console.
 func InitTraceLogger(enabled bool, logPath string) {
 	once.Do(func() {
 		globalLogger = &TraceLogger{
@@ -49,6 +51,13 @@ func InitTraceLogger(enabled bool, logPath string) {
 		}
 
 		if enabled {
+			// logPath should not be empty at this point (default path should have been set),
+			// but check for safety
+			if logPath == "" {
+				log.Error("Transaction tracing enabled but log path is empty. Tracing disabled.")
+				globalLogger.enabled = false
+				return
+			}
 			if err := globalLogger.initFile(); err != nil {
 				log.Error("Failed to initialize trace logger", "error", err)
 				globalLogger.enabled = false
@@ -58,19 +67,35 @@ func InitTraceLogger(enabled bool, logPath string) {
 }
 
 // initFile initializes the log file
+// This matches reth's path handling: if path ends with directory separator or has no extension,
+// trace.log will be appended
 func (tl *TraceLogger) initFile() error {
 	if tl.logPath == "" {
 		return fmt.Errorf("log path is empty")
 	}
 
+	// Determine the actual file path based on reth's logic
+	filePath := tl.logPath
+
+	// Check if path ends with directory separator
+	if strings.HasSuffix(filePath, string(filepath.Separator)) || strings.HasSuffix(filePath, "/") || strings.HasSuffix(filePath, "\\") {
+		filePath = filepath.Join(filePath, "trace.log")
+	} else if filepath.Ext(filePath) == "" {
+		// If path has no extension and file doesn't exist, append trace.log
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			filePath = filepath.Join(filePath, "trace.log")
+		}
+		// If file exists, use it as is
+	}
+
 	// Create directory if it doesn't exist
-	dir := filepath.Dir(tl.logPath)
+	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create log directory: %v", err)
 	}
 
 	// Open or create log file
-	file, err := os.OpenFile(tl.logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %v", err)
 	}

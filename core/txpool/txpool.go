@@ -358,7 +358,7 @@ func (p *TxPool) Add(txs []*types.Transaction, sync bool) []error {
 		// Find which subpool handled it and pull in the corresponding error
 		errs[i] = errsets[split][0]
 		errsets[split] = errsets[split][1:]
-		// For X Layer, log sequencer receive end (matching reth implementation)
+		// For X Layer, log sequencer receive end
 		// Only log if transaction was successfully added (no error)
 		if errs[i] == nil && int8(txs[i].Type()) != monitor.DepositTxType {
 			monitor.LogTransaction(txHash, monitor.SeqReceiveTxEnd, 0)

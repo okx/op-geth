@@ -27,7 +27,7 @@ var DefaultXLayerConfig = XLayerConfig{
 	},
 	Monitor: MonitorConfig{
 		EnableTraceLog: false,
-		TraceLogPath:   "/var/log/op-geth/trace.log",
+		TraceLogPath:   "", // Empty by default
 	},
 }
 

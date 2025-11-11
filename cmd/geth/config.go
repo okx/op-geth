@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"slices"
@@ -286,7 +287,19 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	initApollo(stack, &cfg)
 
 	// For X Layer, initialize monitoring system
-	monitor.InitTraceLogger(cfg.Eth.XLayer.Monitor.EnableTraceLog, cfg.Eth.XLayer.Monitor.TraceLogPath)
+	// Resolve trace log path relative to datadir, matching reth's behavior
+	traceLogPath := cfg.Eth.XLayer.Monitor.TraceLogPath
+	if cfg.Eth.XLayer.Monitor.EnableTraceLog {
+		// If enabled but path is empty, use default path (should have been set in setMonitorXLayer, but handle it here as well)
+		if traceLogPath == "" {
+			traceLogPath = "logs/trace.log"
+		}
+		// If path is not absolute, resolve it relative to datadir
+		if !filepath.IsAbs(traceLogPath) {
+			traceLogPath = stack.ResolvePath(traceLogPath)
+		}
+	}
+	monitor.InitTraceLogger(cfg.Eth.XLayer.Monitor.EnableTraceLog, traceLogPath)
 
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
 

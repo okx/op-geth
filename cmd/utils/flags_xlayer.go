@@ -83,15 +83,14 @@ var (
 		Category: flags.XLayerCategory,
 		EnvVars:  []string{"OP_PP_RPC_TIMEOUT"},
 	}
-	// Monitor related flags
+	// Transaction trace related flags
 	TraceLogPath = &cli.StringFlag{
-		Name:  "monitor.trace-log-path",
-		Usage: "Path of trace.log for transaction monitoring",
-		Value: "/var/log/op-geth/trace.log",
+		Name:  "tx-trace.output-path",
+		Usage: "Path to write transaction trace output file. If the path ends with a directory separator or has no extension, trace.log will be appended",
 	}
 	EnableTraceLog = &cli.BoolFlag{
-		Name:  "monitor.enable-trace-log",
-		Usage: "Enable full transaction trace log",
+		Name:  "tx-trace.enable",
+		Usage: "Enable transaction tracing",
 		Value: false,
 	}
 	// Apollo
@@ -325,13 +324,22 @@ func RegisterXlayerHybridFilterAPI(stack *node.Node, backend ethapi.Backend, eth
 	return filterSystem
 }
 
-// setMonitorXLayer applies monitor-related command line flags to the config.
+// setMonitorXLayer applies transaction trace-related command line flags to the config.
+// This matches the reth implementation for consistency.
+// If enabled but path is not set, use datadir/logs/trace.log as default
 func setMonitorXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.IsSet(EnableTraceLog.Name) {
 		cfg.XLayer.Monitor.EnableTraceLog = ctx.Bool(EnableTraceLog.Name)
 	}
 	if ctx.IsSet(TraceLogPath.Name) {
-		cfg.XLayer.Monitor.TraceLogPath = ctx.String(TraceLogPath.Name)
+		path := ctx.String(TraceLogPath.Name)
+		// Match reth's path handling: if path ends with directory separator or has no extension,
+		// trace.log will be appended in InitTraceLogger
+		cfg.XLayer.Monitor.TraceLogPath = path
+	} else if cfg.XLayer.Monitor.EnableTraceLog && cfg.XLayer.Monitor.TraceLogPath == "" {
+		// If enabled but path not specified, use default: datadir/logs/trace.log
+		// This matches reth's behavior of using a default path when enabled
+		cfg.XLayer.Monitor.TraceLogPath = "logs/trace.log"
 	}
 }
 
