@@ -159,25 +159,33 @@ func (api *XlayerHybridBlockChainAPI) EstimateGas(ctx context.Context, args etha
 		"blobs":                args.Blobs,
 		"chainId":              args.ChainID,
 	}
-	if blockNr, ok := bNrOrHash.Number(); ok && blockNr >= 0 {
-		if api.legacyRpc.shouldProxy(uint64(blockNr)) {
+	if blockNr, ok := bNrOrHash.Number(); ok {
+		// For specific historical blocks, check if we should proxy to Erigon
+		if blockNr >= 0 && api.legacyRpc.shouldProxy(uint64(blockNr)) {
 			var result hexutil.Uint64
-
 			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_estimateGas", estimateGasRequest, &bNrOrHash)
 			return result, err
-		} else {
+		}
+		// For latest, pending, and other recent blocks, always use local
+		return api.BlockChainAPI.EstimateGas(ctx, args, &bNrOrHash, overrides, blockOverrides)
+	}
+
+	// For hash-based queries, check if block exists locally first
+	if hash, ok := bNrOrHash.Hash(); ok {
+		// Try to get the block header to check if it exists locally
+		header := api.BlockChainAPI.GetHeaderByHash(ctx, hash)
+		if header != nil {
+			// Block exists locally, use local EstimateGas and return result directly
 			return api.BlockChainAPI.EstimateGas(ctx, args, &bNrOrHash, overrides, blockOverrides)
 		}
+		// Block not found locally, fallback to Erigon
+		var result hexutil.Uint64
+		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_estimateGas", estimateGasRequest, &bNrOrHash)
+		return result, err
 	}
 
-	localResult, err := api.BlockChainAPI.EstimateGas(ctx, args, &bNrOrHash, overrides, blockOverrides)
-	if err == nil && localResult != 0 {
-		return localResult, nil
-	}
-
-	var result hexutil.Uint64
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_estimateGas", estimateGasRequest, &bNrOrHash)
-	return result, err
+	// Should not reach here (neither number nor hash), but fallback to local as default
+	return api.BlockChainAPI.EstimateGas(ctx, args, &bNrOrHash, overrides, blockOverrides)
 }
 
 type accessListResult struct {
