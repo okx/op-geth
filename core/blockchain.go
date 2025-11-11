@@ -2199,10 +2199,7 @@ func (bc *BlockChain) processBlock(parentRoot common.Hash, block *types.Block, s
 	chainMgaspsMeter.Update(time.Duration(mgasps))
 
 	// X Layer: Log block insert end
-	// Only log for canonical blocks (when setHead is true)
-	if setHead {
-		monitor.LogBlock(blockHash, blockHeight, monitor.RpcBlockInsertEnd)
-	}
+	monitor.LogBlock(blockHash, blockHeight, monitor.RpcBlockInsertEnd)
 
 	logStatistic(block, statedb, startTime, ptime, vtime, triehash, trieUpdate, xvtime, wstart, proctime)
 
