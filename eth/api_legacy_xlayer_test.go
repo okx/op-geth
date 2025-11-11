@@ -401,7 +401,7 @@ func (w *mockTxPreExecAPIWrapper) TransactionPreExec(ctx context.Context, origin
 
 	// Route by block number
 	if blockNr, ok := bNrOrHash.Number(); ok && blockNr >= 0 {
-		if w.legacyRpc.shouldProxy(uint64(blockNr)) {
+		if w.legacyRpc.shouldProxy(blockNr) {
 			var result []PreResult
 			err := w.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_transactionPreExec", origins, &bNrOrHash, stateOverrides)
 			return result, err
@@ -833,7 +833,7 @@ func TestBoundaryConditions_MigrationBlock(t *testing.T) {
 
 	// Test shouldProxy logic at boundaries
 	testCases := []struct {
-		blockNum    uint64
+		blockNum    rpc.BlockNumber
 		shouldProxy bool
 		description string
 	}{
@@ -1041,68 +1041,42 @@ func TestShouldProxyBlockNrOrHash(t *testing.T) {
 	// Test block number
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := legacy.shouldProxyBlockNrOrHash(context.Background(), api, tc.input)
+			result := legacy.shouldProxyBlockNrOrHash(context.Background(), api.BlockChainAPI, tc.input)
 			if result != tc.shouldProxy {
 				t.Errorf("%s: got shouldProxy=%v, want %v", tc.description, result, tc.shouldProxy)
 			}
 		})
 	}
 
-	// Test hash
-	testAPI := &testXlayerHybridAPI{
-		legacyRpc: legacy,
-		headers:   mockHeaders,
+	// Test hash by creating mock API that implements headerByHashGetter interface
+	mockAPI := &testHeaderByHashGetter{
+		headers: mockHeaders,
 	}
 
 	ctx := context.Background()
 
 	hashInput100 := makeBlockHash(storedHashes[100])
-	if testAPI.shouldProxyBlockNrOrHash(ctx, hashInput100) {
+	if legacy.shouldProxyBlockNrOrHash(ctx, mockAPI, hashInput100) {
 		t.Error("Hash of block 100 exists locally, should not proxy")
 	}
 
 	hashInput105 := makeBlockHash(storedHashes[105])
-	if testAPI.shouldProxyBlockNrOrHash(ctx, hashInput105) {
+	if legacy.shouldProxyBlockNrOrHash(ctx, mockAPI, hashInput105) {
 		t.Error("Hash of block 105 exists locally, should not proxy")
 	}
 
 	unknownHashInput := makeBlockHash(common.HexToHash("0xdeadbeef"))
-	if !testAPI.shouldProxyBlockNrOrHash(ctx, unknownHashInput) {
+	if !legacy.shouldProxyBlockNrOrHash(ctx, mockAPI, unknownHashInput) {
 		t.Error("Unknown hash should proxy to Erigon")
 	}
 }
 
-// testXlayerHybridAPI is a test wrapper that mimics XlayerHybridBlockChainAPI behavior
-type testXlayerHybridAPI struct {
-	legacyRpc *XlayerLegacyRPCService
-	headers   map[common.Hash]map[string]interface{}
+// testHeaderByHashGetter implements the headerByHashGetter interface for testing
+type testHeaderByHashGetter struct {
+	headers map[common.Hash]map[string]interface{}
 }
 
-// shouldProxyBlockNrOrHash wraps the actual logic for testing
-func (t *testXlayerHybridAPI) shouldProxyBlockNrOrHash(ctx context.Context, bNrOrHash *rpc.BlockNumberOrHash) bool {
-	if bNrOrHash == nil {
-		return false
-	}
-
-	if blockNr, ok := bNrOrHash.Number(); ok {
-		if blockNr >= 0 && t.legacyRpc.shouldProxy(uint64(blockNr)) {
-			return true
-		}
-		return false
-	}
-
-	if hash, ok := bNrOrHash.Hash(); ok {
-		header := t.GetHeaderByHash(ctx, hash)
-		if header != nil {
-			return false
-		}
-		return true
-	}
-
-	return false
-}
-
-func (t *testXlayerHybridAPI) GetHeaderByHash(ctx context.Context, hash common.Hash) map[string]interface{} {
+func (t *testHeaderByHashGetter) GetHeaderByHash(ctx context.Context, hash common.Hash) map[string]interface{} {
 	if headerData, ok := t.headers[hash]; ok {
 		return headerData
 	}
