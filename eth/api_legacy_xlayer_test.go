@@ -923,6 +923,202 @@ func TestSpecialBlockNumbers(t *testing.T) {
 	})
 }
 
+func TestShouldProxyBlockNrOrHash(t *testing.T) {
+	t.Parallel()
+
+	server, _ := createMockErigonServer(t)
+	defer server.Close()
+
+	// Create mock local blockchain with blocks 100-105
+	mockHeaders := make(map[common.Hash]map[string]interface{})
+	storedHashes := make(map[uint64]common.Hash)
+
+	for i := uint64(100); i <= 105; i++ {
+		header := &types.Header{
+			Number:     big.NewInt(int64(i)),
+			ParentHash: storedHashes[i-1],
+			Time:       uint64(time.Now().Unix()),
+		}
+		hash := header.Hash()
+		storedHashes[i] = hash
+		mockHeaders[hash] = map[string]interface{}{
+			"number": hexutil.Uint64(i),
+			"hash":   hash,
+		}
+	}
+
+	migrationBlock := uint64(100)
+	ethCfg := &ethconfig.Config{XLayer: ethconfig.XLayerConfig{LegacyPp: ethconfig.MigrationConfig{
+		MigrationBlock: &migrationBlock,
+		PPRPCUrl:       server.URL,
+		PPRPCTimeout:   5 * time.Second,
+	}}}
+	legacy, err := NewXlayerLegacyRPCService(ethCfg)
+	if err != nil {
+		t.Fatalf("failed to create legacy service: %v", err)
+	}
+	defer legacy.Close()
+
+	api := &XlayerHybridBlockChainAPI{
+		BlockChainAPI: nil,
+		legacyRpc:     legacy,
+	}
+
+	testCases := []struct {
+		name        string
+		input       *rpc.BlockNumberOrHash
+		shouldProxy bool
+		description string
+	}{
+		{
+			name:        "nil_input",
+			input:       nil,
+			shouldProxy: false,
+			description: "nil BlockNumberOrHash should not proxy",
+		},
+		{
+			name:        "latest_block",
+			input:       makeBlockNumberOrHash(rpc.PendingBlockNumber),
+			shouldProxy: false,
+			description: "pending (-1) should never proxy",
+		},
+		{
+			name:        "pending_block",
+			input:       makeBlockNumberOrHash(rpc.LatestBlockNumber),
+			shouldProxy: false,
+			description: "latest (-2) should never proxy",
+		},
+		{
+			name:        "earliest_block",
+			input:       makeBlockNumberOrHash(rpc.FinalizedBlockNumber),
+			shouldProxy: false,
+			description: "finalised (-3) should never proxy (special tag)",
+		},
+		{
+			name:        "safe_block",
+			input:       makeBlockNumberOrHash(rpc.SafeBlockNumber),
+			shouldProxy: false,
+			description: "safe (-4) should never proxy",
+		},
+		{
+			name:        "finalized_block",
+			input:       makeBlockNumberOrHash(rpc.EarliestBlockNumber),
+			shouldProxy: false,
+			description: "earliest (-5) should never proxy",
+		},
+		{
+			name:        "block_below_migration",
+			input:       makeBlockNumberOrHash(rpc.BlockNumber(50)),
+			shouldProxy: true,
+			description: "block 50 < 100 should proxy",
+		},
+		{
+			name:        "block_at_migration_minus_one",
+			input:       makeBlockNumberOrHash(rpc.BlockNumber(99)),
+			shouldProxy: true,
+			description: "block 99 (migration-1) should proxy",
+		},
+		{
+			name:        "block_at_migration",
+			input:       makeBlockNumberOrHash(rpc.BlockNumber(100)),
+			shouldProxy: false,
+			description: "block 100 (migration) should use local",
+		},
+		{
+			name:        "block_above_migration",
+			input:       makeBlockNumberOrHash(rpc.BlockNumber(101)),
+			shouldProxy: false,
+			description: "block 101 (migration+1) should use local",
+		},
+		{
+			name:        "block_zero",
+			input:       makeBlockNumberOrHash(rpc.BlockNumber(0)),
+			shouldProxy: true,
+			description: "block 0 should proxy",
+		},
+	}
+
+	// Test block number
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := legacy.shouldProxyBlockNrOrHash(context.Background(), api, tc.input)
+			if result != tc.shouldProxy {
+				t.Errorf("%s: got shouldProxy=%v, want %v", tc.description, result, tc.shouldProxy)
+			}
+		})
+	}
+
+	// Test hash
+	testAPI := &testXlayerHybridAPI{
+		legacyRpc: legacy,
+		headers:   mockHeaders,
+	}
+
+	ctx := context.Background()
+
+	hashInput100 := makeBlockHash(storedHashes[100])
+	if testAPI.shouldProxyBlockNrOrHash(ctx, hashInput100) {
+		t.Error("Hash of block 100 exists locally, should not proxy")
+	}
+
+	hashInput105 := makeBlockHash(storedHashes[105])
+	if testAPI.shouldProxyBlockNrOrHash(ctx, hashInput105) {
+		t.Error("Hash of block 105 exists locally, should not proxy")
+	}
+
+	unknownHashInput := makeBlockHash(common.HexToHash("0xdeadbeef"))
+	if !testAPI.shouldProxyBlockNrOrHash(ctx, unknownHashInput) {
+		t.Error("Unknown hash should proxy to Erigon")
+	}
+}
+
+// testXlayerHybridAPI is a test wrapper that mimics XlayerHybridBlockChainAPI behavior
+type testXlayerHybridAPI struct {
+	legacyRpc *XlayerLegacyRPCService
+	headers   map[common.Hash]map[string]interface{}
+}
+
+// shouldProxyBlockNrOrHash wraps the actual logic for testing
+func (t *testXlayerHybridAPI) shouldProxyBlockNrOrHash(ctx context.Context, bNrOrHash *rpc.BlockNumberOrHash) bool {
+	if bNrOrHash == nil {
+		return false
+	}
+
+	if blockNr, ok := bNrOrHash.Number(); ok {
+		if blockNr >= 0 && t.legacyRpc.shouldProxy(uint64(blockNr)) {
+			return true
+		}
+		return false
+	}
+
+	if hash, ok := bNrOrHash.Hash(); ok {
+		header := t.GetHeaderByHash(ctx, hash)
+		if header != nil {
+			return false
+		}
+		return true
+	}
+
+	return false
+}
+
+func (t *testXlayerHybridAPI) GetHeaderByHash(ctx context.Context, hash common.Hash) map[string]interface{} {
+	if headerData, ok := t.headers[hash]; ok {
+		return headerData
+	}
+	return nil
+}
+
+func makeBlockNumberOrHash(num rpc.BlockNumber) *rpc.BlockNumberOrHash {
+	result := rpc.BlockNumberOrHashWithNumber(num)
+	return &result
+}
+
+func makeBlockHash(hash common.Hash) *rpc.BlockNumberOrHash {
+	result := rpc.BlockNumberOrHashWithHash(hash, false)
+	return &result
+}
+
 // Mock BlockChainAPI that can simulate local hits and misses
 type mockLocalBlockChainAPI struct {
 	*ethapi.BlockChainAPI

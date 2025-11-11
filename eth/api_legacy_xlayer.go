@@ -75,6 +75,30 @@ func (mc *XlayerLegacyRPCService) shouldProxy(blockNumber uint64) bool {
 	return mc.MigrationBlock > 0 && blockNumber < mc.MigrationBlock
 }
 
+func (mc *XlayerLegacyRPCService) shouldProxyBlockNrOrHash(ctx context.Context, api *XlayerHybridBlockChainAPI, bNrOrHash *rpc.BlockNumberOrHash) bool {
+	if bNrOrHash == nil {
+		return false
+	}
+
+	if blockNr, ok := bNrOrHash.Number(); ok {
+		// For specific historical blocks, check if we should proxy to Erigon
+		if blockNr >= 0 && mc.shouldProxy(uint64(blockNr)) {
+			return true
+		}
+		return false
+	}
+
+	if hash, ok := bNrOrHash.Hash(); ok {
+		header := api.BlockChainAPI.GetHeaderByHash(ctx, hash)
+		if header != nil {
+			return false
+		}
+		return true
+	}
+
+	return false
+}
+
 // XlayerHybridBlockChainAPI wraps the standard BlockChainAPI to add migration routing
 type XlayerHybridBlockChainAPI struct {
 	*ethapi.BlockChainAPI
@@ -115,24 +139,14 @@ func (api *XlayerHybridBlockChainAPI) Call(ctx context.Context, args ethapi.Tran
 		"chainId":              args.ChainID,
 	}
 
-	if blockNr, ok := bNrOrHash.Number(); ok && blockNr >= 0 {
-		if api.legacyRpc.shouldProxy(uint64(blockNr)) {
-			var result hexutil.Bytes
-			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_call", callRequest, &bNrOrHash)
-			return result, err
-		} else {
-			return api.BlockChainAPI.Call(ctx, args, &bNrOrHash, overrides, blockOverrides)
-		}
+	shouldProxy := api.legacyRpc.shouldProxyBlockNrOrHash(ctx, api, &bNrOrHash)
+	if shouldProxy {
+		var result hexutil.Bytes
+		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_call", callRequest, &bNrOrHash)
+		return result, err
 	}
 
-	localResult, err := api.BlockChainAPI.Call(ctx, args, &bNrOrHash, overrides, blockOverrides)
-	if err == nil && localResult != nil {
-		return localResult, nil
-	}
-
-	var result hexutil.Bytes
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_call", callRequest, &bNrOrHash)
-	return result, err
+	return api.BlockChainAPI.Call(ctx, args, &bNrOrHash, overrides, blockOverrides)
 }
 
 // eth_estimateGas
@@ -159,32 +173,15 @@ func (api *XlayerHybridBlockChainAPI) EstimateGas(ctx context.Context, args etha
 		"blobs":                args.Blobs,
 		"chainId":              args.ChainID,
 	}
-	if blockNr, ok := bNrOrHash.Number(); ok {
-		// For specific historical blocks, check if we should proxy to Erigon
-		if blockNr >= 0 && api.legacyRpc.shouldProxy(uint64(blockNr)) {
-			var result hexutil.Uint64
-			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_estimateGas", estimateGasRequest, &bNrOrHash)
-			return result, err
-		}
-		// For latest, pending, and other recent blocks, always use local
-		return api.BlockChainAPI.EstimateGas(ctx, args, &bNrOrHash, overrides, blockOverrides)
-	}
 
-	// For hash-based queries, check if block exists locally first
-	if hash, ok := bNrOrHash.Hash(); ok {
-		// Try to get the block header to check if it exists locally
-		header := api.BlockChainAPI.GetHeaderByHash(ctx, hash)
-		if header != nil {
-			// Block exists locally, use local EstimateGas and return result directly
-			return api.BlockChainAPI.EstimateGas(ctx, args, &bNrOrHash, overrides, blockOverrides)
-		}
-		// Block not found locally, fallback to Erigon
+	shouldProxy := api.legacyRpc.shouldProxyBlockNrOrHash(ctx, api, &bNrOrHash)
+
+	if shouldProxy {
 		var result hexutil.Uint64
 		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_estimateGas", estimateGasRequest, &bNrOrHash)
 		return result, err
 	}
 
-	// Should not reach here (neither number nor hash), but fallback to local as default
 	return api.BlockChainAPI.EstimateGas(ctx, args, &bNrOrHash, overrides, blockOverrides)
 }
 
@@ -219,25 +216,17 @@ func (api *XlayerHybridBlockChainAPI) CreateAccessList(ctx context.Context, args
 		"blobs":                args.Blobs,
 		"chainId":              args.ChainID,
 	}
-	if blockNr, ok := bNrOrHash.Number(); ok && blockNr >= 0 {
-		if api.legacyRpc.shouldProxy(uint64(blockNr)) {
-			var result *accessListResult
-			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_createAccessList", createAccessListRequest, &bNrOrHash)
-			return result, err
-		} else {
-			accessList, err := api.BlockChainAPI.CreateAccessList(ctx, args, &bNrOrHash, stateOverrides)
-			return (*accessListResult)(accessList), err
-		}
+
+	shouldProxy := api.legacyRpc.shouldProxyBlockNrOrHash(ctx, api, &bNrOrHash)
+
+	if shouldProxy {
+		var result *accessListResult
+		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_createAccessList", createAccessListRequest, &bNrOrHash)
+		return result, err
 	}
 
-	localResult, err := api.BlockChainAPI.CreateAccessList(ctx, args, &bNrOrHash, stateOverrides)
-	if err == nil && localResult != nil {
-		return (*accessListResult)(localResult), nil
-	}
-
-	var result *accessListResult
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_createAccessList", createAccessListRequest, &bNrOrHash)
-	return result, err
+	accessList, err := api.BlockChainAPI.CreateAccessList(ctx, args, &bNrOrHash, stateOverrides)
+	return (*accessListResult)(accessList), err
 }
 
 // eth_getBlockByNumber
@@ -275,26 +264,15 @@ func (api *XlayerHybridBlockChainAPI) GetBlockByHash(ctx context.Context, hash c
 // eth_getStorageAt
 // FORWARD
 func (api *XlayerHybridBlockChainAPI) GetStorageAt(ctx context.Context, address common.Address, hexKey string, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
-	// Try to determine the block number
-	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
-		if api.legacyRpc.shouldProxy(uint64(blockNr)) {
-			var result hexutil.Bytes
-			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getStorageAt", address, hexKey, blockNrOrHash)
-			return result, err
-		} else {
-			return api.BlockChainAPI.GetStorageAt(ctx, address, hexKey, blockNrOrHash)
-		}
+	shouldProxy := api.legacyRpc.shouldProxyBlockNrOrHash(ctx, api, &blockNrOrHash)
+
+	if shouldProxy {
+		var result hexutil.Bytes
+		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getStorageAt", address, hexKey, blockNrOrHash)
+		return result, err
 	}
 
-	// For hash-based queries or recent blocks
-	localResult, err := api.BlockChainAPI.GetStorageAt(ctx, address, hexKey, blockNrOrHash)
-	if err == nil && localResult != nil {
-		return localResult, nil
-	}
-
-	var result hexutil.Bytes
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getStorageAt", address, hexKey, blockNrOrHash)
-	return result, err
+	return api.BlockChainAPI.GetStorageAt(ctx, address, hexKey, blockNrOrHash)
 }
 
 // eth_getHeaderByHash LOCAL
@@ -328,76 +306,41 @@ func (api *XlayerHybridBlockChainAPI) GetHeaderByNumber(ctx context.Context, num
 // eth_getBlockReceipts
 // FORWARD
 func (api *XlayerHybridBlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) ([]map[string]interface{}, error) {
-	// Check if we have a block number
-	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
-		if api.legacyRpc.shouldProxy(uint64(blockNr)) {
-			var result []map[string]interface{}
-			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getBlockReceipts", blockNrOrHash)
-			return result, err
-		} else {
-			return api.BlockChainAPI.GetBlockReceipts(ctx, blockNrOrHash)
-		}
+	shouldProxy := api.legacyRpc.shouldProxyBlockNrOrHash(ctx, api, &blockNrOrHash)
+
+	if shouldProxy {
+		var result []map[string]interface{}
+		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getBlockReceipts", blockNrOrHash)
+		return result, err
 	}
 
-	// For hash-based queries, try local first to determine the block number
-	localResult, err := api.BlockChainAPI.GetBlockReceipts(ctx, blockNrOrHash)
-	if err == nil && localResult != nil {
-		return localResult, nil
-	}
-
-	// If not found locally and migration is configured, try erigon
-	var result []map[string]interface{}
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getBlockReceipts", blockNrOrHash)
-	return result, err
+	return api.BlockChainAPI.GetBlockReceipts(ctx, blockNrOrHash)
 }
 
 // eth_getBalance
 // FORWARD
 func (api *XlayerHybridBlockChainAPI) GetBalance(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Big, error) {
-	// Check if we should proxy based on block number
-	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
-		if api.legacyRpc.shouldProxy(uint64(blockNr)) {
-			var result *hexutil.Big
-			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getBalance", address, blockNrOrHash)
-			return result, err
-		} else {
-			return api.BlockChainAPI.GetBalance(ctx, address, blockNrOrHash)
-		}
+	shouldProxy := api.legacyRpc.shouldProxyBlockNrOrHash(ctx, api, &blockNrOrHash)
+	if shouldProxy {
+		var result *hexutil.Big
+		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getBalance", address, blockNrOrHash)
+		return result, err
 	}
 
-	// Try local first
-	localResult, err := api.BlockChainAPI.GetBalance(ctx, address, blockNrOrHash)
-	if err == nil && localResult != nil {
-		return localResult, nil
-	}
-
-	// If local call failed and we have a proxy configured, use it as fallback
-	var result *hexutil.Big
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getBalance", address, blockNrOrHash)
-	return result, err
+	return api.BlockChainAPI.GetBalance(ctx, address, blockNrOrHash)
 }
 
 // eth_getCode
 // FORWARD
 func (api *XlayerHybridBlockChainAPI) GetCode(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
-	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr >= 0 {
-		if api.legacyRpc.shouldProxy(uint64(blockNr)) {
-			var result hexutil.Bytes
-			err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getCode", address, blockNrOrHash)
-			return result, err
-		} else {
-			return api.BlockChainAPI.GetCode(ctx, address, blockNrOrHash)
-		}
+	shouldProxy := api.legacyRpc.shouldProxyBlockNrOrHash(ctx, api, &blockNrOrHash)
+	if shouldProxy {
+		var result hexutil.Bytes
+		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getCode", address, blockNrOrHash)
+		return result, err
 	}
 
-	localResult, err := api.BlockChainAPI.GetCode(ctx, address, blockNrOrHash)
-	if err == nil && localResult != nil {
-		return localResult, nil
-	}
-
-	var result hexutil.Bytes
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getCode", address, blockNrOrHash)
-	return result, err
+	return api.BlockChainAPI.GetCode(ctx, address, blockNrOrHash)
 }
 
 // XlayerHybridTransactionAPI wraps the standard TransactionAPI to add migration routing
