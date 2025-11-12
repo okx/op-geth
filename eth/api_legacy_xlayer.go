@@ -760,6 +760,15 @@ func (api *XlayerHybridFilterAPI) GetLogs(ctx context.Context, crit filters.Filt
 	return api.FilterAPI.GetLogs(ctx, crit)
 }
 
+func (api *XlayerHybridFilterAPI) Logs(ctx context.Context, crit filters.FilterCriteria) (*rpc.Subscription, error) {
+	migrationBlock := int64(api.legacyRpc.MigrationBlock)
+	if crit.FromBlock != nil && crit.FromBlock.Int64() < migrationBlock {
+		crit.FromBlock = big.NewInt(migrationBlock)
+	}
+
+	return api.FilterAPI.Logs(ctx, crit)
+}
+
 // WrapAPIsForXlayer wraps the standard APIs with migration-aware versions
 func WrapAPIsForXlayer(apis []rpc.API, txPreExecAPI *TxPreExecAPI, config *XlayerLegacyRPCService) []rpc.API {
 	if config == nil {
