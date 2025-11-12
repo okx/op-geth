@@ -469,6 +469,16 @@ func (bc *BlockChain) Genesis() *types.Block {
 	return bc.genesisBlock
 }
 
+func (bc *BlockChain) GenesisXLayer() *types.Block {
+	genesis := bc.genesisBlock
+	if !bc.chainConfig.IsXLayer() {
+		return genesis
+	}
+	genesisHeader := types.CopyHeader(bc.genesisBlock.Header())
+	genesisHeader.Number = bc.chainConfig.LegacyXLayerBlock
+	return types.NewBlockWithHeader(genesisHeader)
+}
+
 // GetVMConfig returns the block chain VM config.
 func (bc *BlockChain) GetVMConfig() *vm.Config {
 	return &bc.cfg.VmConfig
