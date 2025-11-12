@@ -855,7 +855,7 @@ func TestBoundaryConditions_MigrationBlock(t *testing.T) {
 			// Test GetBlockByNumber routing
 			if tc.shouldProxy {
 				// Should call Erigon
-				res, err := api.GetBlockByNumber(ctx, rpc.BlockNumber(tc.blockNum), false)
+				res, err := api.GetBlockByNumber(ctx, tc.blockNum, false)
 				if err != nil {
 					t.Fatalf("GetBlockByNumber(%d) failed: %v", tc.blockNum, err)
 				}
@@ -1049,25 +1049,8 @@ func TestShouldProxyBlockNrOrHash(t *testing.T) {
 	}
 }
 
-// testHeaderByHashGetter implements the headerByHashGetter interface for testing
-type testHeaderByHashGetter struct {
-	headers map[common.Hash]map[string]interface{}
-}
-
-func (t *testHeaderByHashGetter) GetHeaderByHash(ctx context.Context, hash common.Hash) map[string]interface{} {
-	if headerData, ok := t.headers[hash]; ok {
-		return headerData
-	}
-	return nil
-}
-
 func makeBlockNumberOrHash(num rpc.BlockNumber) *rpc.BlockNumberOrHash {
 	result := rpc.BlockNumberOrHashWithNumber(num)
-	return &result
-}
-
-func makeBlockHash(hash common.Hash) *rpc.BlockNumberOrHash {
-	result := rpc.BlockNumberOrHashWithHash(hash, false)
 	return &result
 }
 
