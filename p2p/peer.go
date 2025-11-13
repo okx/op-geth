@@ -451,7 +451,7 @@ outer:
 				// Assign the new match
 				result[cap.Name] = &protoRW{Protocol: proto, offset: offset, in: make(chan Msg), w: rw}
 				offset += proto.Length
-
+				log.Info("zjg, matchProtocols", "cap", cap.Name, "proto", proto.Name, "offset", offset)
 				continue outer
 			}
 		}
@@ -462,6 +462,7 @@ outer:
 func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error) {
 	p.wg.Add(len(p.running))
 	for _, proto := range p.running {
+		log.Info("zjg, startProtocols", "proto", proto.Name, "version", proto.Version)
 		proto.closed = p.closed
 		proto.wstart = writeStart
 		proto.werr = writeErr
