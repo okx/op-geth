@@ -34,7 +34,6 @@ func NewIDXLayer(config *params.ChainConfig, genesis *types.Block, head, time ui
 
 	// Calculate the current fork checksum and the next fork block
 	forksByBlock, forksByTime := gatherForksXLayer(config, genesis.Time())
-	log.Info("debug yxq", "head", head, "time", time, "forksByBlock", forksByBlock, "forksByTime", forksByTime)
 	for _, fork := range forksByBlock {
 		if fork <= head {
 			// Fork already passed, checksum the previous hash and the fork number
