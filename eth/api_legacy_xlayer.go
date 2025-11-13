@@ -100,10 +100,7 @@ func (api *XlayerHybridBlockChainAPI) shouldProxy(ctx context.Context, bNrOrHash
 
 	if hash, ok := bNrOrHash.Hash(); ok {
 		header := api.BlockChainAPI.GetHeaderByHash(ctx, hash)
-		if header != nil {
-			return false
-		}
-		return true
+		return header == nil
 	}
 
 	return false
