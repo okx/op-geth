@@ -459,15 +459,20 @@ func (api *XlayerHybridTransactionAPI) GetBlockInternalTransactions(ctx context.
 
 // eth_getInternalTransactions TransactionAPI LOCAL
 func (api *XlayerHybridTransactionAPI) GetInternalTransactions(ctx context.Context, txHash common.Hash) ([]*types.InnerTx, error) {
-	// Try local first
-	result, err := api.TransactionAPI.GetInternalTransactions(ctx, txHash)
-	if err == nil && result != nil {
-		return result, nil
+	// Check if the transaction exists locally
+	tx, err := api.TransactionAPI.GetTransactionByHash(ctx, txHash)
+
+	// If transaction doesn't exist locally, try Erigon
+	if tx == nil || err != nil {
+		log.Info("[GetInternalTransactions] transaction not found locally, trying erigon", "txHash", txHash, "err", err)
+		var remoteResult []*types.InnerTx
+		err := api.legacyRpc.ErigonClient.CallContext(ctx, &remoteResult, "eth_getInternalTransactions", txHash)
+		return remoteResult, err
 	}
-	// If not found locally and migration is configured, try erigon
-	var remoteResult []*types.InnerTx
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &remoteResult, "eth_getInternalTransactions", txHash)
-	return remoteResult, err
+
+	// Transaction exists locally
+	log.Info("[GetInternalTransactions] transaction found locally, getting internal txs", "txHash", txHash)
+	return api.TransactionAPI.GetInternalTransactions(ctx, txHash)
 }
 
 // eth_getRawTransactionByBlockHashAndIndex TransactionAPI LOCAL
