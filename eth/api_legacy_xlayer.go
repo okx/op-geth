@@ -464,14 +464,12 @@ func (api *XlayerHybridTransactionAPI) GetInternalTransactions(ctx context.Conte
 
 	// If transaction doesn't exist locally, try Erigon
 	if tx == nil || err != nil {
-		log.Info("[GetInternalTransactions] transaction not found locally, trying erigon", "txHash", txHash, "err", err)
 		var remoteResult []*types.InnerTx
 		err := api.legacyRpc.ErigonClient.CallContext(ctx, &remoteResult, "eth_getInternalTransactions", txHash)
 		return remoteResult, err
 	}
 
 	// Transaction exists locally
-	log.Info("[GetInternalTransactions] transaction found locally, getting internal txs", "txHash", txHash)
 	return api.TransactionAPI.GetInternalTransactions(ctx, txHash)
 }
 
