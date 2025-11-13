@@ -147,6 +147,7 @@ type transport interface {
 	// The two handshakes.
 	doEncHandshake(prv *ecdsa.PrivateKey) (*ecdsa.PublicKey, error)
 	doProtoHandshake(our *protoHandshake) (*protoHandshake, error)
+	doProtoHandshakeLegacy(baseHandshake *protoHandshake) (*protoHandshake, error)
 	// The MsgReadWriter can only be used after the encryption
 	// handshake has completed. The code uses conn.id to track this
 	// by setting it to a non-nil value after the encryption handshake.
@@ -919,8 +920,13 @@ func (srv *Server) setupConn(c *conn, dialDest *enode.Node) error {
 		return err
 	}
 
-	// Run the capability negotiation handshake.
-	phs, err := c.doProtoHandshake(srv.ourHandshake)
+	var phs *protoHandshake
+	if c.is(inboundConn) {
+		phs, err = c.doProtoHandshakeLegacy(srv.ourHandshake)
+	} else {
+		phs, err = c.doProtoHandshake(srv.ourHandshake)
+	}
+
 	if err != nil {
 		clog.Trace("Failed p2p handshake", "err", err)
 		return &protoHandshakeError{err: err}
