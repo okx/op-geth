@@ -27,6 +27,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -78,6 +79,7 @@ func NewID(config *params.ChainConfig, genesis *types.Block, head, time uint64) 
 
 	// Calculate the current fork checksum and the next fork block
 	forksByBlock, forksByTime := gatherForks(config, genesis.Time())
+
 	for _, fork := range forksByBlock {
 		if fork <= head {
 			// Fork already passed, checksum the previous hash and the fork number
@@ -111,10 +113,10 @@ func NewIDWithChain(chain Blockchain) ID {
 
 // NewFilter creates a filter that returns if a fork ID should be rejected or not
 // based on the local chain's status.
-func NewFilter(chain Blockchain) Filter {
+func NewFilter(chain *core.BlockChain) Filter {
 	return newFilter(
 		chain.Config(),
-		chain.Genesis(),
+		chain.GenesisXLayer(),
 		func() (uint64, uint64) {
 			head := chain.CurrentHeader()
 			return head.Number.Uint64(), head.Time
@@ -284,8 +286,14 @@ func gatherForks(config *params.ChainConfig, genesis uint64) ([]uint64, []uint64
 			i--
 		}
 	}
-	// Skip any forks in block 0, that's the genesis ruleset
-	if len(forksByBlock) > 0 && forksByBlock[0] == 0 {
+
+	genesisNumber := uint64(0)
+	if config.IsXLayer() {
+		genesisNumber = config.LegacyXLayerBlock.Uint64()
+	}
+
+	// Skip any forks in or before block genesisNumber, that's the genesis ruleset
+	if len(forksByBlock) > 0 && forksByBlock[0] <= genesisNumber {
 		forksByBlock = forksByBlock[1:]
 	}
 	// Skip any forks before genesis.
