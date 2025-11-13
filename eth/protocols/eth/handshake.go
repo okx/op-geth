@@ -94,12 +94,11 @@ func (p *Peer) readStatus68(networkID uint64, status *StatusPacket68, genesis co
 
 func (p *Peer) handshake69(networkID uint64, chain *core.BlockChain, rangeMsg BlockRangeUpdatePacket) error {
 	var (
-		genesis    = chain.Genesis()
+		genesis    = chain.GenesisXLayer()
 		latest     = chain.CurrentBlock()
-		forkID     = forkid.NewID(chain.Config(), genesis, latest.Number.Uint64(), latest.Time)
-		forkFilter = forkid.NewFilter(chain)
+		forkID     = forkid.NewIDXLayer(chain.Config(), genesis, latest.Number.Uint64(), latest.Time)
+		forkFilter = forkid.NewFilterXLayer(chain)
 	)
-
 	errc := make(chan error, 2)
 	go func() {
 		pkt := &StatusPacket69{
