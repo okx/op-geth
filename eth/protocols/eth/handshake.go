@@ -19,11 +19,13 @@ package eth
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/forkid"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
 )
@@ -32,6 +34,13 @@ const (
 	// handshakeTimeout is the maximum allowed time for the `eth` handshake to
 	// complete before dropping the connection.= as malicious.
 	handshakeTimeout = 5 * time.Second
+)
+
+// Simple cache for peer genesis preferences
+// Key: peer ID, Value: true = use standard genesis, false = use X Layer genesis
+var (
+	peerGenesisCacheMu    sync.RWMutex
+	peerShouldUseStandard = make(map[string]bool)
 )
 
 // Handshake executes the eth protocol handshake, negotiating version number,
@@ -93,12 +102,34 @@ func (p *Peer) readStatus68(networkID uint64, status *StatusPacket68, genesis co
 }
 
 func (p *Peer) handshake69(networkID uint64, chain *core.BlockChain, rangeMsg BlockRangeUpdatePacket) error {
-	var (
-		genesis    = chain.GenesisXLayer()
-		latest     = chain.CurrentBlock()
-		forkID     = forkid.NewIDXLayer(chain.Config(), genesis, latest.Number.Uint64(), latest.Time)
+	peerID := p.ID()
+
+	// Check cache: should we use standard genesis for this peer?
+	peerGenesisCacheMu.RLock()
+	useStandard := peerShouldUseStandard[peerID]
+	peerGenesisCacheMu.RUnlock()
+
+	// Select genesis type
+	var genesis *types.Block
+	var forkID forkid.ID
+	var forkFilter forkid.Filter
+	var latest = chain.CurrentBlock()
+
+	if useStandard {
+		// Use standard genesis (compatible with old Geth)
+		genesis = chain.Genesis()
+		forkID = forkid.NewID(chain.Config(), genesis, latest.Number.Uint64(), latest.Time)
+		forkFilter = forkid.NewFilter(chain)
+		p.Log().Info("ETH69 handshake using standard genesis")
+	} else {
+		// Use X Layer genesis (compatible with Reth) - default for first attempt
+		genesis = chain.GenesisXLayer()
+		forkID = forkid.NewIDXLayer(chain.Config(), genesis, latest.Number.Uint64(), latest.Time)
 		forkFilter = forkid.NewFilterXLayer(chain)
-	)
+		p.Log().Info("ETH69 handshake using X Layer genesis")
+	}
+
+	// Perform handshake
 	errc := make(chan error, 2)
 	go func() {
 		pkt := &StatusPacket69{
@@ -112,12 +143,32 @@ func (p *Peer) handshake69(networkID uint64, chain *core.BlockChain, rangeMsg Bl
 		}
 		errc <- p2p.Send(p.rw, StatusMsg, pkt)
 	}()
-	var status StatusPacket69 // safe to read after two values have been received from errc
+	var status StatusPacket69
 	go func() {
 		errc <- p.readStatus69(networkID, &status, genesis.Hash(), forkFilter)
 	}()
 
-	return waitForHandshake(errc, p)
+	err := waitForHandshake(errc, p)
+
+	// Handle result - update cache for next connection
+	if err != nil {
+		if errors.Is(err, errGenesisMismatch) {
+			// Genesis mismatch: mark to try the opposite genesis type next time
+			peerGenesisCacheMu.Lock()
+			peerShouldUseStandard[peerID] = !useStandard
+			peerGenesisCacheMu.Unlock()
+
+			p.Log().Info("ETH69 handshake genesis mismatch, will use alternative on reconnect",
+				"tried", map[bool]string{true: "standard", false: "xlayer"}[useStandard],
+				"nextAttempt", map[bool]string{true: "standard", false: "xlayer"}[!useStandard])
+		}
+	} else {
+		// Success: remember this genesis type works for this peer
+		p.Log().Info("ETH69 handshake succeeded",
+			"genesisType", map[bool]string{true: "standard", false: "xlayer"}[useStandard])
+	}
+
+	return err
 }
 
 func (p *Peer) readStatus69(networkID uint64, status *StatusPacket69, genesis common.Hash, forkFilter forkid.Filter) error {

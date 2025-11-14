@@ -75,6 +75,9 @@ var (
 	errNetworkIDMismatch = errors.New("network ID mismatch")
 	errGenesisMismatch   = errors.New("genesis mismatch")
 	errForkIDRejected    = errors.New("fork ID rejected")
+
+	// Exported errors for use by other packages
+	ErrGenesisMismatch   = errGenesisMismatch
 	errInvalidBlockRange = errors.New("invalid block range in status")
 )
 
