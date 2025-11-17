@@ -147,6 +147,7 @@ type transport interface {
 	// The two handshakes.
 	doEncHandshake(prv *ecdsa.PrivateKey) (*ecdsa.PublicKey, error)
 	doProtoHandshake(our *protoHandshake) (*protoHandshake, error)
+	// For X Layer
 	doProtoHandshakeLegacy(baseHandshake *protoHandshake) (*protoHandshake, error)
 	// The MsgReadWriter can only be used after the encryption
 	// handshake has completed. The code uses conn.id to track this

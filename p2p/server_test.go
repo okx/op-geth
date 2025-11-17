@@ -63,6 +63,7 @@ func (c *testTransport) doProtoHandshake(our *protoHandshake) (*protoHandshake, 
 	return &protoHandshake{ID: pubkey, Name: "test"}, nil
 }
 
+// For X Layer
 func (c *testTransport) doProtoHandshakeLegacy(our *protoHandshake) (*protoHandshake, error) {
 	pubkey := crypto.FromECDSAPub(c.rpub)[1:]
 	return &protoHandshake{ID: pubkey, Name: "test"}, nil
@@ -491,6 +492,7 @@ func (c *setupTransport) doProtoHandshake(our *protoHandshake) (*protoHandshake,
 	return &c.phs, nil
 }
 
+// For X Layer
 func (c *setupTransport) doProtoHandshakeLegacy(our *protoHandshake) (*protoHandshake, error) {
 	return c.doProtoHandshake(our)
 }
