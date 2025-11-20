@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/realtime/realtimeapi"
 	"github.com/ethereum/go-ethereum/realtime/rtclient"
+
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/stretchr/testify/require"

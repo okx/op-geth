@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/realtime/cache"
 	"github.com/ethereum/go-ethereum/realtime/kafka"
 	kafkaTypes "github.com/ethereum/go-ethereum/realtime/kafka/types"
+	"github.com/ethereum/go-ethereum/realtime/relayer/streamclient"
 	realtimeTypes "github.com/ethereum/go-ethereum/realtime/types"
 )
 
@@ -110,7 +111,9 @@ func ListenRealtimeConsumer(
 		// Start the kafka consumer
 		go kafkaConsumer.ConsumeKafka(ctx, blockMsgsChan, txMsgsChan, errorMsgsChan, errorChan)
 	} else if cfg.SubscribeWebsocket {
-		// TODO: Add ws consumer consume logic
+		streamClient := streamclient.NewStreamClient(ctx, &cfg.WSConn, &cfg.Kafka)
+		// Start the websocket consumer
+		go streamClient.ConsumeRealtime(blockMsgsChan, txMsgsChan, errorMsgsChan, errorChan)
 	} else {
 		log.Error("[Realtime] RealtimeConsumer disabled, no realtime kafka or websocket consumer specified")
 		return
