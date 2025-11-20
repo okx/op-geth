@@ -244,11 +244,11 @@ func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, dropPeer 
 	}
 	// Create the post-merge skeleton syncer and start the process
 	// For XLayer, get legacyXLayerBlock from chainConfig
-	var legacyXLayerBlock uint64
-	if chain.Config().LegacyXLayerBlock != nil {
-		legacyXLayerBlock = chain.Config().LegacyXLayerBlock.Uint64()
+	var cutOffBlock uint64
+	if chain.Config() != nil && chain.Config().LegacyXLayerBlock != nil {
+		cutOffBlock = chain.Config().LegacyXLayerBlock.Uint64()
 	}
-	dl.skeleton = newSkeleton(stateDb, dl.peers, dropPeer, newBeaconBackfiller(dl, success), legacyXLayerBlock)
+	dl.skeleton = newSkeleton(stateDb, dl.peers, dropPeer, newBeaconBackfiller(dl, success), cutOffBlock)
 
 	go dl.stateFetcher()
 	return dl
