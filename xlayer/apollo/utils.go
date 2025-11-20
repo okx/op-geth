@@ -1,19 +1,15 @@
 package apollo
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/log"
 )
 
-func getNamespacePrefix(namespace string) (string, error) {
-	items := strings.Split(namespace, "-")
-	if len(items) == 0 {
-		return "", fmt.Errorf("invalid namespace: %s", namespace)
-	}
-	return items[0], nil
+func getNamespacePrefix(namespace string) string {
+	prefix := strings.Split(namespace, "-")[0]
+	return prefix
 }
 
 func convertArrayToSlice(configVal ConfigValue, targetType reflect.Type) (any, bool) {

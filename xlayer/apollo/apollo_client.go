@@ -53,12 +53,7 @@ func TryInitialize(cfg *config.AppConfig) (*ApolloService, error) {
 		nsMap := make(map[string]string)
 		namespaces := strings.Split(cfg.NamespaceName, ",")
 		for _, namespace := range namespaces {
-			prefix, err := getNamespacePrefix(namespace)
-			if err != nil {
-				initErr = fmt.Errorf("failed to get namespace prefix: %v", err)
-				return
-			}
-
+			prefix := getNamespacePrefix(namespace)
 			_, found := nsMap[prefix]
 			if found {
 				initErr = fmt.Errorf("duplicate apollo namespace: %s", prefix)
@@ -82,6 +77,10 @@ func TryInitialize(cfg *config.AppConfig) (*ApolloService, error) {
 			cache:        cache,
 		}
 
+		// Set up the listener reference
+		listener.ApolloService = instance
+		client.AddChangeListener(listener)
+
 		// Load initial configs into cache
 		err = instance.fetchAndUpdateConfigs()
 		if err != nil {
@@ -89,10 +88,6 @@ func TryInitialize(cfg *config.AppConfig) (*ApolloService, error) {
 			initErr = err
 			return
 		}
-
-		// Set up the listener reference
-		listener.ApolloService = instance
-		client.AddChangeListener(listener)
 
 		log.Info("[Apollo] Apollo client initialized successfully", "config", cfg)
 	})
@@ -211,11 +206,7 @@ func (a *ApolloService) getCachedConfig(key string) (ConfigValue, bool) {
 }
 
 func makeCacheKey(namespace string, key string) (string, error) {
-	namespacePrefix, err := getNamespacePrefix(namespace)
-	if err != nil {
-		log.Error("[Apollo] failed to get namespace prefix", "error", err)
-		return "", err
-	}
+	namespacePrefix := getNamespacePrefix(namespace)
 	return fmt.Sprintf("%s:%s", namespacePrefix, key), nil
 }
 

@@ -168,57 +168,63 @@ func (cv *ConfigValue) AsFloat64() (float64, bool) {
 
 func (cv ConfigValue) AsArray() ([]ConfigValue, bool) {
 	if cv.typ == TypeArray {
-		values := make([]ConfigValue, len(cv.array))
-		for i, v := range cv.array {
-			values[i] = v
-		}
-		return values, true
+		return cv.array, true
 	}
 	return nil, false
 }
 
+// types.go - Replace the entire tryFromConfigValue function
+
 func tryFromConfigValue[T any](configVal ConfigValue) (T, bool) {
 	var defaultValue T
-	defaultType := reflect.TypeOf(defaultValue)
 
-	if defaultType.Kind() == reflect.Slice {
-		result, success := convertArrayToSlice(configVal, defaultType)
-		if success {
+	// Use type switch on interface{} conversion of default value
+	// The compiler can optimize this at compile time for each instantiation
+	switch any(defaultValue).(type) {
+	case uint64:
+		val, ok := configVal.AsUint64()
+		return any(val).(T), ok
+
+	case int64:
+		val, ok := configVal.AsInt64()
+		return any(val).(T), ok
+
+	case int32:
+		val, ok := configVal.AsInt32()
+		return any(val).(T), ok
+
+	case uint32:
+		val, ok := configVal.AsUint32()
+		return any(val).(T), ok
+
+	case int:
+		val, ok := configVal.AsInt64()
+		return any(int(val)).(T), ok
+
+	case string:
+		val, ok := configVal.AsString()
+		return any(val).(T), ok
+
+	case bool:
+		val, ok := configVal.AsBool()
+		return any(val).(T), ok
+
+	case float64:
+		val, ok := configVal.AsFloat64()
+		return any(val).(T), ok
+	}
+
+	// Handle slice types - this still needs some reflection but only for slices
+	// We can optimize this further by checking specific slice types
+	defaultType := reflect.TypeOf(defaultValue)
+	if defaultType != nil && defaultType.Kind() == reflect.Slice {
+		result, ok := convertArrayToSlice(configVal, defaultType)
+		if ok {
 			return result.(T), true
 		}
 		return defaultValue, false
 	}
 
-	var result any
-	var success bool
-
-	switch any(defaultValue).(type) {
-	case uint64:
-		result, success = configVal.AsUint64()
-	case int64:
-		result, success = configVal.AsInt64()
-	case int32:
-		result, success = configVal.AsInt32()
-	case uint32:
-		result, success = configVal.AsUint32()
-	case int:
-		val, ok := configVal.AsInt64()
-		result, success = int(val), ok
-	case string:
-		result, success = configVal.AsString()
-	case bool:
-		result, success = configVal.AsBool()
-	case float64:
-		result, success = configVal.AsFloat64()
-
-	default:
-		log.Warn("[Apollo] Using default (unsupported type)")
-		return defaultValue, false
-	}
-
-	if !success {
-		log.Warn("[Apollo] Using default (type mismatch)")
-		return defaultValue, false
-	}
-	return result.(T), success
+	log.Warn("[Apollo] Using default (unsupported type)")
+	return defaultValue, false
 }
