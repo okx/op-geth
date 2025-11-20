@@ -144,10 +144,9 @@ func (a *ApolloService) fetchAndUpdateConfigs() error {
 		cache := a.client.GetConfigCache(namespace)
 		if cache != nil {
 			cache.Range(func(key, value interface{}) bool {
-				err := a.updateCacheFromConfig(namespace, value)
+				err = a.updateCacheFromConfig(namespace, value)
 				if err != nil {
 					log.Error("[Apollo] failed to update cache from config", "value", value, "error", err)
-					err = fmt.Errorf("failed to update cache from config: %w", err)
 					return false
 				}
 				return true
