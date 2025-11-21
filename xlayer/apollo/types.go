@@ -173,13 +173,9 @@ func (cv ConfigValue) AsArray() ([]ConfigValue, bool) {
 	return nil, false
 }
 
-// types.go - Replace the entire tryFromConfigValue function
-
 func tryFromConfigValue[T any](configVal ConfigValue) (T, bool) {
 	var defaultValue T
 
-	// Use type switch on interface{} conversion of default value
-	// The compiler can optimize this at compile time for each instantiation
 	switch any(defaultValue).(type) {
 	case uint64:
 		val, ok := configVal.AsUint64()
@@ -214,8 +210,6 @@ func tryFromConfigValue[T any](configVal ConfigValue) (T, bool) {
 		return any(val).(T), ok
 	}
 
-	// Handle slice types - this still needs some reflection but only for slices
-	// We can optimize this further by checking specific slice types
 	defaultType := reflect.TypeOf(defaultValue)
 	if defaultType != nil && defaultType.Kind() == reflect.Slice {
 		result, ok := convertArrayToSlice(configVal, defaultType)

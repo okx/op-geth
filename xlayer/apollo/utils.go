@@ -8,8 +8,11 @@ import (
 )
 
 func getNamespacePrefix(namespace string) string {
-	prefix := strings.Split(namespace, "-")[0]
-	return prefix
+	if strings.Contains(namespace, "-") {
+		prefix := strings.Split(namespace, "-")[0]
+		return prefix
+	}
+	return namespace
 }
 
 func convertArrayToSlice(configVal ConfigValue, targetType reflect.Type) (any, bool) {
@@ -37,6 +40,9 @@ func convertArrayToSlice(configVal ConfigValue, targetType reflect.Type) (any, b
 		case reflect.Int:
 			val, ok := cv.AsInt64()
 			elem, success = int(val), ok
+		case reflect.Uint:
+			val, ok := cv.AsUint64()
+			elem, success = uint(val), ok
 		case reflect.String:
 			elem, success = cv.AsString()
 		case reflect.Bool:

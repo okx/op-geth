@@ -68,7 +68,6 @@ func (a *ApolloService) GetConfigValueFromType(value interface{}) (ConfigValue, 
 			typ: TypeF64,
 			f64: value.(float64),
 		}, nil
-
 	default:
 		return ConfigValue{
 			typ: TypeString,
