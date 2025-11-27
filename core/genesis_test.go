@@ -340,3 +340,161 @@ func TestVerkleGenesisCommit(t *testing.T) {
 		t.Fatal("could not find node")
 	}
 }
+
+// TestLoadChainConfigWithXLayerHardcodedForks tests that LoadChainConfig applies
+// X Layer hardcoded fork configurations correctly
+func TestLoadChainConfigWithXLayerHardcodedForks(t *testing.T) {
+	testLoadChainConfigWithXLayerHardcodedForks(t, rawdb.HashScheme)
+	testLoadChainConfigWithXLayerHardcodedForks(t, rawdb.PathScheme)
+}
+
+func testLoadChainConfigWithXLayerHardcodedForks(t *testing.T, scheme string) {
+	newUint64 := func(val uint64) *uint64 { return &val }
+
+	tests := []struct {
+		name           string
+		chainID        *big.Int
+		storedJovian   *uint64
+		expectedJovian *uint64
+	}{
+		{
+			name:           "XLayer mainnet should have JovianTime set to hardcoded value",
+			chainID:        big.NewInt(params.XLayerMainnetChainID),
+			storedJovian:   newUint64(999999),     // Database has a value
+			expectedJovian: newUint64(1764691201), // Should be overridden to hardcoded value
+		},
+		{
+			name:           "XLayer testnet should have JovianTime set to hardcoded value",
+			chainID:        big.NewInt(params.XLayerTestnetChainID),
+			storedJovian:   nil,                   // Database has nil
+			expectedJovian: newUint64(1764241200), // Should be set to hardcoded value
+		},
+		{
+			name:           "XLayer testnet with wrong value should be overridden",
+			chainID:        big.NewInt(params.XLayerTestnetChainID),
+			storedJovian:   newUint64(123456),     // Wrong value in database
+			expectedJovian: newUint64(1764241200), // Should be overridden
+		},
+		{
+			name:           "Non-XLayer chain should not be modified",
+			chainID:        big.NewInt(1), // Ethereum mainnet
+			storedJovian:   newUint64(888888),
+			expectedJovian: newUint64(888888), // Should remain unchanged
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := rawdb.NewMemoryDatabase()
+			tdb := triedb.NewDatabase(db, newDbConfig(scheme))
+
+			// Create genesis with specific chain ID and JovianTime
+			genesis := &Genesis{
+				Config: &params.ChainConfig{
+					ChainID:             tt.chainID,
+					HomesteadBlock:      big.NewInt(0),
+					EIP150Block:         big.NewInt(0),
+					EIP155Block:         big.NewInt(0),
+					EIP158Block:         big.NewInt(0),
+					ByzantiumBlock:      big.NewInt(0),
+					ConstantinopleBlock: big.NewInt(0),
+					PetersburgBlock:     big.NewInt(0),
+					IstanbulBlock:       big.NewInt(0),
+					BerlinBlock:         big.NewInt(0),
+					LondonBlock:         big.NewInt(0),
+					BedrockBlock:        big.NewInt(0),
+					JovianTime:          tt.storedJovian,
+					Optimism: &params.OptimismConfig{
+						EIP1559Elasticity:  6,
+						EIP1559Denominator: 50,
+					},
+				},
+				Alloc: types.GenesisAlloc{},
+			}
+
+			// Setup genesis block
+			_, _, _, err := SetupGenesisBlock(db, tdb, genesis)
+			if err != nil {
+				t.Fatalf("Failed to setup genesis: %v", err)
+			}
+
+			// Load chain config from database
+			loadedConfig, _, err := LoadChainConfig(db, nil)
+			if err != nil {
+				t.Fatalf("Failed to load chain config: %v", err)
+			}
+
+			// Verify ChainID
+			if loadedConfig.ChainID.Cmp(tt.chainID) != 0 {
+				t.Errorf("ChainID mismatch: got %v, want %v", loadedConfig.ChainID, tt.chainID)
+			}
+
+			// Verify JovianTime
+			if tt.expectedJovian == nil {
+				if loadedConfig.JovianTime != nil {
+					t.Errorf("JovianTime should be nil, got %v", *loadedConfig.JovianTime)
+				}
+			} else {
+				if loadedConfig.JovianTime == nil {
+					t.Errorf("JovianTime should be %v, got nil", *tt.expectedJovian)
+				} else if *loadedConfig.JovianTime != *tt.expectedJovian {
+					t.Errorf("JovianTime mismatch: got %v, want %v", *loadedConfig.JovianTime, *tt.expectedJovian)
+				}
+			}
+		})
+	}
+}
+
+// TestChainOverridesApplyWithXLayerForks tests that ChainOverrides.apply()
+// correctly applies X Layer hardcoded forks
+func TestChainOverridesApplyWithXLayerForks(t *testing.T) {
+	newUint64 := func(val uint64) *uint64 { return &val }
+
+	tests := []struct {
+		name           string
+		chainID        *big.Int
+		inputJovian    *uint64
+		expectedJovian *uint64
+	}{
+		{
+			name:           "XLayer mainnet with ChainOverrides",
+			chainID:        big.NewInt(params.XLayerMainnetChainID),
+			inputJovian:    newUint64(999),
+			expectedJovian: newUint64(1764691201), // Should be set to hardcoded value
+		},
+		{
+			name:           "XLayer testnet with ChainOverrides",
+			chainID:        big.NewInt(params.XLayerTestnetChainID),
+			inputJovian:    nil,
+			expectedJovian: newUint64(1764241200), // Should be set to hardcoded value
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &params.ChainConfig{
+				ChainID:    tt.chainID,
+				JovianTime: tt.inputJovian,
+			}
+
+			overrides := &ChainOverrides{}
+			err := overrides.apply(config)
+			if err != nil {
+				t.Fatalf("Failed to apply overrides: %v", err)
+			}
+
+			// Verify JovianTime
+			if tt.expectedJovian == nil {
+				if config.JovianTime != nil {
+					t.Errorf("JovianTime should be nil, got %v", *config.JovianTime)
+				}
+			} else {
+				if config.JovianTime == nil {
+					t.Errorf("JovianTime should be %v, got nil", *tt.expectedJovian)
+				} else if *config.JovianTime != *tt.expectedJovian {
+					t.Errorf("JovianTime mismatch: got %v, want %v", *config.JovianTime, *tt.expectedJovian)
+				}
+			}
+		})
+	}
+}

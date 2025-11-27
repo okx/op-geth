@@ -492,6 +492,9 @@ func (o *ChainOverrides) apply(cfg *params.ChainConfig) error {
 		return nil
 	}
 
+	// X Layer hardcoded fork configurations first
+	cfg = params.ApplyXLayerHardcodedForks(cfg)
+
 	// OP-Stack: If applying the superchain-registry to a known OP-Stack chain,
 	// then override the local chain-config with that from the registry.
 	if o.ApplySuperchainUpgrades && cfg.IsOptimism() && cfg.ChainID != nil && cfg.ChainID.IsUint64() {
@@ -712,6 +715,13 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 // LoadChainConfig loads the stored chain config if it is already present in
 // database, otherwise, return the config in the provided genesis specification.
 func LoadChainConfig(db ethdb.Database, genesis *Genesis) (cfg *params.ChainConfig, ghash common.Hash, err error) {
+	// X Layer hardcoded fork configurations before returning
+	defer func() {
+		if cfg != nil && err == nil {
+			cfg = params.ApplyXLayerHardcodedForks(cfg)
+		}
+	}()
+
 	// Load the stored chain config from the database. It can be nil
 	// in case the database is empty. Notably, we only care about the
 	// chain config corresponds to the canonical chain.
