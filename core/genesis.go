@@ -733,9 +733,6 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 
 // LoadChainConfig loads the stored chain config if it is already present in
 // database, otherwise, return the config in the provided genesis specification.
-// Note: X Layer hardcoded fork times are ensured to be correct in the database
-// by EnsureXLayerHardcodedForksInDB during SetupGenesisBlock, so no runtime
-// override is needed here.
 func LoadChainConfig(db ethdb.Database, genesis *Genesis) (cfg *params.ChainConfig, ghash common.Hash, err error) {
 	// Load the stored chain config from the database. It can be nil
 	// in case the database is empty. Notably, we only care about the

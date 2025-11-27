@@ -30,6 +30,7 @@ func EnsureXLayerHardcodedForksInDB(db ethdb.Database, ghash common.Hash) error 
 	storedCfg := rawdb.ReadChainConfig(db, ghash)
 	if storedCfg == nil || storedCfg.ChainID == nil {
 		// Database empty or invalid, nothing to do
+		log.Error("X Layer: Database empty or invalid, nothing to do")
 		return nil
 	}
 
@@ -37,6 +38,7 @@ func EnsureXLayerHardcodedForksInDB(db ethdb.Database, ghash common.Hash) error 
 	xlayerForks, exists := params.XLayerHardcodedForks[chainID]
 	if !exists {
 		// Not an X Layer chain, nothing to do
+		log.Error("X Layer: Not an X Layer chain, nothing to do")
 		return nil
 	}
 
