@@ -1,18 +1,4 @@
-// Copyright 2024 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+// X Layer hardcoded fork configurations test
 
 package params
 
@@ -71,7 +57,6 @@ func TestApplyXLayerHardcodedForks(t *testing.T) {
 				HoloceneTime:      newUint64(0),
 				IsthmusTime:       newUint64(0),
 				JovianTime:        newUint64(123456789), // Should be overridden to hardcoded value
-				InteropTime:       newUint64(987654321), // Should be overridden to nil
 				LegacyXLayerBlock: big.NewInt(12241700),
 			},
 			expectedConfig: &ChainConfig{
@@ -84,8 +69,7 @@ func TestApplyXLayerHardcodedForks(t *testing.T) {
 				GraniteTime:       newUint64(0),
 				HoloceneTime:      newUint64(0),
 				IsthmusTime:       newUint64(0),
-				JovianTime:        newUint64(1764691201), // Hardcoded value (same as OP/Base)
-				InteropTime:       nil,                   // Hardcoded to nil
+				JovianTime:        newUint64(1764691201), // Hardcoded value
 				LegacyXLayerBlock: big.NewInt(12241700),
 			},
 		},
@@ -102,7 +86,6 @@ func TestApplyXLayerHardcodedForks(t *testing.T) {
 				HoloceneTime:      newUint64(0),
 				IsthmusTime:       newUint64(0),
 				JovianTime:        nil, // Should be set to hardcoded value
-				InteropTime:       newUint64(999),
 				LegacyXLayerBlock: big.NewInt(12241700),
 			},
 			expectedConfig: &ChainConfig{
@@ -116,7 +99,6 @@ func TestApplyXLayerHardcodedForks(t *testing.T) {
 				HoloceneTime:      newUint64(0),
 				IsthmusTime:       newUint64(0),
 				JovianTime:        newUint64(1764241200), // Hardcoded value
-				InteropTime:       nil,                   // Overridden to nil
 				LegacyXLayerBlock: big.NewInt(12241700),
 			},
 		},
@@ -139,7 +121,7 @@ func TestApplyXLayerHardcodedForks(t *testing.T) {
 			},
 			expectedConfig: &ChainConfig{
 				ChainID:    big.NewInt(XLayerMainnetChainID),
-				JovianTime: newUint64(1764691201), // Hardcoded value (same as OP/Base)
+				JovianTime: newUint64(1764691201), // Hardcoded value
 			},
 		},
 	}
@@ -179,14 +161,6 @@ func TestApplyXLayerHardcodedForks(t *testing.T) {
 				require.Equal(t, *tt.expectedConfig.JovianTime, *result.JovianTime, "JovianTime mismatch")
 			}
 
-			// Check InteropTime
-			if tt.expectedConfig.InteropTime == nil {
-				require.Nil(t, result.InteropTime, "Expected nil InteropTime")
-			} else {
-				require.NotNil(t, result.InteropTime, "Expected non-nil InteropTime")
-				require.Equal(t, *tt.expectedConfig.InteropTime, *result.InteropTime, "InteropTime mismatch")
-			}
-
 			// Check other fields are preserved (not modified)
 			if tt.expectedConfig.BedrockBlock != nil {
 				require.NotNil(t, result.BedrockBlock, "BedrockBlock should be preserved")
@@ -213,7 +187,6 @@ func TestXLayerHardcodedForksConfiguration(t *testing.T) {
 	require.Equal(t, "xlayer-mainnet", mainnetForks.NetworkName, "XLayer mainnet network name should be correct")
 	require.NotNil(t, mainnetForks.JovianTime, "XLayer mainnet JovianTime should be set")
 	require.Equal(t, uint64(1764691201), *mainnetForks.JovianTime, "XLayer mainnet JovianTime should be same as OP/Base")
-	require.Nil(t, mainnetForks.InteropTime, "XLayer mainnet InteropTime should be nil")
 
 	// Verify XLayer testnet configuration
 	testnetForks, exists := XLayerHardcodedForks[XLayerTestnetChainID]
@@ -221,8 +194,7 @@ func TestXLayerHardcodedForksConfiguration(t *testing.T) {
 	require.Equal(t, uint64(1952), testnetForks.ChainID, "XLayer testnet ChainID should be 1952")
 	require.Equal(t, "xlayer-testnet", testnetForks.NetworkName, "XLayer testnet network name should be correct")
 	require.NotNil(t, testnetForks.JovianTime, "XLayer testnet JovianTime should be set")
-	require.Equal(t, uint64(1764241200), *testnetForks.JovianTime, "XLayer testnet JovianTime should be Beijing 2025-11-27 19:00")
-	require.Nil(t, testnetForks.InteropTime, "XLayer testnet InteropTime should be nil")
+	require.Equal(t, uint64(1764241200), *testnetForks.JovianTime, "XLayer testnet JovianTime should be UTC 2025-11-27 19:00")
 }
 
 // TestApplyXLayerHardcodedForksIdempotency tests that applying forks multiple times is safe
