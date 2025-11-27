@@ -487,9 +487,6 @@ type ChainOverrides struct {
 }
 
 // apply applies the chain overrides on the supplied chain config.
-// Note: X Layer hardcoded fork times are ensured to be correct in the database
-// by EnsureXLayerHardcodedForksInDB during SetupGenesisBlock, so no runtime
-// override is needed here.
 func (o *ChainOverrides) apply(cfg *params.ChainConfig) error {
 	if o == nil || cfg == nil {
 		return nil
