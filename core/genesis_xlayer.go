@@ -10,19 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-// EnsureXLayerHardcodedForksInDB ensures that X Layer fork times are correctly stored in the database.
-// This function is called during genesis setup to guarantee that the database contains the correct
-// hardcoded fork activation times for X Layer chains (mainnet and testnet).
-//
-// On first startup or when fork times are outdated:
-//   - Detects X Layer chains by ChainID (196 for mainnet, 1952 for testnet)
-//   - Compares database values with hardcoded values
-//   - Writes updated configuration to database if needed
-//
-// On subsequent startups:
-//   - Quickly verifies configuration is up-to-date
-//   - Returns without database writes if no changes needed
-//
 // This ensures the database is the single source of truth for chain configuration,
 // eliminating the need for runtime overrides on every config read.
 func EnsureXLayerHardcodedForksInDB(db ethdb.Database, ghash common.Hash) error {
