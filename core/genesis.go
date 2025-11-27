@@ -624,9 +624,6 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 	storedCfg := rawdb.ReadChainConfig(db, ghash)
 
 	// X Layer: Ensure hardcoded fork times are correctly stored in database.
-	// This guarantees the database is the single source of truth for chain configuration.
-	// On first startup: detects missing/outdated fork times and writes to database.
-	// On subsequent startups: quickly verifies and returns if already up-to-date.
 	if storedCfg != nil {
 		if err := EnsureXLayerHardcodedForksInDB(db, ghash); err != nil {
 			return nil, common.Hash{}, nil, err
