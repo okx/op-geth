@@ -487,13 +487,13 @@ type ChainOverrides struct {
 }
 
 // apply applies the chain overrides on the supplied chain config.
+// Note: X Layer hardcoded fork times are ensured to be correct in the database
+// by EnsureXLayerHardcodedForksInDB during SetupGenesisBlock, so no runtime
+// override is needed here.
 func (o *ChainOverrides) apply(cfg *params.ChainConfig) error {
 	if o == nil || cfg == nil {
 		return nil
 	}
-
-	// X Layer hardcoded fork configurations first
-	cfg = params.ApplyXLayerHardcodedForks(cfg)
 
 	// OP-Stack: If applying the superchain-registry to a known OP-Stack chain,
 	// then override the local chain-config with that from the registry.
@@ -607,6 +607,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 			return nil, common.Hash{}, nil, err
 		}
 
+		// X Layer: Apply hardcoded fork times before committing genesis
+		genesis.Config = params.ApplyXLayerHardcodedForks(genesis.Config)
+
 		block, err := genesis.Commit(db, triedb)
 		if err != nil {
 			return nil, common.Hash{}, nil, err
@@ -622,6 +625,19 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 	// fields. This scenario can occur when the node is created from scratch
 	// with an existing ancient store.
 	storedCfg := rawdb.ReadChainConfig(db, ghash)
+
+	// X Layer: Ensure hardcoded fork times are correctly stored in database.
+	// This guarantees the database is the single source of truth for chain configuration.
+	// On first startup: detects missing/outdated fork times and writes to database.
+	// On subsequent startups: quickly verifies and returns if already up-to-date.
+	if storedCfg != nil {
+		if err := EnsureXLayerHardcodedForksInDB(db, ghash); err != nil {
+			return nil, common.Hash{}, nil, err
+		}
+		// Re-read configuration after potential update
+		storedCfg = rawdb.ReadChainConfig(db, ghash)
+	}
+
 	if storedCfg == nil {
 		// OP-Stack note: a new chain, initialized with op-network CLI flag, hits this case.
 
@@ -637,6 +653,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 		if err := overrides.apply(genesis.Config); err != nil {
 			return nil, common.Hash{}, nil, err
 		}
+
+		// X Layer: Apply hardcoded fork times before committing genesis
+		genesis.Config = params.ApplyXLayerHardcodedForks(genesis.Config)
 
 		if hash := genesis.ToBlock().Hash(); hash != ghash {
 			return nil, common.Hash{}, nil, &GenesisMismatchError{ghash, hash}
@@ -714,14 +733,10 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 
 // LoadChainConfig loads the stored chain config if it is already present in
 // database, otherwise, return the config in the provided genesis specification.
+// Note: X Layer hardcoded fork times are ensured to be correct in the database
+// by EnsureXLayerHardcodedForksInDB during SetupGenesisBlock, so no runtime
+// override is needed here.
 func LoadChainConfig(db ethdb.Database, genesis *Genesis) (cfg *params.ChainConfig, ghash common.Hash, err error) {
-	// X Layer hardcoded fork configurations before returning
-	defer func() {
-		if cfg != nil && err == nil {
-			cfg = params.ApplyXLayerHardcodedForks(cfg)
-		}
-	}()
-
 	// Load the stored chain config from the database. It can be nil
 	// in case the database is empty. Notably, we only care about the
 	// chain config corresponds to the canonical chain.

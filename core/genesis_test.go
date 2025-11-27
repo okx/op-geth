@@ -445,56 +445,6 @@ func testLoadChainConfigWithXLayerHardcodedForks(t *testing.T, scheme string) {
 	}
 }
 
-// TestChainOverridesApplyWithXLayerForks tests that ChainOverrides.apply()
-// correctly applies X Layer hardcoded forks
-func TestChainOverridesApplyWithXLayerForks(t *testing.T) {
-	newUint64 := func(val uint64) *uint64 { return &val }
-
-	tests := []struct {
-		name           string
-		chainID        *big.Int
-		inputJovian    *uint64
-		expectedJovian *uint64
-	}{
-		{
-			name:           "XLayer mainnet with ChainOverrides",
-			chainID:        big.NewInt(params.XLayerMainnetChainID),
-			inputJovian:    newUint64(999),
-			expectedJovian: newUint64(1764691201), // Should be set to hardcoded value
-		},
-		{
-			name:           "XLayer testnet with ChainOverrides",
-			chainID:        big.NewInt(params.XLayerTestnetChainID),
-			inputJovian:    nil,
-			expectedJovian: newUint64(1764241200), // Should be set to hardcoded value
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := &params.ChainConfig{
-				ChainID:    tt.chainID,
-				JovianTime: tt.inputJovian,
-			}
-
-			overrides := &ChainOverrides{}
-			err := overrides.apply(config)
-			if err != nil {
-				t.Fatalf("Failed to apply overrides: %v", err)
-			}
-
-			// Verify JovianTime
-			if tt.expectedJovian == nil {
-				if config.JovianTime != nil {
-					t.Errorf("JovianTime should be nil, got %v", *config.JovianTime)
-				}
-			} else {
-				if config.JovianTime == nil {
-					t.Errorf("JovianTime should be %v, got nil", *tt.expectedJovian)
-				} else if *config.JovianTime != *tt.expectedJovian {
-					t.Errorf("JovianTime mismatch: got %v, want %v", *config.JovianTime, *tt.expectedJovian)
-				}
-			}
-		})
-	}
-}
+// Note: TestChainOverridesApplyWithXLayerForks has been removed.
+// X Layer fork times are now applied during genesis setup (before commit),
+// not in ChainOverrides.apply(). See genesis_xlayer_test.go for current tests.

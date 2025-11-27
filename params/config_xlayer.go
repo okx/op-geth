@@ -39,9 +39,10 @@ var XLayerHardcodedForks = map[uint64]*XLayerForkConfig{
 
 // ApplyXLayerHardcodedForks applies X Layer hardcoded fork configuration based on ChainID.
 // This function only overrides specific fork times, keeping other configuration from the database.
+// This function is primarily used during genesis setup to apply hardcoded values before writing
+// to the database.
 func ApplyXLayerHardcodedForks(cfg *ChainConfig) *ChainConfig {
 	if cfg == nil || cfg.ChainID == nil {
-		log.Error("X Layer: No chain config provided, no modifications needed")
 		return cfg
 	}
 
@@ -49,7 +50,6 @@ func ApplyXLayerHardcodedForks(cfg *ChainConfig) *ChainConfig {
 	xlayerForks, exists := XLayerHardcodedForks[chainID]
 
 	if !exists {
-		log.Error("X Layer: No hardcoded fork configuration found for chain ID", "chainID", chainID)
 		return cfg
 	}
 
