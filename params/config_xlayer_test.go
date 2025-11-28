@@ -98,7 +98,7 @@ func TestApplyXLayerHardcodedForks(t *testing.T) {
 				GraniteTime:       newUint64(0),
 				HoloceneTime:      newUint64(0),
 				IsthmusTime:       newUint64(0),
-				JovianTime:        newUint64(1764241200), // Hardcoded value
+				JovianTime:        newUint64(1764320400), // Hardcoded value
 				LegacyXLayerBlock: big.NewInt(12241700),
 			},
 		},
@@ -110,7 +110,7 @@ func TestApplyXLayerHardcodedForks(t *testing.T) {
 			},
 			expectedConfig: &ChainConfig{
 				ChainID:    big.NewInt(XLayerTestnetChainID),
-				JovianTime: newUint64(1764241200), // Correct hardcoded value
+				JovianTime: newUint64(1764320400), // Correct hardcoded value
 			},
 		},
 		{
@@ -194,7 +194,7 @@ func TestXLayerHardcodedForksConfiguration(t *testing.T) {
 	require.Equal(t, uint64(1952), testnetForks.ChainID, "XLayer testnet ChainID should be 1952")
 	require.Equal(t, "xlayer-testnet", testnetForks.NetworkName, "XLayer testnet network name should be correct")
 	require.NotNil(t, testnetForks.JovianTime, "XLayer testnet JovianTime should be set")
-	require.Equal(t, uint64(1764241200), *testnetForks.JovianTime, "XLayer testnet JovianTime should be UTC 2025-11-27 19:00")
+	require.Equal(t, uint64(1764320400), *testnetForks.JovianTime, "XLayer testnet JovianTime should be 2025-11-28 09:00:00 UTC")
 }
 
 // TestApplyXLayerHardcodedForksIdempotency tests that applying forks multiple times is safe
@@ -207,12 +207,12 @@ func TestApplyXLayerHardcodedForksIdempotency(t *testing.T) {
 	// Apply once
 	result1 := ApplyXLayerHardcodedForks(config)
 	require.NotNil(t, result1.JovianTime)
-	require.Equal(t, uint64(1764241200), *result1.JovianTime)
+	require.Equal(t, uint64(1764320400), *result1.JovianTime)
 
 	// Apply again to the result
 	result2 := ApplyXLayerHardcodedForks(result1)
 	require.NotNil(t, result2.JovianTime)
-	require.Equal(t, uint64(1764241200), *result2.JovianTime)
+	require.Equal(t, uint64(1764320400), *result2.JovianTime)
 
 	// Results should be the same
 	require.Equal(t, result1.JovianTime, result2.JovianTime, "Applying forks multiple times should be idempotent")

@@ -33,7 +33,7 @@ var XLayerHardcodedForks = map[uint64]*XLayerForkConfig{
 	XLayerTestnetChainID: {
 		ChainID:     XLayerTestnetChainID,
 		NetworkName: "xlayer-testnet",
-		JovianTime:  newUint64(1764241200), // 2025-11-27 11:00:00 UTC
+		JovianTime:  newUint64(1764320400), // 2025-11-28 09:00:00 UTC
 	},
 }
 
