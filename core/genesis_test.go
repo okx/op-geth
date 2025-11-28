@@ -367,13 +367,13 @@ func testLoadChainConfigWithXLayerHardcodedForks(t *testing.T, scheme string) {
 			name:           "XLayer testnet should have JovianTime set to hardcoded value",
 			chainID:        big.NewInt(params.XLayerTestnetChainID),
 			storedJovian:   nil,                   // Database has nil
-			expectedJovian: newUint64(1764320400), // Should be set to hardcoded value
+			expectedJovian: newUint64(1764327600), // Should be set to hardcoded value
 		},
 		{
 			name:           "XLayer testnet with wrong value should be overridden",
 			chainID:        big.NewInt(params.XLayerTestnetChainID),
 			storedJovian:   newUint64(123456),     // Wrong value in database
-			expectedJovian: newUint64(1764320400), // Should be overridden
+			expectedJovian: newUint64(1764327600), // Should be overridden
 		},
 		{
 			name:           "Non-XLayer chain should not be modified",
