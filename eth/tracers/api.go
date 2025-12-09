@@ -103,6 +103,12 @@ func NewAPI(backend Backend) *API {
 	return &API{backend: backend}
 }
 
+// GetBackend returns the backend interface for external access.
+// This is used by migration routing logic to check transaction existence.
+func (api *API) GetBackend() Backend {
+	return api.backend
+}
+
 // chainContext constructs the context reader which is used by the evm for reading
 // the necessary chain context.
 func (api *API) chainContext(ctx context.Context) core.ChainContext {

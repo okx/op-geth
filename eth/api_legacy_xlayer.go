@@ -787,17 +787,39 @@ func NewXlayerHybridTracersAPI(original *tracers.API, config *XlayerLegacyRPCSer
 }
 
 // debug_traceTransaction LOCAL
+// This ensures we only forward genuine "transaction not found" cases, not other errors.
 func (api *XlayerHybridTracersAPI) TraceTransaction(ctx context.Context, hash common.Hash, config *tracers.TraceConfig) (interface{}, error) {
-	// Try local first
-	result, err := api.API.TraceTransaction(ctx, hash, config)
-	if err == nil && result != nil {
-		return result, nil
+	// Get backend to check transaction existence precisely
+	backend := api.API.GetBackend()
+	found, _, _, _, _ := backend.GetCanonicalTransaction(hash)
+
+	if !found {
+		// Transaction not found locally
+		// Check if indexing is still in progress
+		if !backend.TxIndexDone() {
+			return nil, ethapi.NewTxIndexingError()
+		}
+
+		// Transaction confirmed not found, try Erigon for historical data
+		log.Debug("Transaction not found locally, forwarding to Erigon", "hash", hash)
+		var remoteResult interface{}
+		err := api.legacyRpc.ErigonClient.CallContext(ctx, &remoteResult, "debug_traceTransaction", hash, config)
+		if err != nil {
+			log.Warn("Failed to trace transaction on Erigon", "hash", hash, "error", err)
+			return nil, err
+		}
+		log.Debug("Successfully traced transaction on Erigon", "hash", hash)
+		return remoteResult, nil
 	}
 
-	// If not found locally and migration is configured, try erigon
-	var remoteResult interface{}
-	err = api.legacyRpc.ErigonClient.CallContext(ctx, &remoteResult, "debug_traceTransaction", hash, config)
-	return remoteResult, err
+	// Transaction exists locally, execute trace
+	result, err := api.API.TraceTransaction(ctx, hash, config)
+	if err != nil {
+		log.Debug("Local trace execution failed", "hash", hash, "error", err)
+		return nil, err
+	}
+
+	return result, nil
 }
 
 // WrapAPIsForXlayer wraps the standard APIs with migration-aware versions
