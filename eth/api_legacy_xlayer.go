@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/filters"
+	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/ethapi/override"
 	"github.com/ethereum/go-ethereum/log"
@@ -771,6 +772,34 @@ func (api *XlayerHybridFilterAPI) Logs(ctx context.Context, crit filters.FilterC
 	return api.FilterAPI.Logs(ctx, crit)
 }
 
+// XlayerHybridTracersAPI wraps the standard tracers.API to add migration routing
+type XlayerHybridTracersAPI struct {
+	*tracers.API
+	legacyRpc *XlayerLegacyRPCService
+}
+
+// NewXlayerHybridTracersAPI creates a new migration-aware TracersAPI
+func NewXlayerHybridTracersAPI(original *tracers.API, config *XlayerLegacyRPCService) *XlayerHybridTracersAPI {
+	return &XlayerHybridTracersAPI{
+		API:       original,
+		legacyRpc: config,
+	}
+}
+
+// debug_traceTransaction LOCAL
+func (api *XlayerHybridTracersAPI) TraceTransaction(ctx context.Context, hash common.Hash, config *tracers.TraceConfig) (interface{}, error) {
+	// Try local first
+	result, err := api.API.TraceTransaction(ctx, hash, config)
+	if err == nil && result != nil {
+		return result, nil
+	}
+
+	// If not found locally and migration is configured, try erigon
+	var remoteResult interface{}
+	err = api.legacyRpc.ErigonClient.CallContext(ctx, &remoteResult, "debug_traceTransaction", hash, config)
+	return remoteResult, err
+}
+
 // WrapAPIsForXlayer wraps the standard APIs with migration-aware versions
 func WrapAPIsForXlayer(apis []rpc.API, txPreExecAPI *TxPreExecAPI, config *XlayerLegacyRPCService) []rpc.API {
 	if config == nil {
@@ -806,6 +835,20 @@ func WrapAPIsForXlayer(apis []rpc.API, txPreExecAPI *TxPreExecAPI, config *Xlaye
 					Namespace:     api.Namespace,
 					Version:       api.Version,
 					Service:       NewXlayerHybridFilterAPI(original, config),
+					Public:        api.Public,
+					Authenticated: api.Authenticated,
+				})
+			default:
+				wrapped = append(wrapped, api)
+			}
+		case "debug":
+			// Check if this is a tracers.API and wrap it
+			switch original := api.Service.(type) {
+			case *tracers.API:
+				wrapped = append(wrapped, rpc.API{
+					Namespace:     api.Namespace,
+					Version:       api.Version,
+					Service:       NewXlayerHybridTracersAPI(original, config),
 					Public:        api.Public,
 					Authenticated: api.Authenticated,
 				})
