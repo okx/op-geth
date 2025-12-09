@@ -795,20 +795,18 @@ func (api *XlayerHybridTracersAPI) TraceTransaction(ctx context.Context, hash co
 
 	if !found {
 		// Transaction not found locally
-		// Check if indexing is still in progress
 		if !backend.TxIndexDone() {
 			return nil, ethapi.NewTxIndexingError()
 		}
 
 		// Transaction confirmed not found, try Erigon for historical data
-		log.Debug("Transaction not found locally, forwarding to Erigon", "hash", hash)
 		var remoteResult interface{}
 		err := api.legacyRpc.ErigonClient.CallContext(ctx, &remoteResult, "debug_traceTransaction", hash, config)
 		if err != nil {
 			log.Warn("Failed to trace transaction on Erigon", "hash", hash, "error", err)
 			return nil, err
 		}
-		log.Debug("Successfully traced transaction on Erigon", "hash", hash)
+		log.Info("Successfully traced transaction on Erigon", "hash", hash)
 		return remoteResult, nil
 	}
 

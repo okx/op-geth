@@ -103,8 +103,7 @@ func NewAPI(backend Backend) *API {
 	return &API{backend: backend}
 }
 
-// GetBackend returns the backend interface for external access.
-// This is used by migration routing logic to check transaction existence.
+// X Layer: this is used by migration routing logic to check transaction existence.
 func (api *API) GetBackend() Backend {
 	return api.backend
 }
