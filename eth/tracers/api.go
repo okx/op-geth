@@ -103,11 +103,6 @@ func NewAPI(backend Backend) *API {
 	return &API{backend: backend}
 }
 
-// X Layer: this is used by migration routing logic to check transaction existence.
-func (api *API) GetBackend() Backend {
-	return api.backend
-}
-
 // chainContext constructs the context reader which is used by the evm for reading
 // the necessary chain context.
 func (api *API) chainContext(ctx context.Context) core.ChainContext {
@@ -1176,4 +1171,10 @@ func overrideConfig(original *params.ChainConfig, override *params.ChainConfig) 
 	}
 
 	return copy, canon
+}
+
+// X Layer: CheckTransactionExists checks if a transaction exists in the canonical chain.
+func (api *API) CheckTransactionExists(hash common.Hash) (exists bool, indexDone bool) {
+	found, _, _, _, _ := api.backend.GetCanonicalTransaction(hash)
+	return found, api.backend.TxIndexDone()
 }
