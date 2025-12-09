@@ -1172,9 +1172,3 @@ func overrideConfig(original *params.ChainConfig, override *params.ChainConfig) 
 
 	return copy, canon
 }
-
-// X Layer: CheckTransactionExists checks if a transaction exists in the canonical chain.
-func (api *API) CheckTransactionExists(hash common.Hash) (exists bool, indexDone bool) {
-	found, _, _, _, _ := api.backend.GetCanonicalTransaction(hash)
-	return found, api.backend.TxIndexDone()
-}
