@@ -31,7 +31,6 @@ import (
 
 var (
 	errInvalidBlockRange = errors.New("invalid block range params")
-	errUnknownBlock      = errors.New("unknown block")
 )
 
 // filterCriteriaLegacy is a wrapper around filters.FilterCriteria to serialize with uppercase field names
@@ -767,7 +766,7 @@ func (api *XlayerHybridFilterAPI) GetLogs(ctx context.Context, crit filters.Filt
 		}
 
 		// If local query failed with "unknown block", fallback to Erigon
-		if errors.Is(err, errUnknownBlock) {
+		if err.Error() == "unknown block" {
 			var erigonResult []*types.Log
 			err = api.legacyRpc.ErigonClient.CallContext(ctx, &erigonResult, "eth_getLogs", filterCriteriaLegacy{crit})
 			return erigonResult, err
