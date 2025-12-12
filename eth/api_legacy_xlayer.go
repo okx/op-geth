@@ -2,7 +2,6 @@ package eth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -32,35 +31,6 @@ import (
 var (
 	errInvalidBlockRange = errors.New("invalid block range params")
 )
-
-// filterCriteriaLegacy is a wrapper around filters.FilterCriteria to serialize with uppercase field names
-type filterCriteriaLegacy struct {
-	filters.FilterCriteria
-}
-
-// MarshalJSON implements json.Marshaler interface to ensure field names are lowercase.
-func (w filterCriteriaLegacy) MarshalJSON() ([]byte, error) {
-	type output struct {
-		BlockHash *common.Hash     `json:"blockHash,omitempty"`
-		FromBlock *hexutil.Big     `json:"fromBlock,omitempty"`
-		ToBlock   *hexutil.Big     `json:"toBlock,omitempty"`
-		Addresses []common.Address `json:"address,omitempty"`
-		Topics    [][]common.Hash  `json:"topics,omitempty"`
-	}
-
-	var enc output
-	enc.BlockHash = w.BlockHash
-	if w.FromBlock != nil {
-		enc.FromBlock = (*hexutil.Big)(w.FromBlock)
-	}
-	if w.ToBlock != nil {
-		enc.ToBlock = (*hexutil.Big)(w.ToBlock)
-	}
-	enc.Addresses = w.Addresses
-	enc.Topics = w.Topics
-
-	return json.Marshal(&enc)
-}
 
 // XlayerLegacyRPCService holds the configuration for RPC migration
 type XlayerLegacyRPCService struct {
@@ -732,7 +702,7 @@ func (api *XlayerHybridFilterAPI) getLogsForOverlappingRange(ctx context.Context
 	erigonCrit := crit
 	erigonCrit.ToBlock = big.NewInt(int64(api.legacyRpc.MigrationBlock) - 1)
 	var erigonLogs []*types.Log
-	err := api.legacyRpc.ErigonClient.CallContext(ctx, &erigonLogs, "eth_getLogs", filterCriteriaLegacy{erigonCrit})
+	err := api.legacyRpc.ErigonClient.CallContext(ctx, &erigonLogs, "eth_getLogs", erigonCrit)
 	if err != nil {
 		return nil, err
 	}
@@ -768,7 +738,7 @@ func (api *XlayerHybridFilterAPI) GetLogs(ctx context.Context, crit filters.Filt
 		// If local query failed with "unknown block", fallback to Erigon
 		if err.Error() == "unknown block" {
 			var erigonResult []*types.Log
-			err = api.legacyRpc.ErigonClient.CallContext(ctx, &erigonResult, "eth_getLogs", filterCriteriaLegacy{crit})
+			err = api.legacyRpc.ErigonClient.CallContext(ctx, &erigonResult, "eth_getLogs", crit)
 			return erigonResult, err
 		}
 
@@ -794,7 +764,7 @@ func (api *XlayerHybridFilterAPI) GetLogs(ctx context.Context, crit filters.Filt
 	// 1. begin and end are both earlier than migration block
 	if begin < migrationBlock && end < migrationBlock {
 		var result []*types.Log
-		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getLogs", filterCriteriaLegacy{crit})
+		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getLogs", crit)
 		return result, err
 	}
 
