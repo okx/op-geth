@@ -437,7 +437,7 @@ jobs:
           UNIT_STATUS="${{ needs.unit-tests.result }}"
           XLAYER_STATUS="${{ needs.xlayer-tests.result }}"
 
-          if [[ "$SYNC_STATUS" == "success" && "$BUILD_STATUS" == "success" && "$LINT_STATUS" == "success" && "$UNIT_STATUS" == "success"]]; then
+          if [[ "$SYNC_STATUS" == "success" && "$BUILD_STATUS" == "success" && "$LINT_STATUS" == "success" && "$UNIT_STATUS" == "success" ]]; then
             OVERALL_STATUS="success"
             STATUS_EMOJI="✅"
             STATUS_TEXT="All checks passed"
