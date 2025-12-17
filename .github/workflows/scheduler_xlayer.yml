@@ -3,8 +3,8 @@ name: X Layer Op-Geth Scheduled CI
 # Schedule: Daily at 2:00 PM Beijing Time (UTC+8)
 on:
   schedule:
-    - cron: '0 6 * * *'   # 14:00 Beijing Time (UTC+8 = 06:00 UTC)
-  workflow_dispatch:      # Allow manual trigger
+    - cron: "0 6 * * *" # 14:00 Beijing Time (UTC+8 = 06:00 UTC)
+  workflow_dispatch: # Allow manual trigger
 
 # Ensure only one workflow runs at a time
 concurrency:
@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.23'
+  GO_VERSION: "1.23"
   GOPRIVATE: "github.com/ethereum-optimism"
   TEST_TIMEOUT: "30m"
 
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write  # Required for pushing merged changes
+      contents: write # Required for pushing merged changes
     steps:
       - name: Checkout current branch
         uses: actions/checkout@v4
@@ -286,39 +286,6 @@ jobs:
             echo "❌ **Some unit tests failed**" >> $GITHUB_STEP_SUMMARY
           fi
 
-  unit-tests-short:
-    needs: [build-dependencies]
-    name: Unit Tests (Short)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Run short unit tests (excluding E2E)
-        run: |
-          # Exclude test/e2e directory and run with -short flag
-          # Use same build tags as 'make test': ckzg for KZG crypto support
-          go test -tags=ckzg -short -timeout=20m $(go list ./... | grep -v '/test/e2e')
-
-      - name: Generate test summary
-        if: always()
-        run: |
-          echo "## ⚡ Unit Tests (Short)" >> $GITHUB_STEP_SUMMARY
-          if [ $? -eq 0 ]; then
-            echo "✅ **All short tests passed**" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Some short tests failed**" >> $GITHUB_STEP_SUMMARY
-          fi
-
   xlayer-tests:
     needs: [build-dependencies]
     name: X Layer Specific Tests
@@ -364,7 +331,7 @@ jobs:
     name: Benchmark Tests
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    if: false  # Enable when needed
+    if: false # Enable when needed
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -407,7 +374,7 @@ jobs:
     name: Code Coverage
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: false  # Enable when needed
+    if: false # Enable when needed
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -449,7 +416,8 @@ jobs:
 
   report-status:
     name: Report Status to Lark/Feishu
-    needs: [sync-upstream, build-dependencies, lint-go, unit-tests, unit-tests-short, xlayer-tests]
+    needs:
+      [sync-upstream, build-dependencies, lint-go, unit-tests, xlayer-tests]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -467,10 +435,9 @@ jobs:
           BUILD_STATUS="${{ needs.build-dependencies.result }}"
           LINT_STATUS="${{ needs.lint-go.result }}"
           UNIT_STATUS="${{ needs.unit-tests.result }}"
-          SHORT_STATUS="${{ needs.unit-tests-short.result }}"
           XLAYER_STATUS="${{ needs.xlayer-tests.result }}"
 
-          if [[ "$SYNC_STATUS" == "success" && "$BUILD_STATUS" == "success" && "$LINT_STATUS" == "success" && "$UNIT_STATUS" == "success" && "$SHORT_STATUS" == "success" ]]; then
+          if [[ "$SYNC_STATUS" == "success" && "$BUILD_STATUS" == "success" && "$LINT_STATUS" == "success" && "$UNIT_STATUS" == "success"]]; then
             OVERALL_STATUS="success"
             STATUS_EMOJI="✅"
             STATUS_TEXT="All checks passed"
@@ -499,7 +466,6 @@ jobs:
           BUILD_ICON=$(get_status_icon "$BUILD_STATUS")
           LINT_ICON=$(get_status_icon "$LINT_STATUS")
           UNIT_ICON=$(get_status_icon "$UNIT_STATUS")
-          SHORT_ICON=$(get_status_icon "$SHORT_STATUS")
           XLAYER_ICON=$(get_status_icon "$XLAYER_STATUS")
 
           # Build Lark/Feishu card JSON
@@ -593,13 +559,6 @@ jobs:
                       "is_short": true,
                       "text": {
                         "tag": "lark_md",
-                        "content": "${SHORT_ICON} Short Tests"
-                      }
-                    },
-                    {
-                      "is_short": true,
-                      "text": {
-                        "tag": "lark_md",
                         "content": "${XLAYER_ICON} X Layer Tests"
                       }
                     }
@@ -677,6 +636,4 @@ jobs:
           echo "| Build | ${{ needs.build-dependencies.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Linting | ${{ needs.lint-go.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Unit Tests (Full) | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Unit Tests (Short) | ${{ needs.unit-tests-short.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| X Layer Tests | ${{ needs.xlayer-tests.result }} |" >> $GITHUB_STEP_SUMMARY
-
