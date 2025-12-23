@@ -727,6 +727,26 @@ func (api *XlayerHybridFilterAPI) getLogsForOverlappingRange(ctx context.Context
 
 // eth_getLogs
 func (api *XlayerHybridFilterAPI) GetLogs(ctx context.Context, crit filters.FilterCriteria) ([]*types.Log, error) {
+	// Handle blockHash parameter (single block query)
+	if crit.BlockHash != nil {
+		// Try local first - FilterAPI already has complete blockHash handling logic
+		result, err := api.FilterAPI.GetLogs(ctx, crit)
+		if err == nil {
+			return result, nil
+		}
+
+		// If local query failed with "unknown block", fallback to Erigon
+		if err.Error() == "unknown block" {
+			var erigonResult []*types.Log
+			err = api.legacyRpc.ErigonClient.CallContext(ctx, &erigonResult, "eth_getLogs", crit)
+			return erigonResult, err
+		}
+
+		// For other errors, return the error directly
+		return nil, err
+	}
+
+	// Handle block range queries
 	begin := rpc.LatestBlockNumber.Int64()
 	if crit.FromBlock != nil {
 		begin = crit.FromBlock.Int64()
