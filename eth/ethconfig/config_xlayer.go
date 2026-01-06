@@ -13,13 +13,6 @@ var DefaultXLayerConfig = XLayerConfig{
 		SenderAccountsList:    []common.Address{},
 		BlockPriorityTxsLimit: 0,
 	},
-	Apollo: ApolloConfig{
-		Enable:        false,
-		AppID:         "",
-		IP:            "",
-		Cluster:       "",
-		NamespaceName: "",
-	},
 	LegacyPp: MigrationConfig{
 		MigrationBlock: nil,
 		PPRPCUrl:       "",
@@ -35,7 +28,6 @@ var DefaultXLayerConfig = XLayerConfig{
 type XLayerConfig struct {
 	EnableInnerTx bool            `toml:",omitempty"`
 	OkPay         OkPayConfig     `toml:",omitempty"`
-	Apollo        ApolloConfig    `toml:",omitempty"`
 	LegacyPp      MigrationConfig `toml:",omitempty"` // The erigon RPC endpoint URL for pre-migration blocks
 	Monitor       MonitorConfig   `toml:",omitempty"` // Transaction monitoring configuration
 }
@@ -58,17 +50,4 @@ type OkPayConfig struct {
 type MonitorConfig struct {
 	EnableTraceLog bool   `toml:",omitempty"`
 	TraceLogPath   string `toml:",omitempty"`
-}
-
-type ApolloConfig struct {
-	// Enable Apollo service
-	Enable bool `toml:",omitempty"`
-	// Apollo app ID
-	AppID string `toml:",omitempty"`
-	// Apollo server endpoint
-	IP string `toml:",omitempty"`
-	// Apollo cluster name
-	Cluster string `toml:",omitempty"`
-	// Apollo namespace
-	NamespaceName string `toml:",omitempty"`
 }

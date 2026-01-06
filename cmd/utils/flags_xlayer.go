@@ -1,18 +1,16 @@
 package utils
 
 import (
-	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/filters"
-	"github.com/ethereum/go-ethereum/eth/gasprice"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/urfave/cli/v2"
 )
@@ -92,32 +90,6 @@ var (
 		Name:  "tx-trace.enable",
 		Usage: "Enable transaction tracing",
 		Value: false,
-	}
-	// Apollo
-	ApolloEnabledFlag = &cli.BoolFlag{
-		Name:  "apollo.enabled",
-		Usage: "Enable Apollo configuration service",
-		Value: false,
-	}
-	ApolloAppIDFlag = &cli.StringFlag{
-		Name:  "apollo.app-id",
-		Usage: "Apollo app ID",
-		Value: "",
-	}
-	ApolloIPFlag = &cli.StringFlag{
-		Name:  "apollo.ip",
-		Usage: "Apollo IP",
-		Value: "",
-	}
-	ApolloClusterFlag = &cli.StringFlag{
-		Name:  "apollo.cluster",
-		Usage: "Apollo cluster name",
-		Value: "default",
-	}
-	ApolloNamespaceFlag = &cli.StringFlag{
-		Name:  "apollo.namespace",
-		Usage: "Apollo namespace",
-		Value: "application",
 	}
 	// GPO
 	GpoType = &cli.StringFlag{
@@ -200,11 +172,6 @@ var (
 		PPRPCTimeoutFlag,
 		TraceLogPath,
 		EnableTraceLog,
-		ApolloEnabledFlag,
-		ApolloAppIDFlag,
-		ApolloIPFlag,
-		ApolloClusterFlag,
-		ApolloNamespaceFlag,
 		GpoType,
 		GpoUpdatePeriod,
 		GpoDefault,
@@ -228,7 +195,6 @@ func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setInnerTxXLayer(ctx, cfg)
 	setMigrationXLayer(ctx, cfg)
 	setMonitorXLayer(ctx, cfg)
-	setApolloXLayer(ctx, cfg)
 	setGPOXLayer(ctx, cfg)
 }
 
@@ -285,26 +251,6 @@ func setMigrationXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 }
 
-func setApolloXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
-	if ctx.IsSet(ApolloEnabledFlag.Name) {
-		cfg.XLayer.Apollo.Enable = ctx.Bool(ApolloEnabledFlag.Name)
-	}
-	if !cfg.XLayer.Apollo.Enable {
-		return
-	}
-	if ctx.IsSet(ApolloAppIDFlag.Name) {
-		cfg.XLayer.Apollo.AppID = ctx.String(ApolloAppIDFlag.Name)
-	}
-	if ctx.IsSet(ApolloIPFlag.Name) {
-		cfg.XLayer.Apollo.IP = ctx.String(ApolloIPFlag.Name)
-	}
-	if ctx.IsSet(ApolloClusterFlag.Name) {
-		cfg.XLayer.Apollo.Cluster = ctx.String(ApolloClusterFlag.Name)
-	}
-	if ctx.IsSet(ApolloNamespaceFlag.Name) {
-		cfg.XLayer.Apollo.NamespaceName = ctx.String(ApolloNamespaceFlag.Name)
-	}
-}
 
 // RegisterXlayerHybridFilterAPI adds the eth log filtering RPC API to the node.
 func RegisterXlayerHybridFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconfig.Config) *filters.FilterSystem {
@@ -355,7 +301,3 @@ func setGPOXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 }
 
-// SetApolloGPOXLayer is a public wrapper function to internally call setGPO
-func SetApolloGPOXLayer(ctx *cli.Context, cfg *gasprice.Config) {
-	setGPO(ctx, cfg)
-}
