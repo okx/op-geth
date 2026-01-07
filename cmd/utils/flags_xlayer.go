@@ -252,7 +252,6 @@ func setMigrationXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 }
 
-
 // RegisterXlayerHybridFilterAPI adds the eth log filtering RPC API to the node.
 func RegisterXlayerHybridFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconfig.Config) *filters.FilterSystem {
 	filterSystem := filters.NewFilterSystem(backend, filters.Config{
@@ -301,4 +300,3 @@ func setGPOXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 		cfg.GPO.XLayer.CongestionThreshold = ctx.Int(GpoCongestionThreshold.Name)
 	}
 }
-
