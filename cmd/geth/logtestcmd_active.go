@@ -16,7 +16,7 @@
 
 //go:build integrationtests
 
-package main
+package gethmain
 
 import (
 	"errors"
