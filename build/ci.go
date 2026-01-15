@@ -57,6 +57,7 @@ import (
 	"time"
 
 	"github.com/cespare/cp"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto/signify"
 	"github.com/ethereum/go-ethereum/internal/build"
 	"github.com/ethereum/go-ethereum/internal/download"
@@ -148,7 +149,7 @@ func executablePath(name string) string {
 func main() {
 	log.SetFlags(log.Lshortfile)
 
-	if !build.FileExist(filepath.Join("build", "ci.go")) {
+	if !common.FileExist(filepath.Join("build", "ci.go")) {
 		log.Fatal("this script must be run from the root of the repository")
 	}
 	if len(os.Args) < 2 {
@@ -287,21 +288,27 @@ func buildFlags(env build.Environment, staticLinking bool, buildTags []string) (
 
 func doTest(cmdline []string) {
 	var (
-		dlgo      = flag.Bool("dlgo", false, "Download Go and build with it")
-		arch      = flag.String("arch", "", "Run tests for given architecture")
-		cc        = flag.String("cc", "", "Sets C compiler binary")
-		coverage  = flag.Bool("coverage", false, "Whether to record code coverage")
-		verbose   = flag.Bool("v", false, "Whether to log verbosely")
-		race      = flag.Bool("race", false, "Execute the race detector")
-		short     = flag.Bool("short", false, "Pass the 'short'-flag to go test")
-		cachedir  = flag.String("cachedir", "./build/cache", "directory for caching downloads")
-		buildTags = flag.String("tags", "", "Build tags")
+		dlgo          = flag.Bool("dlgo", false, "Download Go and build with it")
+		arch          = flag.String("arch", "", "Run tests for given architecture")
+		cc            = flag.String("cc", "", "Sets C compiler binary")
+		coverage      = flag.Bool("coverage", false, "Whether to record code coverage")
+		verbose       = flag.Bool("v", false, "Whether to log verbosely")
+		race          = flag.Bool("race", false, "Execute the race detector")
+		short         = flag.Bool("short", false, "Pass the 'short'-flag to go test")
+		cachedir      = flag.String("cachedir", "./build/cache", "directory for caching downloads")
+		buildTags     = flag.String("tags", "", "Build tags")
+		skipspectests = flag.Bool("skip-spectests", false, "Skip downloading execution-spec-tests fixtures")
+		threads       = flag.Int("p", 1, "Number of CPU threads to use for testing")
 	)
 	flag.CommandLine.Parse(cmdline)
 
-	// Get test fixtures.
+	// Load checksums file (needed for both spec tests and dlgo)
 	csdb := download.MustLoadChecksums("build/checksums.txt")
-	downloadSpecTestFixtures(csdb, *cachedir)
+
+	// Get test fixtures.
+	if !*skipspectests {
+		downloadSpecTestFixtures(csdb, *cachedir)
+	}
 
 	// Configure the toolchain.
 	tc := build.GoToolchain{GOARCH: *arch, CC: *cc}
@@ -326,7 +333,7 @@ func doTest(cmdline []string) {
 
 	// Test a single package at a time. CI builders are slow
 	// and some tests run into timeouts under load.
-	gotest.Args = append(gotest.Args, "-p", "1")
+	gotest.Args = append(gotest.Args, "-p", fmt.Sprintf("%d", *threads))
 	if *coverage {
 		gotest.Args = append(gotest.Args, "-covermode=atomic", "-cover")
 	}
@@ -387,7 +394,7 @@ func doCheckGenerate() {
 
 	for _, mod := range goModules {
 		// Compute the origin hashes of all the files
-		hashes, err := build.HashFolder(mod, []string{"tests/testdata", "build/cache", ".git"})
+		hashes, err := build.HashFolder(mod, []string{"tests/testdata", "build/cache", ".git", ".jj"})
 		if err != nil {
 			log.Fatal("Error computing hashes", "err", err)
 		}
@@ -397,7 +404,7 @@ func doCheckGenerate() {
 		c.Dir = mod
 		build.MustRun(c)
 		// Check if generate file hashes have changed
-		generated, err := build.HashFolder(mod, []string{"tests/testdata", "build/cache", ".git"})
+		generated, err := build.HashFolder(mod, []string{"tests/testdata", "build/cache", ".git", ".jj"})
 		if err != nil {
 			log.Fatalf("Error re-computing hashes: %v", err)
 		}
@@ -907,7 +914,7 @@ func ppaUpload(workdir, ppa, sshUser string, files []string) {
 	var idfile string
 	if sshkey := getenvBase64("PPA_SSH_KEY"); len(sshkey) > 0 {
 		idfile = filepath.Join(workdir, "sshkey")
-		if !build.FileExist(idfile) {
+		if !common.FileExist(idfile) {
 			os.WriteFile(idfile, sshkey, 0600)
 		}
 	}
