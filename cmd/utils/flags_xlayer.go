@@ -36,25 +36,6 @@ var (
 		Value:    0,
 		Category: flags.XLayerCategory,
 	}
-	// Xlayer Intercept feature
-	InterceptEnabled = &cli.BoolFlag{
-		Name:     "intercept.enabled",
-		Usage:    "Enable the intercept feature",
-		Value:    ethconfig.Defaults.Miner.InterceptConfig.Enabled,
-		Category: flags.XLayerCategory,
-	}
-	InterceptBridgeContractAddress = &cli.StringFlag{
-		Name:     "intercept.bridgeContractAddress",
-		Usage:    "The target bridge contract address to intercept",
-		Value:    ethconfig.Defaults.Miner.InterceptConfig.BridgeContractAddress,
-		Category: flags.XLayerCategory,
-	}
-	InterceptTargetTokenAddress = &cli.StringFlag{
-		Name:     "intercept.targetTokenAddress",
-		Usage:    "The target token address to intercept",
-		Value:    ethconfig.Defaults.Miner.InterceptConfig.TargetTokenAddress,
-		Category: flags.XLayerCategory,
-	}
 	// InnerTx
 	InnerTxFlag = &cli.BoolFlag{
 		Name:     "innertx",
@@ -164,9 +145,6 @@ var (
 		OkPayPriorityEnableFlag,
 		OkPaySenderAccountsList,
 		OkPayBlockPriorityTxsLimit,
-		InterceptEnabled,
-		InterceptBridgeContractAddress,
-		InterceptTargetTokenAddress,
 		InnerTxFlag,
 		MigrationBlockFlag,
 		PPRPCUrlFlag,
@@ -192,7 +170,6 @@ var (
 // SetXLayerConfig is a public wrapper function to internally call all XLayer configuration functions
 func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setOkPayXLayer(ctx, cfg)
-	setXLayerIntercept(ctx, cfg)
 	setInnerTxXLayer(ctx, cfg)
 	setMigrationXLayer(ctx, cfg)
 	setMonitorXLayer(ctx, cfg)
@@ -215,18 +192,6 @@ func setOkPayXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 		for _, senderHex := range addrHexes {
 			cfg.XLayer.OkPay.SenderAccountsList = append(cfg.XLayer.OkPay.SenderAccountsList, common.HexToAddress(senderHex))
 		}
-	}
-}
-
-func setXLayerIntercept(ctx *cli.Context, cfg *ethconfig.Config) {
-	if ctx.IsSet(InterceptEnabled.Name) {
-		cfg.Miner.InterceptConfig.Enabled = ctx.Bool(InterceptEnabled.Name)
-	}
-	if ctx.IsSet(InterceptBridgeContractAddress.Name) {
-		cfg.Miner.InterceptConfig.BridgeContractAddress = ctx.String(InterceptBridgeContractAddress.Name)
-	}
-	if ctx.IsSet(InterceptTargetTokenAddress.Name) {
-		cfg.Miner.InterceptConfig.TargetTokenAddress = ctx.String(InterceptTargetTokenAddress.Name)
 	}
 }
 
