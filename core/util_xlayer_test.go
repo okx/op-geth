@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGenerateFirstXlayerBlock(t *testing.T) {
+func TestGenerateFirstXLayerBlock(t *testing.T) {
 	// Create a test chain config with XLayer enabled
 	chainConfig := &params.ChainConfig{
 		ChainID:           big.NewInt(1),
@@ -29,7 +29,7 @@ func TestGenerateFirstXlayerBlock(t *testing.T) {
 			setupDB: func(db ethdb.Database) {
 				// Empty database
 			},
-			expectedError: "commitXLayerFirstBlock: genesis block not found",
+			expectedError: "commitXlayerFirstBlock: genesis block not found",
 		},
 		{
 			name: "genesis block not in database",
@@ -66,8 +66,8 @@ func TestGenerateFirstXlayerBlock(t *testing.T) {
 			// Setup test case
 			tt.setupDB(testDB)
 
-			// Execute test
-			block, err := GenerateFirstXLayerBlock(testDB, chainConfig)
+		// Execute test
+		block, err := GenerateFirstXLayerBlock(testDB, chainConfig)
 
 			// Verify results
 			if tt.expectedError == "" {
@@ -135,10 +135,10 @@ func TestCommitXlayerFirstBlock(t *testing.T) {
 				rawdb.WriteHeadBlockHash(db, hash)
 				rawdb.WriteHeaderNumber(db, hash, 0)
 			},
-			expectedError: "commitXLayerFirstBlock: genesis block not found",
-		},
-		{
-			name: "successful commit",
+		expectedError: "commitXLayerFirstBlock: genesis block not found",
+	},
+	{
+		name: "successful commit",
 			setupDB: func(db ethdb.Database) {
 				// Write head block hash and number (0)
 				hash := common.HexToHash("0x123")
@@ -167,8 +167,8 @@ func TestCommitXlayerFirstBlock(t *testing.T) {
 			// Setup test case
 			tt.setupDB(testDB)
 
-			// Execute test
-			err := CommitXLayerFirstBlock(testDB, chainConfig)
+		// Execute test
+		err := CommitXLayerFirstBlock(testDB, chainConfig)
 
 			// Verify results
 			if tt.expectedError == "" {
