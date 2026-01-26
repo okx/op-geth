@@ -337,7 +337,6 @@ func (miner *Miner) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload
 			return nil, empty.err
 		}
 		payload := newPayload(miner.lifeCtx, empty.block, empty.requests, empty.witness, args.Id())
-
 		// make sure to make it appear as full, otherwise it will wait indefinitely for payload building to complete.
 		payload.full = empty.block
 		payload.fullFees = empty.fees
