@@ -449,6 +449,7 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 }
 
 func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) error {
+	// For X Layer
 	txHash := tx.Hash().Hex()
 	blockHeight := env.header.Number.Uint64()
 
@@ -473,8 +474,7 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 	}
 
 	if tx.Type() == types.BlobTxType {
-		err := miner.commitBlobTransaction(env, tx)
-		return err
+		return miner.commitBlobTransaction(env, tx)
 	}
 
 	// If a conditional is set, check prior to applying
@@ -494,12 +494,10 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 	if err != nil {
 		return err
 	}
-
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
 	env.size += tx.Size()
 	env.tcount++
-
 	return nil
 }
 
@@ -770,71 +768,6 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	// Split the pending transactions into locals and remotes.
 	prioPlainTxs, normalPlainTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingPlainTxs
 	prioBlobTxs, normalBlobTxs := make(map[common.Address][]*txpool.LazyTransaction), pendingBlobTxs
-
-	// For X Layer
-	type okPayTx struct {
-		account common.Address
-		tx      *txpool.LazyTransaction
-	}
-
-	okPayTxs := make(map[common.Address][]*txpool.LazyTransaction)
-
-	sortedOkPayTxs := common.OrderedList[okPayTx]{}
-	sortedOkPayTxs.SetCompareFunc(func(a, b okPayTx) int {
-		if a.tx.Tx.Nonce() < b.tx.Tx.Nonce() {
-			return -1
-		}
-		if a.tx.Tx.Nonce() > b.tx.Tx.Nonce() {
-			return 1
-		}
-		return 0
-	})
-
-	accounts := miner.config.OkPaySenderAccounts
-
-	// Skip the entire loop if OkPay priority feature is disabled
-	if miner.config.OkPayPriorityEnable && len(accounts) > 0 {
-		for _, account := range accounts {
-			if txs := normalPlainTxs[account]; len(txs) > 0 {
-				for _, tx := range txs {
-					sortedOkPayTxs.Add(okPayTx{account: account, tx: tx})
-				}
-				delete(normalPlainTxs, account)
-			}
-		}
-
-		if sortedOkPayTxs.Size() > 0 {
-			sortedOkPayTxs.Sort()
-			items := sortedOkPayTxs.Items()
-
-			limit := int(miner.config.OkPayBlockPriorityTxsLimit)
-			if len(items) > limit {
-				// Process priority transactions
-				for _, item := range items[:limit] {
-					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
-				}
-				// Put back unselected transactions
-				for _, item := range items[limit:] {
-					normalPlainTxs[item.account] = append(normalPlainTxs[item.account], item.tx)
-				}
-			} else {
-				// All transactions get priority
-				for _, item := range items {
-					okPayTxs[item.account] = append(okPayTxs[item.account], item.tx)
-				}
-			}
-		}
-	}
-	// Process OkPay transactions first (highest priority)
-	if len(okPayTxs) > 0 {
-		okpayPlainTxs := newTransactionsByPriceAndNonce(env.signer, okPayTxs, env.header.BaseFee)
-		emptyBlobTxs := newTransactionsByPriceAndNonce(env.signer, nil, env.header.BaseFee)
-		// execStart removed: caller accumulates timings
-		if err := miner.commitTransactions(env, okpayPlainTxs, emptyBlobTxs, interrupt); err != nil {
-			return err
-		}
-		// Note: execution timing is accumulated in caller scope (generateWork)
-	}
 
 	for _, account := range prio {
 		if txs := normalPlainTxs[account]; len(txs) > 0 {
