@@ -34,7 +34,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/eth/gasprice/xlayer"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/params"
@@ -416,5 +415,4 @@ func (b *backendMock) HistoryPruningCutoff() uint64 { return 0 }
 // OP-Stack additions
 func (b *backendMock) HistoricalRPCService() *rpc.Client { return nil }
 func (b *backendMock) Genesis() *types.Block             { return nil }
-func (b *backendMock) XLayerGpricer() xlayer.L2GasPricer { return nil }
 func (b *backendMock) SequencerRPCService() *rpc.Client  { return nil }

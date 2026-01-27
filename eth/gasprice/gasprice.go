@@ -27,7 +27,6 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -52,9 +51,6 @@ type Config struct {
 	IgnorePrice      *big.Int `toml:",omitempty"`
 
 	MinSuggestedPriorityFee *big.Int `toml:",omitempty"` // for Optimism fee suggestion
-
-	// For X Layer
-	XLayer XLayerGasPriceConfig
 }
 
 // OracleBackend includes all necessary background APIs for oracle.
@@ -250,7 +246,6 @@ func (oracle *Oracle) SuggestTipCap(ctx context.Context) (*big.Int, error) {
 	if price.Cmp(oracle.maxPrice) > 0 {
 		price = new(big.Int).Set(oracle.maxPrice)
 	}
-
 	oracle.cacheLock.Lock()
 	oracle.lastHead = headHash
 	oracle.lastPrice = price
