@@ -109,16 +109,14 @@ func (api *XlayerHybridBlockChainAPI) shouldProxy(ctx context.Context, bNrOrHash
 // XlayerHybridBlockChainAPI wraps the standard BlockChainAPI to add migration routing
 type XlayerHybridBlockChainAPI struct {
 	*ethapi.BlockChainAPI
-	txPreExecAPI *TxPreExecAPI
-	legacyRpc    *XlayerLegacyRPCService
+	legacyRpc *XlayerLegacyRPCService
 }
 
 // NewXlayerHybridBlockChainAPI creates a new migration-aware BlockChainAPI
-func NewXlayerHybridBlockChainAPI(original *ethapi.BlockChainAPI, txPreExecAPI *TxPreExecAPI, legacyRPCService *XlayerLegacyRPCService) *XlayerHybridBlockChainAPI {
+func NewXlayerHybridBlockChainAPI(original *ethapi.BlockChainAPI, legacyRPCService *XlayerLegacyRPCService) *XlayerHybridBlockChainAPI {
 	return &XlayerHybridBlockChainAPI{
 		BlockChainAPI: original,
 		legacyRpc:     legacyRPCService,
-		txPreExecAPI:  txPreExecAPI,
 	}
 }
 
@@ -352,32 +350,10 @@ func (api *XlayerHybridBlockChainAPI) GetCode(ctx context.Context, address commo
 	return api.BlockChainAPI.GetCode(ctx, address, blockNrOrHash)
 }
 
-// eth_transactionPreExec FORWARD
-func (api *XlayerHybridBlockChainAPI) TransactionPreExec(ctx context.Context, origins []PreArgs, blockNrOrHash *rpc.BlockNumberOrHash, stateOverrides *override.StateOverride) ([]PreResult, error) {
-	if api.txPreExecAPI == nil {
-		return nil, fmt.Errorf("TxPreExecAPI not available")
-	}
-
-	bNrOrHash := rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
-	if blockNrOrHash != nil {
-		bNrOrHash = *blockNrOrHash
-	}
-
-	shouldProxy := api.shouldProxy(ctx, &bNrOrHash)
-	if shouldProxy {
-		var result []PreResult
-		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_transactionPreExec", origins, &bNrOrHash, stateOverrides)
-		return result, err
-	}
-
-	return api.txPreExecAPI.TransactionPreExec(ctx, origins, &bNrOrHash, stateOverrides)
-}
-
 // XlayerHybridTransactionAPI wraps the standard TransactionAPI to add migration routing
 type XlayerHybridTransactionAPI struct {
 	*ethapi.TransactionAPI
-	TxPreExecAPI *TxPreExecAPI
-	legacyRpc    *XlayerLegacyRPCService
+	legacyRpc *XlayerLegacyRPCService
 }
 
 // NewXlayerHybridTransactionAPI creates a new migration-aware TransactionAPI
@@ -792,7 +768,7 @@ func (api *XlayerHybridFilterAPI) Logs(ctx context.Context, crit filters.FilterC
 }
 
 // WrapAPIsForXlayer wraps the standard APIs with migration-aware versions
-func WrapAPIsForXlayer(apis []rpc.API, txPreExecAPI *TxPreExecAPI, config *XlayerLegacyRPCService) []rpc.API {
+func WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API {
 	if config == nil {
 		return apis // No migration configured, return original APIs
 	}
@@ -809,7 +785,7 @@ func WrapAPIsForXlayer(apis []rpc.API, txPreExecAPI *TxPreExecAPI, config *Xlaye
 				wrapped = append(wrapped, rpc.API{
 					Namespace:     api.Namespace,
 					Version:       api.Version,
-					Service:       NewXlayerHybridBlockChainAPI(original, txPreExecAPI, config),
+					Service:       NewXlayerHybridBlockChainAPI(original, config),
 					Public:        api.Public,
 					Authenticated: api.Authenticated,
 				})
