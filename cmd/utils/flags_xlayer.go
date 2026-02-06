@@ -15,13 +15,6 @@ import (
 )
 
 var (
-	// InnerTx
-	InnerTxFlag = &cli.BoolFlag{
-		Name:     "innertx",
-		Usage:    "Enable inner transaction capture and storage (disabled by default)",
-		Value:    false,
-		Category: flags.XLayerCategory,
-	}
 	// Migration flags for XLayer routing
 	MigrationBlockFlag = &cli.Uint64Flag{
 		Name:     "migration-block",
@@ -55,7 +48,6 @@ var (
 
 	// XLayerFlags are the default flags for X Layer features
 	XLayerFlags = []cli.Flag{
-		InnerTxFlag,
 		MigrationBlockFlag,
 		PPRPCUrlFlag,
 		PPRPCTimeoutFlag,
@@ -66,15 +58,8 @@ var (
 
 // SetXLayerConfig is a public wrapper function to internally call all XLayer configuration functions
 func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
-	setInnerTxXLayer(ctx, cfg)
 	setMigrationXLayer(ctx, cfg)
 	setMonitorXLayer(ctx, cfg)
-}
-
-func setInnerTxXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
-	if ctx.IsSet(InnerTxFlag.Name) {
-		cfg.XLayer.EnableInnerTx = ctx.Bool(InnerTxFlag.Name)
-	}
 }
 
 func setMigrationXLayer(ctx *cli.Context, cfg *ethconfig.Config) {

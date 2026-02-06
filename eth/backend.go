@@ -263,8 +263,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				EnablePreimageRecording: config.EnablePreimageRecording,
 				EnableWitnessStats:      config.EnableWitnessStats,
 				StatelessSelfValidation: config.StatelessSelfValidation,
-				// For X Layer
-				EnableInnerTxs: config.XLayer.EnableInnerTx,
 			},
 			// Enables file journaling for the trie database. The journal files will be stored
 			// within the data directory. The corresponding paths will be either:

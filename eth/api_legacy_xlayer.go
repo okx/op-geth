@@ -418,34 +418,6 @@ func (api *XlayerHybridTransactionAPI) GetBlockTransactionCountByNumber(ctx cont
 	return api.TransactionAPI.GetBlockTransactionCountByNumber(ctx, blockNr)
 }
 
-// eth_getBlockInternalTransactions FORWARD
-func (api *XlayerHybridTransactionAPI) GetBlockInternalTransactions(ctx context.Context, blockNr rpc.BlockNumber) (map[common.Hash][]*types.InnerTx, error) {
-	// Check if we should proxy to erigon
-	if api.legacyRpc.shouldProxyByNumber(blockNr) {
-		var result map[common.Hash][]*types.InnerTx
-		err := api.legacyRpc.ErigonClient.CallContext(ctx, &result, "eth_getBlockInternalTransactions", hexutil.Uint64(blockNr))
-		return result, err
-	}
-	// Handle locally
-	return api.TransactionAPI.GetBlockInternalTransactions(ctx, blockNr)
-}
-
-// eth_getInternalTransactions TransactionAPI LOCAL
-func (api *XlayerHybridTransactionAPI) GetInternalTransactions(ctx context.Context, txHash common.Hash) ([]*types.InnerTx, error) {
-	// Check if the transaction exists locally
-	tx, err := api.TransactionAPI.GetTransactionByHash(ctx, txHash)
-
-	// If transaction doesn't exist locally, try Erigon
-	if tx == nil || err != nil {
-		var remoteResult []*types.InnerTx
-		err := api.legacyRpc.ErigonClient.CallContext(ctx, &remoteResult, "eth_getInternalTransactions", txHash)
-		return remoteResult, err
-	}
-
-	// Transaction exists locally
-	return api.TransactionAPI.GetInternalTransactions(ctx, txHash)
-}
-
 // eth_getRawTransactionByBlockHashAndIndex TransactionAPI LOCAL
 func (api *XlayerHybridTransactionAPI) GetRawTransactionByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, index hexutil.Uint) hexutil.Bytes {
 	// Try local first

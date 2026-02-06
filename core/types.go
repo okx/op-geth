@@ -56,8 +56,5 @@ type ProcessResult struct {
 	Receipts types.Receipts
 	Requests [][]byte
 	Logs     []*types.Log
-	GasUsed  uint64
-
-	// For X Layer
-	InnerTxs [][]*types.InnerTx // Inner transactions for each transaction in the block
+	GasUsed uint64
 }
