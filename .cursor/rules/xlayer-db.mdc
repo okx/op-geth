@@ -43,10 +43,6 @@ globs:
 - "cmd/geth/dbcmd.go"
 - "core/rawdb/*_test.go"
 - "core/rawdb/ancienttest/**/*.go"
-- "core/rawdb/accessors_inner_tx_xlayer.go"
-- "core/types/innertx_xlayer.go"
-- "core/state_processor_xlayer.go"
-- "core/vm/evm_xlayer.go"
 
 alwaysApply: false
 ---
