@@ -103,12 +103,6 @@ type Backend interface {
 	NewMatcherBackend() filtermaps.MatcherBackend
 }
 
-// For X Layer - InnerTxBackend extends Backend with inner transaction support
-type XLayerBackend interface {
-	Backend
-	IsInnerTxEnabled() bool
-}
-
 func GetAPIs(apiBackend Backend) []rpc.API {
 	nonceLock := new(AddrLocker)
 	return []rpc.API{

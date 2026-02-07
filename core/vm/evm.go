@@ -130,9 +130,6 @@ type EVM struct {
 	// precompiles holds the precompiled contracts for the current epoch
 	precompiles map[common.Address]PrecompiledContract
 
-	// For X Layer
-	innerTxMeta *InnerTxMeta
-
 	// jumpDests stores results of JUMPDEST analysis.
 	jumpDests JumpDestCache
 
@@ -154,13 +151,6 @@ func NewEVM(blockCtx BlockContext, statedb StateDB, chainConfig *params.ChainCon
 		Config:      config,
 		chainConfig: chainConfig,
 		chainRules:  chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Random != nil, blockCtx.Time),
-
-		// For X Layer
-		innerTxMeta: &InnerTxMeta{
-			lastDepth: 0,
-			indexMap:  map[int]int{0: 0},
-			InnerTxs:  make([]*types.InnerTx, 0),
-		},
 
 		jumpDests: newMapJumpDests(),
 		hasher:    crypto.NewKeccakState(),
@@ -236,14 +226,6 @@ func (evm *EVM) SetTxContext(txCtx TxContext) {
 		txCtx.AccessEvents = state.NewAccessEvents(evm.StateDB.PointCache())
 	}
 	evm.TxContext = txCtx
-
-	// For X Layer
-	evm.innerTxMeta = &InnerTxMeta{
-		index:     0,
-		lastDepth: 0,
-		indexMap:  map[int]int{0: 0},
-		InnerTxs:  make([]*types.InnerTx, 0),
-	}
 }
 
 // Cancel cancels any running EVM operation. This may be called concurrently and

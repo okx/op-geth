@@ -23,7 +23,6 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -583,26 +582,12 @@ func (st *stateTransition) innerExecute() (*ExecutionResult, error) {
 	st.state.Prepare(rules, msg.From, st.evm.Context.Coinbase, msg.To, vm.ActivePrecompiles(rules), msg.AccessList)
 
 	var (
-		ret          []byte
-		vmerr        error // vm errors do not effect consensus and are therefore not assigned to err
-		contractAddr common.Address
+		ret   []byte
+		vmerr error // vm errors do not effect consensus and are therefore not assigned to err
 	)
-	// For X Layer
-	innerTx := &types.InnerTx{
-		Dept:         *big.NewInt(0),
-		From:         msg.From.String(),
-		IsError:      false,
-		Gas:          st.gasRemaining + gas,
-		ValueWei:     st.msg.Value.String(),
-		CallValueWei: hexutil.EncodeBig(st.msg.Value),
-	}
-	st.evm.AddInnerTx(innerTx)
 
 	if contractCreation {
-		ret, contractAddr, st.gasRemaining, vmerr = st.evm.Create(msg.From, msg.Data, st.gasRemaining, value)
-
-		// For X Layer
-		innerTx.To = contractAddr.String()
+		ret, _, st.gasRemaining, vmerr = st.evm.Create(msg.From, msg.Data, st.gasRemaining, value)
 	} else {
 		// Increment the nonce for the next transaction.
 		st.state.SetNonce(msg.From, st.state.GetNonce(msg.From)+1, tracing.NonceChangeEoACall)
@@ -626,18 +611,6 @@ func (st *stateTransition) innerExecute() (*ExecutionResult, error) {
 
 		// Execute the transaction's call.
 		ret, st.gasRemaining, vmerr = st.evm.Call(msg.From, st.to(), msg.Data, st.gasRemaining, value)
-
-		// For X Layer
-		innerTx.To = msg.To.String()
-	}
-
-	// For X Layer
-	if ret != nil {
-		innerTx.Output = hexutil.Encode(ret[:])
-	}
-	if vmerr != nil {
-		innerTx.Error = vmerr.Error()
-		innerTx.IsError = true
 	}
 
 	// OP-Stack: pre-Regolith: if deposit, skip refunds, skip tipping coinbase
@@ -735,9 +708,6 @@ func (st *stateTransition) innerExecute() (*ExecutionResult, error) {
 			}
 		}
 	}
-
-	// For X Layer
-	innerTx.GasUsed = st.gasUsed()
 
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),

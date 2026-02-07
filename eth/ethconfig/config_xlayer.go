@@ -5,7 +5,6 @@ import (
 )
 
 var DefaultXLayerConfig = XLayerConfig{
-	EnableInnerTx: true,
 	LegacyPp: MigrationConfig{
 		MigrationBlock: nil,
 		PPRPCUrl:       "",
@@ -19,8 +18,7 @@ var DefaultXLayerConfig = XLayerConfig{
 
 // XLayerConfig is the X Layer config used on the eth backend
 type XLayerConfig struct {
-	EnableInnerTx bool            `toml:",omitempty"`
-	LegacyPp      MigrationConfig `toml:",omitempty"` // The erigon RPC endpoint URL for pre-migration blocks
+	LegacyPp MigrationConfig `toml:",omitempty"` // The erigon RPC endpoint URL for pre-migration blocks
 	Monitor       MonitorConfig   `toml:",omitempty"` // Transaction monitoring configuration
 }
 

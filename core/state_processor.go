@@ -66,10 +66,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		blockHash   = block.Hash()
 		blockNumber = block.Number()
 		allLogs     []*types.Log
-		gp          = new(GasPool).AddGas(block.GasLimit())
-
-		// For X Layer
-		allInnerTxs [][]*types.InnerTx
+		gp = new(GasPool).AddGas(block.GasLimit())
 	)
 
 	// Mutate the block and state according to any hard-fork specs
@@ -104,16 +101,13 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 		statedb.SetTxContext(tx.Hash(), i)
 
-		receipt, innerTxs, err := ApplyTransactionWithEVM_XLayer(msg, gp, statedb, blockNumber, blockHash, context.Time, tx, usedGas, evm)
+		receipt, err := ApplyTransactionWithEVM(msg, gp, statedb, blockNumber, blockHash, context.Time, tx, usedGas, evm)
 		if err != nil {
 			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
-
-		// For X Layer
-		allInnerTxs = append(allInnerTxs, innerTxs)
 	}
 
 	isIsthmus := config.IsIsthmus(block.Time())
@@ -147,10 +141,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		Receipts: receipts,
 		Requests: requests,
 		Logs:     allLogs,
-		GasUsed:  *usedGas,
-
-		// For X Layer
-		InnerTxs: allInnerTxs,
+		GasUsed: *usedGas,
 	}, nil
 }
 
