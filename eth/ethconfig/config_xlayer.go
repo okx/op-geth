@@ -19,7 +19,7 @@ var DefaultXLayerConfig = XLayerConfig{
 // XLayerConfig is the X Layer config used on the eth backend
 type XLayerConfig struct {
 	LegacyPp MigrationConfig `toml:",omitempty"` // The erigon RPC endpoint URL for pre-migration blocks
-	Monitor       MonitorConfig   `toml:",omitempty"` // Transaction monitoring configuration
+	Monitor  MonitorConfig   `toml:",omitempty"` // Transaction monitoring configuration
 }
 
 type MigrationConfig struct {
