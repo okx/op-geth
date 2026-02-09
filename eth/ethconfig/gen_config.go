@@ -73,7 +73,9 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		OverrideOptimismJovian                    *uint64       `toml:",omitempty"`
 		OverrideOptimismInterop                   *uint64       `toml:",omitempty"`
 		ApplySuperchainUpgrades                   bool          `toml:",omitempty"`
-		RollupSequencerHTTP                       string
+		RollupSequencerHTTP                       []string
+		RollupSequencerDialTimeout                time.Duration
+		RollupSequencerRequestTimeout             time.Duration
 		RollupSequencerTxConditionalEnabled       bool
 		RollupSequencerTxConditionalCostRateLimit int
 		RollupHistoricalRPC                       string
@@ -221,7 +223,9 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		OverrideOptimismJovian                    *uint64        `toml:",omitempty"`
 		OverrideOptimismInterop                   *uint64        `toml:",omitempty"`
 		ApplySuperchainUpgrades                   *bool          `toml:",omitempty"`
-		RollupSequencerHTTP                       *string
+		RollupSequencerHTTP                       []string
+		RollupSequencerDialTimeout                *time.Duration
+		RollupSequencerRequestTimeout             *time.Duration
 		RollupSequencerTxConditionalEnabled       *bool
 		RollupSequencerTxConditionalCostRateLimit *int
 		RollupHistoricalRPC                       *string
@@ -409,7 +413,13 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		c.ApplySuperchainUpgrades = *dec.ApplySuperchainUpgrades
 	}
 	if dec.RollupSequencerHTTP != nil {
-		c.RollupSequencerHTTP = *dec.RollupSequencerHTTP
+		c.RollupSequencerHTTP = dec.RollupSequencerHTTP
+	}
+	if dec.RollupSequencerDialTimeout != nil {
+		c.RollupSequencerDialTimeout = *dec.RollupSequencerDialTimeout
+	}
+	if dec.RollupSequencerRequestTimeout != nil {
+		c.RollupSequencerRequestTimeout = *dec.RollupSequencerRequestTimeout
 	}
 	if dec.RollupSequencerTxConditionalEnabled != nil {
 		c.RollupSequencerTxConditionalEnabled = *dec.RollupSequencerTxConditionalEnabled

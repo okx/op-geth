@@ -134,7 +134,7 @@ type Ethereum struct {
 	shutdownTracker *shutdowncheck.ShutdownTracker // Tracks if and when the node has shutdown ungracefully
 
 	// OP-Stack additions
-	seqRPCService        *rpc.Client
+	seqRPCService        *rpc.SequencerClient
 	historicalRPCService *rpc.Client
 	interopRPC           *interop.InteropClient
 	supervisorFailsafe   atomic.Bool
@@ -462,12 +462,14 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 	}
 
-	if config.RollupSequencerHTTP != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		client, err := rpc.DialContext(ctx, config.RollupSequencerHTTP)
-		cancel()
+	if len(config.RollupSequencerHTTP) > 0 {
+		client, err := rpc.NewSequencerClient(
+			config.RollupSequencerHTTP,
+			config.RollupSequencerDialTimeout,
+			config.RollupSequencerRequestTimeout,
+		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create sequencer client: %w", err)
 		}
 		eth.seqRPCService = client
 	}
