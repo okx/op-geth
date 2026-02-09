@@ -56,5 +56,5 @@ type ProcessResult struct {
 	Receipts types.Receipts
 	Requests [][]byte
 	Logs     []*types.Log
-	GasUsed uint64
+	GasUsed  uint64
 }

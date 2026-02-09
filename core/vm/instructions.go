@@ -847,7 +847,7 @@ func opStaticCall(pc *uint64, evm *EVM, scope *ScopeContext) ([]byte, error) {
 	args := scope.Memory.GetPtr(inOffset.Uint64(), inSize.Uint64())
 	ret, returnGas, err := evm.StaticCall(scope.Contract.Address(), toAddr, args, gas)
 
-	if err != nil{
+	if err != nil {
 		temp.Clear()
 	} else {
 		temp.SetOne()
