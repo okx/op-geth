@@ -1007,14 +1007,14 @@ var (
 	}
 
 	RollupSequencerDialTimeoutFlag = &cli.DurationFlag{
-		Name:     "rollup.sequencerdialtimeout",
+		Name:     "rollup.sequencer-dial-timeout",
 		Usage:    "Timeout for dialing sequencer endpoints",
 		Value:    5 * time.Second,
 		Category: flags.RollupCategory,
 	}
 
 	RollupSequencerRequestTimeoutFlag = &cli.DurationFlag{
-		Name:     "rollup.sequencerrequesttimeout",
+		Name:     "rollup.sequencer-request-timeout",
 		Usage:    "Timeout for individual requests to sequencer endpoints",
 		Value:    5 * time.Second,
 		Category: flags.RollupCategory,
