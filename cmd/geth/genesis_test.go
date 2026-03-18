@@ -99,6 +99,9 @@ func TestCustomGenesis(t *testing.T) {
 
 // TestCustomBackend that the backend selection and detection (leveldb vs pebble) works properly.
 func TestCustomBackend(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
 	t.Parallel()
 	// Test pebble, but only on 64-bit platforms
 	if strconv.IntSize != 64 {
@@ -185,7 +188,7 @@ func TestCustomBackend(t *testing.T) {
 		},
 		{ // Reject invalid backend choice
 			initArgs:   []string{"--db.engine", "mssql"},
-			initExpect: `Fatal: Invalid choice for db.engine 'mssql', allowed 'leveldb' or 'pebble'`,
+			initExpect: `Fatal: Invalid choice for db.engine 'mssql', allowed 'leveldb' or 'pebble' or 'rocksdb'`,
 			// Since the init fails, this will return the (default) mainnet genesis
 			// block nonce
 			execExpect: `0x0000000000000042`,

@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"slices"
@@ -39,7 +40,9 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/catalyst"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/internal/flags"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -157,6 +160,10 @@ func loadBaseConfig(ctx *cli.Context) gethConfig {
 
 	// Apply flags.
 	utils.SetNodeConfig(ctx, &cfg.Node)
+
+	// For X Layer
+	utils.SetXLayerConfig(ctx, &cfg.Eth)
+
 	return cfg
 }
 
@@ -288,6 +295,21 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	// Start metrics export if enabled
 	utils.SetupMetrics(&cfg.Metrics)
 
+	// For X Layer, initialize monitoring system
+	// Resolve trace log path relative to datadir, matching reth's behavior
+	traceLogPath := cfg.Eth.XLayer.Monitor.TraceLogPath
+	if cfg.Eth.XLayer.Monitor.EnableTraceLog {
+		// If enabled but path is empty, use default path (should have been set in setMonitorXLayer, but handle it here as well)
+		if traceLogPath == "" {
+			traceLogPath = "logs/trace.log"
+		}
+		// If path is not absolute, resolve it relative to datadir
+		if !filepath.IsAbs(traceLogPath) {
+			traceLogPath = stack.ResolvePath(traceLogPath)
+		}
+	}
+	monitor.InitTraceLogger(cfg.Eth.XLayer.Monitor.EnableTraceLog, traceLogPath)
+
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
 
 	// Create gauge with geth system and build information
@@ -304,8 +326,14 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		})
 	}
 
-	// Configure log filter RPC API.
-	filterSystem := utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
+	// Xlayer: Configure log filter RPC API.
+	isMigrationConfigured := cfg.Eth.XLayer.LegacyPp.MigrationBlock != nil && cfg.Eth.XLayer.LegacyPp.PPRPCUrl != ""
+	var filterSystem *filters.FilterSystem
+	if isMigrationConfigured {
+		filterSystem = utils.RegisterXlayerHybridFilterAPI(stack, backend, &cfg.Eth)
+	} else {
+		filterSystem = utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
+	}
 
 	// Configure GraphQL if requested.
 	if ctx.IsSet(utils.GraphQLEnabledFlag.Name) {

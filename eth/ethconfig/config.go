@@ -73,6 +73,8 @@ var Defaults = Config{
 	RPCTxFeeCap:          1, // 1 ether
 	TxSyncDefaultTimeout: 20 * time.Second,
 	TxSyncMaxTimeout:     1 * time.Minute,
+	// For X Layer
+	XLayer: DefaultXLayerConfig,
 }
 
 //go:generate go run github.com/fjl/gencodec -type Config -formats toml -out gen_config.go
@@ -225,6 +227,9 @@ type Config struct {
 
 	InteropMessageRPC       string `toml:",omitempty"`
 	InteropMempoolFiltering bool   `toml:",omitempty"`
+
+	// For X Layer
+	XLayer XLayerConfig `toml:",omitempty"`
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain config.

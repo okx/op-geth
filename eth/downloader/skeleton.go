@@ -221,22 +221,26 @@ type skeleton struct {
 	terminate  chan chan error  // Termination channel to abort sync
 	terminated chan struct{}    // Channel to signal that the syncer is dead
 
+	// For XLayer, get legacyXLayerBlock from chainConfig
+	cutOffBlock uint64
+
 	// Callback hooks used during testing
 	syncStarting func() // callback triggered after a sync cycle is inited but before started
 }
 
 // newSkeleton creates a new sync skeleton that tracks a potentially dangling
 // header chain until it's linked into an existing set of blocks.
-func newSkeleton(db ethdb.Database, peers *peerSet, drop peerDropFn, filler backfiller) *skeleton {
+func newSkeleton(db ethdb.Database, peers *peerSet, drop peerDropFn, filler backfiller, cutOffBlock uint64) *skeleton {
 	sk := &skeleton{
-		db:         db,
-		filler:     filler,
-		peers:      peers,
-		drop:       drop,
-		requests:   make(map[uint64]*headerRequest),
-		headEvents: make(chan *headUpdate),
-		terminate:  make(chan chan error),
-		terminated: make(chan struct{}),
+		db:          db,
+		filler:      filler,
+		peers:       peers,
+		drop:        drop,
+		requests:    make(map[uint64]*headerRequest),
+		headEvents:  make(chan *headUpdate),
+		terminate:   make(chan chan error),
+		terminated:  make(chan struct{}),
+		cutOffBlock: cutOffBlock,
 	}
 	go sk.startup()
 	return sk
@@ -700,7 +704,8 @@ func (s *skeleton) assignTasks(success chan *headerResponse, fail chan *headerRe
 			continue
 		}
 		// If we've reached the genesis, stop assigning tasks
-		if uint64(task*requestHeaders) >= s.scratchHead {
+		// For XLayer, check if the task is beyond the legacyXLayerBlock
+		if uint64(task*requestHeaders) >= s.scratchHead-s.cutOffBlock {
 			return
 		}
 		// Found a task and have peers available, assign it
@@ -754,8 +759,9 @@ func (s *skeleton) executeTask(peer *peerConnection, req *headerRequest) {
 	// Since nodes may or may not return the genesis header for a batch request,
 	// don't even request it. The parent hash of block #1 is enough to link.
 	requestCount := requestHeaders
-	if req.head < requestHeaders {
-		requestCount = int(req.head)
+	// For XLayer, check if the request is beyond the legacyXLayerBlock
+	if req.head-s.cutOffBlock < requestHeaders {
+		requestCount = int(req.head - s.cutOffBlock)
 	}
 	peer.log.Trace("Fetching skeleton headers", "from", req.head, "count", requestCount)
 	netreq, err := peer.peer.RequestHeadersByNumber(req.head, requestCount, 0, true, resCh)
@@ -816,13 +822,15 @@ func (s *skeleton) executeTask(peer *peerConnection, req *headerRequest) {
 			res.Done <- errors.New("invalid header batch anchor")
 			s.scheduleRevertRequest(req)
 
-		case req.head >= requestHeaders && len(headers) != requestHeaders:
+		// For XLayer, check if the request is beyond the legacyXLayerBlock
+		case req.head-s.cutOffBlock >= requestHeaders && len(headers) != requestHeaders:
 			// Invalid number of non-genesis headers delivered, reject the response and reschedule
 			peer.log.Debug("Invalid non-genesis header count", "have", len(headers), "want", requestHeaders)
 			res.Done <- errors.New("not enough non-genesis headers delivered")
 			s.scheduleRevertRequest(req)
 
-		case req.head < requestHeaders && uint64(len(headers)) != req.head:
+		// For XLayer, check if the request is below the legacyXLayerBlock
+		case req.head-s.cutOffBlock < requestHeaders && uint64(len(headers)) != req.head-s.cutOffBlock:
 			// Invalid number of genesis headers delivered, reject the response and reschedule
 			peer.log.Debug("Invalid genesis header count", "have", len(headers), "want", headers[0].Number.Uint64())
 			res.Done <- errors.New("not enough genesis headers delivered")

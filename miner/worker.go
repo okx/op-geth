@@ -36,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types/interoptypes"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
@@ -142,10 +143,15 @@ type generateParams struct {
 
 // generateWork generates a sealing block based on the given parameters.
 func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPayloadResult {
+	// Use per-call statistics to avoid shared state across concurrent builds
+	proposeStats := metrics.NewLogStatistics()
+
+	startBuildTime := time.Now()
 	work, err := miner.prepareWork(genParam, witness)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
+	proposeStats.CumulativeTiming(metrics.ProposePrepareMs, time.Since(startBuildTime))
 
 	// Check withdrawals fit max block size.
 	// Due to the cap on withdrawal count, this can actually never happen, but we still need to
@@ -173,7 +179,7 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 	}
 
 	misc.EnsureCreate2Deployer(miner.chainConfig, work.header.Time, work.state)
-
+	execStart := time.Now()
 	for _, tx := range genParam.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
@@ -200,6 +206,7 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 			log.Info("Block building got interrupted by payload resolution")
 		}
 	}
+	proposeStats.CumulativeTiming(metrics.ProposeExecTxMs, time.Since(execStart))
 
 	body := types.Body{Transactions: work.txs, Withdrawals: genParam.withdrawals}
 
@@ -219,6 +226,7 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 	if miner.chainConfig.IsPrague(work.header.Number, work.header.Time) && !isIsthmus {
 		requests = [][]byte{}
 		// EIP-6110 deposits
+		xstart := time.Now()
 		if err := core.ParseDepositLogs(&requests, allLogs, miner.chainConfig); err != nil {
 			return &newPayloadResult{err: err}
 		}
@@ -230,6 +238,7 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 		if err := core.ProcessConsolidationQueue(&requests, work.evm); err != nil {
 			return &newPayloadResult{err: err}
 		}
+		proposeStats.CumulativeTiming(metrics.ProposePragueMs, time.Since(xstart))
 	}
 
 	if isIsthmus {
@@ -241,10 +250,36 @@ func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPay
 		work.header.RequestsHash = &reqHash
 	}
 
+	assembleStart := time.Now()
 	block, err := miner.engine.FinalizeAndAssemble(miner.chain, work.header, work.state, &body, work.receipts)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
+	proposeStats.CumulativeTiming(metrics.ProposeAssembleMs, time.Since(assembleStart))
+
+	// Include StateDB internal timings
+	if work != nil && work.state != nil {
+		sdb := work.state
+		proposeStats.CumulativeTiming(metrics.AccountReadMs, sdb.AccountReads)
+		proposeStats.CumulativeTiming(metrics.AccountHashMs, sdb.AccountHashes)
+		proposeStats.CumulativeTiming(metrics.AccountUpdateMs, sdb.AccountUpdates)
+		proposeStats.CumulativeTiming(metrics.StorageReadMs, sdb.StorageReads)
+		proposeStats.CumulativeTiming(metrics.StorageUpdateMs, sdb.StorageUpdates)
+	}
+
+	// Counters and total time
+	// Set block number and counters
+	proposeStats.CumulativeValue(metrics.BlockNumberTag, int64(block.NumberU64()))
+	proposeStats.CumulativeValue(metrics.TxCounter, int64(len(work.txs)))
+	proposeStats.CumulativeValue(metrics.GasUsedCounter, int64(block.GasUsed()))
+	proposeStats.CumulativeTiming(metrics.ProposeTotalMs, time.Since(startBuildTime))
+
+	// store propose stats snapshot keyed by block hash; output will be merged at insertChain
+	if block != nil {
+		// Store the statistics instance directly; it is local and no longer written after this point
+		metrics.GlobalStatsStore.Put(block.Hash(), proposeStats)
+	}
+
 	return &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),
@@ -414,6 +449,19 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 }
 
 func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) error {
+	// For X Layer
+	txHash := tx.Hash().Hex()
+	blockHeight := env.header.Number.Uint64()
+
+	// Filter out deposit transactions (system transactions)
+	if int8(tx.Type()) != monitor.DepositTxType {
+		// Log transaction execution end (matching reth implementation)
+		// This is logged after execution completes, regardless of success/failure
+		defer func() {
+			monitor.LogTransaction(txHash, monitor.SeqTxExecutionEnd, blockHeight)
+		}()
+	}
+
 	// OP-Stack addition
 	interopAccessList := interoptypes.TxToInteropAccessList(tx)
 	if len(interopAccessList) > 0 {
@@ -482,6 +530,8 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 }
 
 // applyTransaction runs the transaction. If execution fails, state and gas pool are reverted.
+//
+//nolint:unused // replaced logic with applytransaction_okx for X Layer
 func (miner *Miner) applyTransaction(env *environment, tx *types.Transaction) (*types.Receipt, error) {
 	var (
 		snap = env.state.Snapshot()

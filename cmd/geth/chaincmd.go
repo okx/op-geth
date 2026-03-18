@@ -50,6 +50,13 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// AccountVerificationResult holds the result of verifying a single account
+type AccountVerificationResult struct {
+	Address  common.Address
+	Errors   []string
+	Verified bool
+}
+
 var (
 	initCommand = &cli.Command{
 		Action:    initGenesis,
@@ -68,7 +75,11 @@ The init command initializes a new genesis block and definition for the network.
 This is a destructive action and changes the network in which you will be
 participating.
 
-It expects the genesis file as argument.`,
+It expects the genesis file as argument.
+
+If --no-verify is provided, the command will skip verify
+the genesis state after initialization. Use --ignore-addresses to specify
+addresses to skip during verification.`,
 	}
 	dumpGenesisCommand = &cli.Command{
 		Action:    dumpGenesis,
@@ -250,6 +261,7 @@ var (
 // initGenesis will initialise the given JSON format genesis file and writes it as
 // the zero'd block (i.e. genesis) or will fail hard if it can't succeed.
 func initGenesis(ctx *cli.Context) error {
+	initStart := time.Now()
 	if ctx.Args().Len() != 1 {
 		utils.Fatalf("need genesis.json file as the only argument")
 	}
@@ -257,16 +269,19 @@ func initGenesis(ctx *cli.Context) error {
 	if len(genesisPath) == 0 {
 		utils.Fatalf("invalid path to genesis file")
 	}
+
 	file, err := os.Open(genesisPath)
 	if err != nil {
 		utils.Fatalf("Failed to read genesis file: %v", err)
 	}
 	defer file.Close()
 
+	start := time.Now()
 	genesis := new(core.Genesis)
 	if err := json.NewDecoder(file).Decode(genesis); err != nil {
 		utils.Fatalf("invalid genesis file: %v", err)
 	}
+	log.Info("read file and decode json", "elapsed", time.Since(start))
 	// Open and initialise both full and light databases
 	stack, _ := makeConfigNode(ctx)
 	defer stack.Close()
@@ -302,8 +317,7 @@ func initGenesis(ctx *cli.Context) error {
 	if compatErr != nil {
 		utils.Fatalf("Failed to write chain config: %v", compatErr)
 	}
-	log.Info("Successfully wrote genesis state", "database", "chaindata", "hash", hash)
-
+	log.Info("Successfully wrote genesis state", "database", "chaindata", "hash", hash, "elapsed", time.Since(initStart))
 	return nil
 }
 
@@ -715,7 +729,7 @@ func pruneHistory(ctx *cli.Context) error {
 	return nil
 }
 
-// downloadEra is the era1 file downloader tool.
+// downladEra is the era1 file downloader tool.
 func downloadEra(ctx *cli.Context) error {
 	flags.CheckExclusive(ctx, eraBlockFlag, eraEpochFlag, eraAllFlag)
 

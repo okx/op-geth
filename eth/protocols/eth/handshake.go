@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -93,12 +94,12 @@ func (p *Peer) readStatus68(networkID uint64, status *StatusPacket68, genesis co
 
 func (p *Peer) handshake69(networkID uint64, chain forkid.Blockchain, rangeMsg BlockRangeUpdatePacket) error {
 	var (
-		genesis    = chain.Genesis()
-		latest     = chain.CurrentHeader()
-		forkID     = forkid.NewID(chain.Config(), genesis, latest.Number.Uint64(), latest.Time)
-		forkFilter = forkid.NewFilter(chain)
+		xlayer     = chain.(*core.BlockChain)
+		genesis    = xlayer.GenesisXLayer()
+		latest     = xlayer.CurrentHeader()
+		forkID     = forkid.NewIDXLayer(chain.Config(), genesis, latest.Number.Uint64(), latest.Time)
+		forkFilter = forkid.NewFilterXLayer(xlayer)
 	)
-
 	errc := make(chan error, 2)
 	go func() {
 		pkt := &StatusPacket69{

@@ -483,6 +483,7 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 		}
 
 		st.state.RevertToSnapshot(snap)
+
 		// Even though we revert the state changes, always increment the nonce for the next deposit transaction
 		st.state.SetNonce(st.msg.From, st.state.GetNonce(st.msg.From)+1, tracing.NonceChangeEoACall)
 		// Record deposits as using all their gas (matches the gas pool)
@@ -584,6 +585,7 @@ func (st *stateTransition) innerExecute() (*ExecutionResult, error) {
 		ret   []byte
 		vmerr error // vm errors do not effect consensus and are therefore not assigned to err
 	)
+
 	if contractCreation {
 		ret, _, st.gasRemaining, vmerr = st.evm.Create(msg.From, msg.Data, st.gasRemaining, value)
 	} else {

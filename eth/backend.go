@@ -20,6 +20,7 @@ package eth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -138,11 +139,12 @@ type Ethereum struct {
 	interopRPC           *interop.InteropClient
 	supervisorFailsafe   atomic.Bool
 
+	xlayerLegacyRPCService *XlayerLegacyRPCService // Migration configuration for routing to xlayer-erigon
+
 	nodeCloser func() error
 }
 
 // New creates a new Ethereum object (including the initialisation of the common Ethereum object),
-// whose lifecycle will be managed by the provided node.
 func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// Ensure configuration values are compatible and sane
 	if !config.SyncMode.IsValid() {
@@ -194,6 +196,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if chainConfig.IsXLayer() {
+		if err := core.CommitXLayerFirstBlock(chainDb, chainConfig); err != nil {
+			return nil, err
+		}
+	}
+
 	engine, err := ethconfig.CreateConsensusEngine(chainConfig, chainDb)
 	if err != nil {
 		return nil, err
@@ -430,6 +439,32 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, config.GPO, config.Miner.GasPrice)
 
+	// For XLayer: Set up migration configuration if configured
+	if config.XLayer.LegacyPp.PPRPCUrl != "" {
+		if chainConfig.LegacyXLayerBlock != nil {
+			// if the legacy xlayer block is set, use the block as migration block
+			log.Info("LegacyXLayerBlock detected, use the block as migration block", "legacyBlock", chainConfig.LegacyXLayerBlock.Uint64())
+			migrationBlock := chainConfig.LegacyXLayerBlock.Uint64()
+			config.XLayer.LegacyPp.MigrationBlock = &migrationBlock
+		}
+		// if we can't retrieve the migration block from either the chain config or the config, return an error
+		if config.XLayer.LegacyPp.MigrationBlock == nil || *config.XLayer.LegacyPp.MigrationBlock == 0 {
+			return nil, errors.New("migration block not set")
+		}
+		log.Info("Migration block set to", "migrationBlock", *config.XLayer.LegacyPp.MigrationBlock)
+		migrationConfig, err := NewXlayerLegacyRPCService(config)
+		if err != nil {
+			log.Error("Failed to create migration configuration", "error", err)
+			return nil, err
+		}
+		if migrationConfig != nil {
+			eth.xlayerLegacyRPCService = migrationConfig
+			log.Info("Migration routing enabled",
+				"migrationBlock", *config.XLayer.LegacyPp.MigrationBlock,
+				"ppUrl", config.XLayer.LegacyPp.PPRPCUrl)
+		}
+	}
+
 	if config.RollupSequencerHTTP != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		client, err := rpc.DialContext(ctx, config.RollupSequencerHTTP)
@@ -489,6 +524,14 @@ func makeExtraData(extra []byte) []byte {
 // NOTE, some of these services probably need to be moved to somewhere else.
 func (s *Ethereum) APIs() []rpc.API {
 	apis := ethapi.GetAPIs(s.APIBackend)
+
+	//// Append any APIs exposed explicitly by the consensus engine
+	//apis = append(apis, s.engine.APIs(s.BlockChain())...)
+
+	// Xlayer: Wrap APIs with migration routing if configured
+	if s.xlayerLegacyRPCService != nil {
+		apis = WrapAPIsForXlayer(apis, s.xlayerLegacyRPCService)
+	}
 
 	// Append any Sequencer APIs as enabled
 	if s.config.RollupSequencerTxConditionalEnabled {
@@ -700,6 +743,9 @@ func (s *Ethereum) Stop() error {
 	}
 	if s.historicalRPCService != nil {
 		s.historicalRPCService.Close()
+	}
+	if s.xlayerLegacyRPCService != nil {
+		s.xlayerLegacyRPCService.Close()
 	}
 	if s.interopRPC != nil {
 		s.interopRPC.Close()

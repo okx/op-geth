@@ -46,6 +46,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/internal/syncx"
 	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
@@ -691,6 +692,20 @@ func (bc *BlockChain) loadLastState() error {
 func (bc *BlockChain) initializeHistoryPruning(latest uint64) error {
 	freezerTail, _ := bc.db.Tail()
 
+	// For xlayer
+	// update the prune point to the LegacyXLayerBlock
+	if bc.chainConfig.LegacyXLayerBlock != nil {
+		log.Info("LegacyXLayerBlock detected, use the block as prune point", "legacyBlock", bc.chainConfig.LegacyXLayerBlock.Uint64())
+		legacyBlock := bc.chainConfig.LegacyXLayerBlock.Uint64()
+		legacyBlockHash := rawdb.ReadCanonicalHash(bc.db, legacyBlock)
+		legacyPrunePoint := &history.PrunePoint{
+			BlockNumber: legacyBlock,
+			BlockHash:   legacyBlockHash,
+		}
+		bc.historyPrunePoint.Store(legacyPrunePoint)
+		return nil
+	}
+
 	switch bc.cfg.ChainHistoryMode {
 	case history.KeepAll:
 		if freezerTail == 0 {
@@ -1071,6 +1086,7 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Ha
 			rawdb.DeleteBody(db, hash, num)
 			rawdb.DeleteReceipts(db, hash, num)
 		}
+
 		// Todo(rjl493456442) txlookup, log index, etc
 	}
 	// If SetHead was only called as a chain reparation method, try to skip
@@ -1184,7 +1200,13 @@ func (bc *BlockChain) ResetWithGenesisBlock(genesis *types.Block) error {
 
 // Export writes the active chain to the given writer.
 func (bc *BlockChain) Export(w io.Writer) error {
-	return bc.ExportN(w, uint64(0), bc.CurrentBlock().Number.Uint64())
+	// For X Layer
+	// Use custom first block number instead of 0
+	first := uint64(0)
+	if bc.chainConfig.LegacyXLayerBlock != nil {
+		first = bc.chainConfig.LegacyXLayerBlock.Uint64()
+	}
+	return bc.ExportN(w, first, bc.CurrentBlock().Number.Uint64())
 }
 
 // ExportN writes a subset of the active chain to the given writer.
@@ -1192,7 +1214,7 @@ func (bc *BlockChain) ExportN(w io.Writer, first uint64, last uint64) error {
 	if first > last {
 		return fmt.Errorf("export failed: first (%d) is greater than last (%d)", first, last)
 	}
-	log.Info("Exporting batch of blocks", "count", last-first+1)
+	log.Info("Exporting batch of blocks", "count", last-first+1, "first", first, "last", last)
 
 	var (
 		parentHash common.Hash
@@ -1608,6 +1630,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	rawdb.WriteBlock(blockBatch, block)
 	rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
 	rawdb.WritePreimages(blockBatch, statedb.Preimages())
+
 	if err := blockBatch.Write(); err != nil {
 		log.Crit("Failed to write block into disk", "err", err)
 	}
@@ -1913,12 +1936,13 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 			continue
 		}
 		// Retrieve the parent block and it's state to execute on top
+		start := time.Now()
 		parent := it.previous()
 		if parent == nil {
 			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 		}
+
 		// The traced section of block import.
-		start := time.Now()
 		res, err := bc.ProcessBlock(parent.Root, block, setHead, makeWitness && len(chain) == 1)
 		if err != nil {
 			return nil, it.index, err
@@ -1934,7 +1958,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		}
 		trieDiffNodes, trieBufNodes, _ := bc.triedb.Size()
 		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead)
-
 		// Print confirmation that a future fork is scheduled, but not yet active.
 		bc.logForkReadiness(block)
 
@@ -1999,6 +2022,9 @@ func (bc *BlockChain) ProcessBlock(parentRoot common.Hash, block *types.Block, s
 		interrupt atomic.Bool
 	)
 	defer interrupt.Store(true) // terminate the prefetch at the end
+
+	blockHash := block.Hash().Hex()
+	blockHeight := block.NumberU64()
 
 	if bc.cfg.NoPrefetch {
 		statedb, err = state.New(parentRoot, bc.statedb)
@@ -2185,6 +2211,11 @@ func (bc *BlockChain) ProcessBlock(parentRoot common.Hash, block *types.Block, s
 	// TODO(rjl493456442) generalize the ResettingTimer
 	mgasps := float64(res.GasUsed) * 1000 / float64(elapsed)
 	chainMgaspsMeter.Update(time.Duration(mgasps))
+
+	// X Layer: Log block insert end
+	monitor.LogBlock(blockHash, blockHeight, monitor.RpcBlockInsertEnd)
+
+	logStatistic(block, statedb, startTime, ptime, vtime, triehash, trieUpdate, xvtime, wstart, proctime)
 
 	return &blockProcessingResult{
 		usedGas:  res.GasUsed,
@@ -2467,6 +2498,8 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Header) error 
 	var (
 		deletedTxs []common.Hash
 		rebirthTxs []common.Hash
+		// For X Layer - collect deleted blocks for batch inner tx deletion
+		deletedBlocks []*types.Block
 
 		deletedLogs []*types.Log
 		rebirthLogs []*types.Log
@@ -2503,6 +2536,9 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Header) error 
 		for _, tx := range block.Transactions() {
 			deletedTxs = append(deletedTxs, tx.Hash())
 		}
+
+		// For X Layer
+		deletedBlocks = append(deletedBlocks, block)
 		// Collect deleted logs and emit them for new integrations
 		if logs := bc.collectLogs(block, true); len(logs) > 0 {
 			// Emit revertals latest first, older then
@@ -2541,6 +2577,7 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Header) error 
 	for _, tx := range types.HashDifference(deletedTxs, rebirthTxs) {
 		rawdb.DeleteTxLookupEntry(batch, tx)
 	}
+
 	// Delete all hash markers that are not part of the new canonical chain.
 	// Because the reorg function does not handle new chain head, all hash
 	// markers greater than or equal to new chain head should be deleted.

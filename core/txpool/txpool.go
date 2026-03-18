@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
@@ -345,6 +346,8 @@ func (p *TxPool) Add(txs []*types.Transaction, sync bool) []error {
 	}
 	errs := make([]error, len(txs))
 	for i, split := range splits {
+		txHash := txs[i].Hash().Hex()
+
 		// If the transaction was rejected by all subpools, mark it unsupported
 		if split == -1 {
 			errs[i] = fmt.Errorf("%w: received type %d", core.ErrTxTypeNotSupported, txs[i].Type())
@@ -353,6 +356,11 @@ func (p *TxPool) Add(txs []*types.Transaction, sync bool) []error {
 		// Find which subpool handled it and pull in the corresponding error
 		errs[i] = errsets[split][0]
 		errsets[split] = errsets[split][1:]
+		// For X Layer, log sequencer receive end
+		// Only log if transaction was successfully added (no error)
+		if errs[i] == nil && int8(txs[i].Type()) != monitor.DepositTxType {
+			monitor.LogTransaction(txHash, monitor.SeqReceiveTxEnd, 0)
+		}
 	}
 	return errs
 }

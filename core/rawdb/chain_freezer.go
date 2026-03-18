@@ -309,7 +309,26 @@ func (f *chainFreezer) freezeRange(nfdb *nofreezedb, number, limit uint64) (hash
 	hashes = make([]common.Hash, 0, limit-number+1)
 
 	_, err = f.ModifyAncients(func(op ethdb.AncientWriteOp) error {
+		config := ReadChainConfig(nfdb, ReadCanonicalHash(nfdb, 0))
+
 		for ; number <= limit; number++ {
+			// save empty data for legacy blocks
+			if config.IsXLayer() && number < config.LegacyXLayerBlock.Uint64() && number != 0 {
+				if err := op.AppendRaw(ChainFreezerHashTable, number, []byte{}); err != nil {
+					return fmt.Errorf("can't write hash to Freezer: %v", err)
+				}
+				if err := op.AppendRaw(ChainFreezerHeaderTable, number, []byte{}); err != nil {
+					return fmt.Errorf("can't write header to Freezer: %v", err)
+				}
+				if err := op.AppendRaw(ChainFreezerBodiesTable, number, []byte{}); err != nil {
+					return fmt.Errorf("can't write body to Freezer: %v", err)
+				}
+				if err := op.AppendRaw(ChainFreezerReceiptTable, number, []byte{}); err != nil {
+					return fmt.Errorf("can't write receipts to Freezer: %v", err)
+				}
+				hashes = append(hashes, common.Hash{})
+				continue
+			}
 			// Retrieve all the components of the canonical block.
 			hash := ReadCanonicalHash(nfdb, number)
 			if hash == (common.Hash{}) {
