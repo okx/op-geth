@@ -5,7 +5,7 @@ footer: |
 base:
   name: go-ethereum
   url: https://github.com/ethereum/go-ethereum
-  hash: 737ffd1bf0cbee378d0111a5b17ae4724fb2216c # v1.16.5
+  hash: 16783c167c4be5e6675fd8de0d1b762c88d6232f # v1.17.1
 fork:
   name: op-geth
   url: https://github.com/ethereum-optimism/op-geth
@@ -297,6 +297,7 @@ def:
           ignore:
             - "internal/ethapi/transaction_args_test.go"
             - "ethclient/ethclient_test.go"
+            - "ethclient/ethclient_op_test.go"
             - "eth/tracers/api_test.go"
         - title: Debug API
           description: Fix Debug API block marshaling to include deposits
