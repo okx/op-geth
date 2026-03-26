@@ -148,7 +148,7 @@ func NewEVM(blockCtx BlockContext, statedb StateDB, chainConfig *params.ChainCon
 		Config:      config,
 		chainConfig: chainConfig,
 		chainRules:  chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Random != nil, blockCtx.Time),
-		jumpDests: newMapJumpDests(),
+		jumpDests:   newMapJumpDests(),
 	}
 	evm.precompiles = activePrecompiledContracts(evm.chainRules)
 
