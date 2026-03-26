@@ -40,7 +40,6 @@ import (
 	"github.com/ethereum/go-ethereum/internal/tablewriter"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
-	_ "github.com/olekukonko/tablewriter"
 	"golang.org/x/sync/errgroup"
 )
 
