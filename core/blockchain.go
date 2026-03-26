@@ -2309,8 +2309,8 @@ func (bc *BlockChain) ProcessBlock(ctx context.Context, parentRoot common.Hash, 
 	// X Layer: Log block insert end
 	monitor.LogBlock(blockHash, blockHeight, monitor.RpcBlockInsertEnd)
 
-	triehash := statedb.AccountHashes                              // The time spent on tries hashing
-	trieUpdate := statedb.AccountUpdates + statedb.StorageUpdates  // The time spent on tries update
+	triehash := statedb.AccountHashes                             // The time spent on tries hashing
+	trieUpdate := statedb.AccountUpdates + statedb.StorageUpdates // The time spent on tries update
 	logStatistic(block, statedb, startTime, ptime, vtime, triehash, trieUpdate, xvtime, wstart, proctime)
 
 	return &blockProcessingResult{
