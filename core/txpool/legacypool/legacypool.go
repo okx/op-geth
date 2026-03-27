@@ -513,8 +513,8 @@ func (pool *LegacyPool) SetIngressFilters(filters []txpool.IngressFilter) {
 // Content retrieves the data content of the transaction pool, returning all the
 // pending as well as queued transactions, grouped by account and sorted by nonce.
 func (pool *LegacyPool) Content() (map[common.Address][]*types.Transaction, map[common.Address][]*types.Transaction) {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
 
 	pending := make(map[common.Address][]*types.Transaction, len(pool.pending))
 	for addr, list := range pool.pending {
@@ -542,8 +542,8 @@ func (pool *LegacyPool) ContentFrom(addr common.Address) ([]*types.Transaction, 
 //
 // OP-Stack addition.
 func (pool *LegacyPool) ToJournal() map[common.Address]types.Transactions {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
 
 	txs := make(map[common.Address]types.Transactions, len(pool.pending)+len(pool.queue.queued))
 	for addr, pending := range pool.pending {
@@ -570,8 +570,8 @@ func (pool *LegacyPool) Pending(filter txpool.PendingFilter) map[common.Address]
 	if filter.BlobTxs {
 		return nil
 	}
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
 
 	pending := make(map[common.Address][]*txpool.LazyTransaction, len(pool.pending))
 	for addr, list := range pool.pending {
