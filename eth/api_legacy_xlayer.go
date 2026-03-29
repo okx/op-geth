@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/filters"
+	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/ethapi/override"
 	"github.com/ethereum/go-ethereum/log"
@@ -739,6 +740,43 @@ func (api *XlayerHybridFilterAPI) Logs(ctx context.Context, crit filters.FilterC
 	return api.FilterAPI.Logs(ctx, crit)
 }
 
+// XlayerHybridTracersAPI wraps the standard tracers.API to add migration routing
+type XlayerHybridTracersAPI struct {
+	*tracers.API
+	legacyRpc *XlayerLegacyRPCService
+}
+
+// NewXlayerHybridTracersAPI creates a new migration-aware TracersAPI
+func NewXlayerHybridTracersAPI(original *tracers.API, config *XlayerLegacyRPCService) *XlayerHybridTracersAPI {
+	return &XlayerHybridTracersAPI{
+		API:       original,
+		legacyRpc: config,
+	}
+}
+
+// debug_traceTransaction LOCAL
+func (api *XlayerHybridTracersAPI) TraceTransaction(ctx context.Context, hash common.Hash, config *tracers.TraceConfig) (interface{}, error) {
+	// Check if transaction exists locally
+	exists, indexDone := api.API.CheckTransactionExists(hash)
+
+	if !exists {
+		// Transaction not in local chain
+		if !indexDone {
+			// Indexing still in progress, cannot determine if tx exists
+			return nil, ethapi.NewTxIndexingError()
+		}
+
+		// Transaction confirmed absent, forward to historical backend (Erigon)
+		var remoteResult interface{}
+		err := api.legacyRpc.ErigonClient.CallContext(ctx, &remoteResult, "debug_traceTransaction", hash, config)
+		log.Info("Successfully traced transaction on Erigon", "hash", hash)
+		return remoteResult, err
+	}
+
+	// Transaction exists locally, execute trace
+	return api.API.TraceTransaction(ctx, hash, config)
+}
+
 // WrapAPIsForXlayer wraps the standard APIs with migration-aware versions
 func WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API {
 	if config == nil {
@@ -774,6 +812,20 @@ func WrapAPIsForXlayer(apis []rpc.API, config *XlayerLegacyRPCService) []rpc.API
 					Namespace:     api.Namespace,
 					Version:       api.Version,
 					Service:       NewXlayerHybridFilterAPI(original, config),
+					Public:        api.Public,
+					Authenticated: api.Authenticated,
+				})
+			default:
+				wrapped = append(wrapped, api)
+			}
+		case "debug":
+			// Check if this is a tracers.API and wrap it
+			switch original := api.Service.(type) {
+			case *tracers.API:
+				wrapped = append(wrapped, rpc.API{
+					Namespace:     api.Namespace,
+					Version:       api.Version,
+					Service:       NewXlayerHybridTracersAPI(original, config),
 					Public:        api.Public,
 					Authenticated: api.Authenticated,
 				})
