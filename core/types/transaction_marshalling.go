@@ -179,6 +179,26 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		yparity := itx.V.Uint64()
 		enc.YParity = (*hexutil.Uint64)(&yparity)
 
+	case *Eip8130Tx:
+		enc.ChainID = (*hexutil.Big)(new(big.Int).SetUint64(itx.ChainID))
+		nonce := hexutil.Uint64(itx.NonceSequence)
+		enc.Nonce = &nonce
+		enc.Gas = (*hexutil.Uint64)(&itx.GasLimit)
+		enc.MaxFeePerGas = (*hexutil.Big)(itx.MaxFeePerGas)
+		enc.MaxPriorityFeePerGas = (*hexutil.Big)(itx.MaxPriorityFeePerGas)
+		enc.Value = (*hexutil.Big)(common.Big0)
+		enc.Input = (*hexutil.Bytes)(&itx.SenderAuth)
+		enc.From = itx.From
+		if itx.V != nil {
+			enc.V = (*hexutil.Big)(itx.V)
+		}
+		if itx.R != nil {
+			enc.R = (*hexutil.Big)(itx.R)
+		}
+		if itx.S != nil {
+			enc.S = (*hexutil.Big)(itx.S)
+		}
+
 	case *DepositTx:
 		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
 		enc.Value = (*hexutil.Big)(itx.Value)
@@ -540,6 +560,41 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 			if err := sanityCheckSignature(vbig, itx.R.ToBig(), itx.S.ToBig(), false); err != nil {
 				return err
 			}
+		}
+
+	case Eip8130TxType:
+		var itx Eip8130Tx
+		inner = &itx
+		if dec.ChainID != nil {
+			itx.ChainID = dec.ChainID.ToInt().Uint64()
+		}
+		if dec.Nonce != nil {
+			itx.NonceSequence = uint64(*dec.Nonce)
+		}
+		if dec.Gas == nil {
+			return errors.New("missing required field 'gas' for txdata")
+		}
+		itx.GasLimit = uint64(*dec.Gas)
+		if dec.MaxPriorityFeePerGas != nil {
+			itx.MaxPriorityFeePerGas = (*big.Int)(dec.MaxPriorityFeePerGas)
+		}
+		if dec.MaxFeePerGas != nil {
+			itx.MaxFeePerGas = (*big.Int)(dec.MaxFeePerGas)
+		}
+		if dec.Input != nil {
+			itx.SenderAuth = *dec.Input
+		}
+		if dec.From != nil {
+			itx.From = dec.From
+		}
+		if dec.V != nil {
+			itx.V = dec.V.ToInt()
+		}
+		if dec.R != nil {
+			itx.R = dec.R.ToInt()
+		}
+		if dec.S != nil {
+			itx.S = dec.S.ToInt()
 		}
 
 	case DepositTxType:
