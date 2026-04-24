@@ -51,6 +51,7 @@ const (
 	DynamicFeeTxType = 0x02
 	BlobTxType       = 0x03
 	SetCodeTxType    = 0x04
+	AATxType         = 0x7B // EIP-8130 XLayerAA
 )
 
 // Transaction is an Ethereum transaction.
@@ -225,6 +226,8 @@ func (tx *Transaction) decodeTyped(b []byte) (TxData, error) {
 		inner = new(SetCodeTx)
 	case DepositTxType:
 		inner = new(DepositTx)
+	case AATxType:
+		inner = new(AATx)
 	default:
 		return nil, ErrTxTypeNotSupported
 	}
