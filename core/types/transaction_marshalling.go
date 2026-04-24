@@ -19,6 +19,7 @@ package types
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 
@@ -61,6 +62,19 @@ type txJSON struct {
 	Blobs       []kzg4844.Blob       `json:"blobs,omitempty"`
 	Commitments []kzg4844.Commitment `json:"commitments,omitempty"`
 	Proofs      []kzg4844.Proof      `json:"proofs,omitempty"`
+
+	// EIP-8130 AA transaction fields:
+	NonceKey      *hexutil.Big    `json:"nonceKey,omitempty"`
+	NonceSequence *hexutil.Uint64 `json:"nonceSequence,omitempty"`
+	Expiry        *hexutil.Uint64 `json:"expiry,omitempty"`
+	// AccountChanges and Calls are complex nested types; kept as raw JSON for
+	// round-trip fidelity. The UnmarshalJSON path converts them to RLP for
+	// AATx.AccountChanges / AATx.Calls.
+	AccountChanges json.RawMessage `json:"accountChanges,omitempty"`
+	Calls          json.RawMessage `json:"calls,omitempty"`
+	Payer          *common.Address `json:"payer,omitempty"`
+	SenderAuth     *hexutil.Bytes  `json:"senderAuth,omitempty"`
+	PayerAuth      *hexutil.Bytes  `json:"payerAuth,omitempty"`
 
 	// Only used for encoding:
 	Hash common.Hash `json:"hash"`
@@ -205,8 +219,108 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		enc.IsSystemTx = &itx.IsSystemTransaction
 		enc.Nonce = (*hexutil.Uint64)(&itx.EffectiveNonce)
 		// other fields will show up as null.
+
+	case *AATx:
+		enc.ChainID = (*hexutil.Big)(new(big.Int).SetUint64(itx.ChainID))
+		enc.From = &itx.From
+		enc.NonceKey = (*hexutil.Big)(itx.NonceKey)
+		ns := hexutil.Uint64(itx.NonceSequence)
+		enc.NonceSequence = &ns
+		ex := hexutil.Uint64(itx.Expiry)
+		enc.Expiry = &ex
+		enc.GasPrice = (*hexutil.Big)(itx.GasPrice)
+		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
+		enc.AccountChanges = aaRLPToJSON(itx.AccountChanges)
+		enc.Calls = aaRLPToJSON(itx.Calls)
+		if itx.Payer != (common.Address{}) {
+			enc.Payer = &itx.Payer
+		}
+		senderAuth := hexutil.Bytes(itx.SenderAuth)
+		enc.SenderAuth = &senderAuth
+		payerAuth := hexutil.Bytes(itx.PayerAuth)
+		enc.PayerAuth = &payerAuth
 	}
 	return json.Marshal(&enc)
+}
+
+// aaRLPToJSON returns the raw RLP value as a JSON raw message (for round-trip).
+// The RLP bytes are base64 or hex — we keep them as a raw JSON null if empty.
+func aaRLPToJSON(raw rlp.RawValue) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage("null")
+	}
+	// Pass raw RLP bytes through hexutil for JSON embedding.
+	return json.RawMessage(`"` + hexutil.Encode(raw) + `"`)
+}
+
+// aaCallRLP is the on-wire representation of a single AA call: [to, data].
+type aaCallRLP struct {
+	To   common.Address
+	Data []byte
+}
+
+// aaCallJSON is the JSON representation of a single AA call from xlayer-reth RPC.
+type aaCallJSON struct {
+	To   common.Address `json:"to"`
+	Data hexutil.Bytes  `json:"data"`
+}
+
+// aaCallsFromJSON converts the RPC-JSON calls format to RLP.
+// Accepts both structured JSON ([[{to,data},...],…]) from xlayer-reth and
+// hex-encoded RLP strings ("0x…") from Go round-trips.
+func aaCallsFromJSON(raw json.RawMessage) (rlp.RawValue, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		b, err := rlp.EncodeToBytes([][]aaCallRLP{})
+		return rlp.RawValue(b), err
+	}
+	s := string(raw)
+	if len(s) > 2 && s[0] == '"' && s[1] == '0' && s[2] == 'x' {
+		var hexStr hexutil.Bytes
+		if err := json.Unmarshal(raw, &hexStr); err != nil {
+			return nil, err
+		}
+		return rlp.RawValue(hexStr), nil
+	}
+	var phases [][]aaCallJSON
+	if err := json.Unmarshal(raw, &phases); err != nil {
+		return nil, fmt.Errorf("calls unmarshal: %w", err)
+	}
+	rlpPhases := make([][]aaCallRLP, len(phases))
+	for i, phase := range phases {
+		rlpPhases[i] = make([]aaCallRLP, len(phase))
+		for j, call := range phase {
+			rlpPhases[i][j] = aaCallRLP{To: call.To, Data: []byte(call.Data)}
+		}
+	}
+	b, err := rlp.EncodeToBytes(rlpPhases)
+	return rlp.RawValue(b), err
+}
+
+// aaAccountChangesFromJSON converts the RPC-JSON accountChanges to RLP.
+// Structured JSON arrays from xlayer-reth and hex-encoded RLP strings are both handled.
+// Non-empty structured arrays are not yet supported.
+func aaAccountChangesFromJSON(raw json.RawMessage) (rlp.RawValue, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		b, err := rlp.EncodeToBytes([]struct{}{})
+		return rlp.RawValue(b), err
+	}
+	s := string(raw)
+	if len(s) > 2 && s[0] == '"' && s[1] == '0' && s[2] == 'x' {
+		var hexStr hexutil.Bytes
+		if err := json.Unmarshal(raw, &hexStr); err != nil {
+			return nil, err
+		}
+		return rlp.RawValue(hexStr), nil
+	}
+	var arr []json.RawMessage
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return nil, fmt.Errorf("accountChanges unmarshal: %w", err)
+	}
+	if len(arr) == 0 {
+		b, err := rlp.EncodeToBytes([]struct{}{})
+		return rlp.RawValue(b), err
+	}
+	return nil, fmt.Errorf("non-empty accountChanges not yet supported in JSON decode")
 }
 
 // UnmarshalJSON unmarshals from JSON.
@@ -590,6 +704,56 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 		if dec.Nonce != nil {
 			inner = &depositTxWithNonce{DepositTx: itx, EffectiveNonce: uint64(*dec.Nonce)}
 		}
+
+	case AATxType:
+		var itx AATx
+		inner = &itx
+		if dec.ChainID != nil {
+			itx.ChainID = dec.ChainID.ToInt().Uint64()
+		}
+		// Wire `from` is zero (RLP 0x80) for EOA-mode. The JSON `from` field currently
+		// carries the recovered sender (injected by xlayer-reth), not the wire value.
+		// Always keep From=zero so MarshalBinary produces the correct EOA-mode wire bytes.
+		// TODO: once xlayer-reth serializes wire `from` (null for EOA, addr for explicit),
+		// switch to: if dec.From != nil { itx.From = *dec.From }
+		if dec.GasPrice == nil {
+			return errors.New("missing required field 'gasPrice' for AA transaction")
+		}
+		itx.GasPrice = dec.GasPrice.ToInt()
+		if dec.Gas == nil {
+			return errors.New("missing required field 'gas' for AA transaction")
+		}
+		itx.Gas = uint64(*dec.Gas)
+		if dec.NonceKey != nil {
+			itx.NonceKey = dec.NonceKey.ToInt()
+		} else {
+			itx.NonceKey = new(big.Int)
+		}
+		if dec.NonceSequence != nil {
+			itx.NonceSequence = uint64(*dec.NonceSequence)
+		}
+		if dec.Expiry != nil {
+			itx.Expiry = uint64(*dec.Expiry)
+		}
+		var aaErr error
+		itx.AccountChanges, aaErr = aaAccountChangesFromJSON(dec.AccountChanges)
+		if aaErr != nil {
+			return fmt.Errorf("AA accountChanges: %w", aaErr)
+		}
+		itx.Calls, aaErr = aaCallsFromJSON(dec.Calls)
+		if aaErr != nil {
+			return fmt.Errorf("AA calls: %w", aaErr)
+		}
+		if dec.Payer != nil {
+			itx.Payer = *dec.Payer
+		}
+		if dec.SenderAuth != nil {
+			itx.SenderAuth = []byte(*dec.SenderAuth)
+		}
+		if dec.PayerAuth != nil {
+			itx.PayerAuth = []byte(*dec.PayerAuth)
+		}
+
 	default:
 		return ErrTxTypeNotSupported
 	}
