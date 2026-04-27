@@ -40,8 +40,7 @@ const (
 	TrieUpdateMs
 	AccountCommitMs
 	StorageCommitMs
-	SnapshotCommitMs
-	TrieDBCommitMs
+	DatabaseCommitMs
 
 	// Propose-stage timings
 	ProposeTotalMs
@@ -161,8 +160,7 @@ func (l *statisticsInstance) CombinedSummary(pstat Statistics) string {
 	trieUpd := l.durations[TrieUpdateMs]
 	accCommit := l.durations[AccountCommitMs]
 	storCommit := l.durations[StorageCommitMs]
-	snapCommit := l.durations[SnapshotCommitMs]
-	triedbCommit := l.durations[TrieDBCommitMs]
+	dbCommit := l.durations[DatabaseCommitMs]
 
 	// Propose (access propose stats directly, no copy)
 	var pTotal, pPrepare, pExec, pPrague, pAssemble time.Duration
@@ -181,7 +179,7 @@ func (l *statisticsInstance) CombinedSummary(pstat Statistics) string {
 	}
 
 	line := fmt.Sprintf(
-		"Block<%d>, Txs<%d> GasUsed<%d>, BlockTime<%s> { Mine[%s] { Prepare[%s], execute[%s], Prague[%s], assemble[%s] , State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s] } }, Insert[%s] { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] , Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], snapCommit[%s], trieDBCommit[%s] } }",
+		"Block<%d>, Txs<%d> GasUsed<%d>, BlockTime<%s> { Mine[%s] { Prepare[%s], execute[%s], Prague[%s], assemble[%s] , State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s] } }, Insert[%s] { execute[%s], validate[%s], crossValidate[%s], evmExecPure[%s], validatePure[%s] , Write { writeBlock[%s] }, State { accRead[%s], storRead[%s], accUpdate[%s], storUpdate[%s], accHash[%s], trieUpdate[%s] }, Commits { accCommit[%s], storCommit[%s], dbCommit[%s] } }",
 		block,
 		tx,
 		gasUsed,
@@ -196,7 +194,7 @@ func (l *statisticsInstance) CombinedSummary(pstat Statistics) string {
 		common.PrettyDuration(exec), common.PrettyDuration(validate), common.PrettyDuration(xvalidate), common.PrettyDuration(evmPure), common.PrettyDuration(valPure),
 		common.PrettyDuration(writeBlk),
 		common.PrettyDuration(accRead), common.PrettyDuration(storRead), common.PrettyDuration(accUpdate), common.PrettyDuration(storUpdate), common.PrettyDuration(accHash), common.PrettyDuration(trieUpd),
-		common.PrettyDuration(accCommit), common.PrettyDuration(storCommit), common.PrettyDuration(snapCommit), common.PrettyDuration(triedbCommit),
+		common.PrettyDuration(accCommit), common.PrettyDuration(storCommit), common.PrettyDuration(dbCommit),
 	)
 	log.Info(line)
 	return line
