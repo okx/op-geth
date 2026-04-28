@@ -59,6 +59,7 @@ func (b *stubBatch) ValueSize() int                      { return 0 }
 func (b *stubBatch) Write() error                        { return ErrRocksDBNotSupported }
 func (b *stubBatch) Reset()                              {}
 func (b *stubBatch) Replay(w ethdb.KeyValueWriter) error { return ErrRocksDBNotSupported }
+func (b *stubBatch) Close()                              {}
 
 // stubIterator implements ethdb.Iterator for the stub
 type stubIterator struct{}
