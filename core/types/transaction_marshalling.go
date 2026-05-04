@@ -205,6 +205,13 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		enc.IsSystemTx = &itx.IsSystemTransaction
 		enc.Nonce = (*hexutil.Uint64)(&itx.EffectiveNonce)
 		// other fields will show up as null.
+
+	case *AaTx:
+		// EIP-8130 opaque round-trip: emit only type + hash. The Go side
+		// does not have access to the inner fields (nonce_key, sender_auth,
+		// calls, etc.) — those are only meaningful to op-reth (Rust). Other
+		// fields will show up as null.
+		_ = itx
 	}
 	return json.Marshal(&enc)
 }
@@ -590,12 +597,30 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 		if dec.Nonce != nil {
 			inner = &depositTxWithNonce{DepositTx: itx, EffectiveNonce: uint64(*dec.Nonce)}
 		}
+
+	case AaTxType:
+		// EIP-8130 (Native AA) opaque round-trip path. op-node and op-batcher
+		// (the only Go consumers in our stack) never inspect AA tx fields —
+		// they only need to forward the transaction by type+hash. Real AA
+		// logic lives in op-reth (Rust). We therefore store an empty payload
+		// and trust the JSON-provided hash.
+		inner = new(AaTx)
 	default:
 		return ErrTxTypeNotSupported
 	}
 
 	// Now set the inner transaction.
 	tx.setDecoded(inner, 0)
+
+	// For EIP-8130 AA transactions, the JSON does not include enough
+	// information to reproduce the canonical RLP payload (the inner fields
+	// like nonce_key, sender_auth, calls etc. are not part of the standard
+	// txJSON struct). Trust the hash field from the RPC response instead of
+	// recomputing it.
+	if dec.Type == AaTxType {
+		h := dec.Hash
+		tx.hash.Store(&h)
+	}
 
 	return nil
 }
