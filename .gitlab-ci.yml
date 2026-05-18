@@ -1,0 +1,108 @@
+---
+# GitLab CI/CD for op-geth (OKX X Layer fork)
+#
+# Stages:
+#   build  — compile the project
+#   test   — run unit tests
+#   report — notify OKone that an Epic has been released (non-OKone deploy path)
+#
+# Required CI/CD variables (set in GitLab project Settings → CI/CD → Variables):
+#   OKONE_APP_KEY     – OKone Open API access key
+#   OKONE_APP_SECRET  – OKone Open API secret key (mark as "masked")
+
+stages:
+  - build
+  - test
+  - report
+
+# ---------------------------------------------------------------------------
+# Build
+# ---------------------------------------------------------------------------
+build:
+  stage: build
+  image: golang:1.22
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - go build ./...
+  cache:
+    key: go-mod-$CI_COMMIT_REF_SLUG
+    paths:
+      - .go/pkg/mod/
+
+# ---------------------------------------------------------------------------
+# Unit tests
+# ---------------------------------------------------------------------------
+test:p2p:
+  stage: test
+  image: golang:1.22
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - go test ./p2p/... -v -count=1
+  cache:
+    key: go-mod-$CI_COMMIT_REF_SLUG
+    paths:
+      - .go/pkg/mod/
+
+test:ethconfig:
+  stage: test
+  image: golang:1.22
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - go test ./eth/ethconfig/... -v -count=1
+  cache:
+    key: go-mod-$CI_COMMIT_REF_SLUG
+    paths:
+      - .go/pkg/mod/
+
+# ---------------------------------------------------------------------------
+# PR Measurement Reporting (non-OKone release path)
+#
+# After a commit lands on the default branch, extract JIRA Epic keys from the
+# merged commit(s) and report each one to the OKone change-reporting API.
+# This records the release in the PR measurement Grafana dashboard:
+#   https://office-grafana.okg.com/d/bfjxs40s37j7kf/
+#
+# Ref: https://okg-block.sg.larksuite.com/wiki/TJaGwmf3UiMbuZkpy27lbfs8gvg
+# ---------------------------------------------------------------------------
+report-pr-to-okone:
+  stage: report
+  image: python:3.11-slim
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+  variables:
+    # Default API base URL (office/swimlane environment)
+    OKONE_API_BASE_URL: "https://okoneopenapi.okg.com/apigw"
+  script:
+    - |
+      set -e
+
+      # Extract JIRA Epic keys from commit messages pushed in this pipeline.
+      # We look for lines matching "Jira: KEY" in the git log.
+      if [ -n "$CI_COMMIT_BEFORE_SHA" ] && [ "$CI_COMMIT_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+        LOG_RANGE="${CI_COMMIT_BEFORE_SHA}..${CI_COMMIT_SHA}"
+      else
+        LOG_RANGE="-1 ${CI_COMMIT_SHA}"
+      fi
+
+      JIRA_KEYS=$(git log $LOG_RANGE --format="%B" | grep -oE 'Jira: [A-Z][A-Z0-9_]+-[0-9]+' | awk '{print $2}' | sort -u)
+
+      if [ -z "$JIRA_KEYS" ]; then
+        echo "No JIRA Epic keys found in pushed commits — skipping OKone reporting."
+        exit 0
+      fi
+
+      echo "Found JIRA keys: $JIRA_KEYS"
+
+      for KEY in $JIRA_KEYS; do
+        echo "Reporting release of $KEY to OKone..."
+        python3 scripts/report_pr_release.py "$KEY"
+      done
+  needs:
+    - job: test:p2p
+    - job: test:ethconfig
