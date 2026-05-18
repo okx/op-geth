@@ -12,20 +12,29 @@ var DefaultXLayerConfig = XLayerConfig{
 	},
 	Monitor: MonitorConfig{
 		EnableTraceLog: false,
-		TraceLogPath:   "", // Empty by default
+		TraceLogPath:   "",
+	},
+	P2P: P2PConfig{
+		ETH69Compat: true,
 	},
 }
 
 // XLayerConfig is the X Layer config used on the eth backend
 type XLayerConfig struct {
-	LegacyPp MigrationConfig `toml:",omitempty"` // The erigon RPC endpoint URL for pre-migration blocks
-	Monitor  MonitorConfig   `toml:",omitempty"` // Transaction monitoring configuration
+	LegacyPp MigrationConfig `toml:",omitempty"`
+	Monitor  MonitorConfig   `toml:",omitempty"`
+	P2P      P2PConfig       `toml:",omitempty"`
+}
+
+// P2PConfig contains P2P-layer configuration for XLayer compatibility shims.
+type P2PConfig struct {
+	ETH69Compat bool `toml:",omitempty"`
 }
 
 type MigrationConfig struct {
-	MigrationBlock *uint64       `toml:",omitempty"` // Block height threshold for migration routing
-	PPRPCUrl       string        `toml:",omitempty"` // XLayer-Erigon RPC endpoint URL
-	PPRPCTimeout   time.Duration `toml:",omitempty"` // Timeout for PP RPC calls (default: 10s)
+	MigrationBlock *uint64       `toml:",omitempty"`
+	PPRPCUrl       string        `toml:",omitempty"`
+	PPRPCTimeout   time.Duration `toml:",omitempty"`
 }
 
 // MonitorConfig contains configuration for transaction monitoring

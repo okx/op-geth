@@ -81,7 +81,9 @@ description: "Domain term glossary for unified terminology across backend skills
 | `TxData` | Interface for underlying tx data; implemented by LegacyTx, DynamicFeeTx, AccessListTx, BlobTx, SetCodeTx | `core/types/transaction.go` |
 | `TxIndexingError` | ethapi error indicating tx indexing still in progress; JSON-RPC code -32000 | `internal/ethapi/errors.go` |
 | `VMError` | VM execution error with stable integer error code | `core/vm/errors.go` |
-| `XLayerConfig` | XLayer-specific eth backend config: LegacyPp (migration) and Monitor (trace log) | `eth/ethconfig/config_xlayer.go` |
+| `P2PConfig` | XLayer P2P configuration sub-struct containing `ETH69Compat` boolean field | `eth/ethconfig/config_xlayer.go` |
+| `SetETH69CompatEnabled` | Sets the runtime atomic flag controlling ETH69 capability stripping; called during startup wiring | `p2p/transport_xlayer.go` |
+| `XLayerConfig` | XLayer-specific eth backend config: LegacyPp (migration), Monitor (trace log), and P2P (ETH69 compat) | `eth/ethconfig/config_xlayer.go` |
 | `XLayerForkConfig` | Hardcoded fork time overrides for XLayer chains | `params/config_xlayer.go` |
 | `XLayerMainnetChainID` | Chain ID 196 for XLayer mainnet | `params/config_xlayer.go` |
 | `XLayerTestnetChainID` | Chain ID 1952 for XLayer testnet (Sepolia-based) | `params/config_xlayer.go` |

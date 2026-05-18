@@ -3,38 +3,54 @@ package p2p
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
+
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 )
 
-// doProtoHandshakeLegacy performs the legacy protocol handshake where we read the remote
-// handshake first, then send our own. This function includes special handling for Geth
-// clients: if the remote peer is a Geth node, we filter out ETH69 from our capabilities
-// to ensure compatibility.
+var (
+	eth69CompatEnabled atomic.Bool
+
+	eth69TrimCounter = metrics.NewRegisteredCounter("p2p/eth69/trimmed", nil)
+)
+
+func init() {
+	eth69CompatEnabled.Store(true)
+}
+
+// SetETH69CompatEnabled sets the ETH69 compatibility trim state.
+// Called once at process startup from cmd/utils.
+func SetETH69CompatEnabled(enabled bool) {
+	eth69CompatEnabled.Store(enabled)
+	if enabled {
+		log.Warn("P2P eth/69 compat trim active (op-geth<>geth peers will negotiate eth/68); disable with --p2p.eth69-compat=false once upstream is verified")
+	}
+}
+
 func (t *rlpxTransport) doProtoHandshakeLegacy(our *protoHandshake) (their *protoHandshake, err error) {
-	// Read the remote peer's handshake message first
 	if their, err = readProtocolHandshake(t); err != nil {
 		return nil, err
 	}
 
-	// Check if the remote peer is a Geth node by examining its client name
-	// Geth nodes typically have "Geth" or "geth" in their client identifier
 	handshakeToSend := our
-	if isGeth(their.Name) {
-		// For Geth clients, we need to filter out ETH69 protocol from our capabilities
-		// This is because Geth nodes may not fully support ETH69, so we only advertise
-		// ETH68 to ensure successful protocol negotiation
-		handshakeToSend = trimETH69(our)
+	trimmed := false
+
+	if eth69CompatEnabled.Load() && isGeth(their.Name) {
+		var ourTrimmed, theirTrimmed bool
+		handshakeToSend, ourTrimmed = trimETH69(our)
+		their, theirTrimmed = trimETH69(their)
+		trimmed = ourTrimmed || theirTrimmed
 	}
 
-	// Send our handshake message (filtered if Geth, original otherwise)
 	err = Send(t, handshakeMsg, handshakeToSend)
 	if err != nil {
 		return nil, fmt.Errorf("write error: %v", err)
 	}
-	// If the protocol version supports Snappy encoding, upgrade immediately
 	t.conn.SetSnappy(their.Version >= snappyProtocolVersion)
 
-	if isGeth(their.Name) {
-		their = trimETH69(their)
+	if trimmed {
+		eth69TrimCounter.Inc(1)
 	}
 
 	return their, nil
@@ -44,16 +60,23 @@ func isGeth(name string) bool {
 	return strings.Contains(name, "Geth") || strings.Contains(name, "geth")
 }
 
-func trimETH69(phs *protoHandshake) *protoHandshake {
-	newCaps := make([]Cap, 0, len(phs.Caps))
+// trimETH69 returns a copy of the handshake with eth/69 removed from caps.
+// The second return value indicates whether eth/69 was actually present and removed.
+// The input handshake is never mutated.
+func trimETH69(phs *protoHandshake) (*protoHandshake, bool) {
 	for _, c := range phs.Caps {
 		if c.Name == "eth" && c.Version == 69 {
-			continue
+			newCaps := make([]Cap, 0, len(phs.Caps)-1)
+			for _, cc := range phs.Caps {
+				if cc.Name == "eth" && cc.Version == 69 {
+					continue
+				}
+				newCaps = append(newCaps, cc)
+			}
+			filteredHandshake := *phs
+			filteredHandshake.Caps = newCaps
+			return &filteredHandshake, true
 		}
-		newCaps = append(newCaps, c)
 	}
-	// Create a deep copy of the handshake with filtered caps
-	filteredHandshake := *phs
-	filteredHandshake.Caps = newCaps
-	return &filteredHandshake
+	return phs, false
 }

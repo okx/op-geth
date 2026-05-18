@@ -6,6 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
@@ -46,6 +47,14 @@ var (
 		Value: false,
 	}
 
+	ETH69CompatFlag = &cli.BoolFlag{
+		Name:     "p2p.eth69-compat",
+		Usage:    "Strip eth/69 capability from Geth peers during legacy handshake (disable once upstream interop verified)",
+		Value:    true,
+		Category: flags.XLayerCategory,
+		EnvVars:  []string{"OP_P2P_ETH69_COMPAT"},
+	}
+
 	// XLayerFlags are the default flags for X Layer features
 	XLayerFlags = []cli.Flag{
 		MigrationBlockFlag,
@@ -53,6 +62,7 @@ var (
 		PPRPCTimeoutFlag,
 		TraceLogPath,
 		EnableTraceLog,
+		ETH69CompatFlag,
 	}
 )
 
@@ -60,6 +70,14 @@ var (
 func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setMigrationXLayer(ctx, cfg)
 	setMonitorXLayer(ctx, cfg)
+	setP2PXLayer(ctx, cfg)
+}
+
+func setP2PXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(ETH69CompatFlag.Name) {
+		cfg.XLayer.P2P.ETH69Compat = ctx.Bool(ETH69CompatFlag.Name)
+	}
+	p2p.SetETH69CompatEnabled(cfg.XLayer.P2P.ETH69Compat)
 }
 
 func setMigrationXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
