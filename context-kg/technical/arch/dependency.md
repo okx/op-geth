@@ -72,7 +72,7 @@ description: "Upstream callers, inter-module deps, storage/middleware, external 
 
 [Rule] `eth/handler_eth.go`: Transaction gossip must be filtered through `txGossipAllowed`; `NoTxGossip`, `TxGossipNetRestrict`, `TxGossipTrustedPeersOnly` flags all gate tx propagation.
 
-[Rule] `p2p/transport_xlayer.go`: ETH69 capability must be stripped for Geth peers before handshake.
+[Rule] `p2p/transport_xlayer.go`: When `--p2p.eth69-compat=true` (default), ETH69 capability must be stripped for Geth peers before handshake. Disable with `--p2p.eth69-compat=false` once upstream interop is verified.
 
 [Rule] `core/txpool/ingress_filters.go`: Interop txs must pass supervisor `CheckAccessList` at `CrossUnsafe` safety level; supervisor unavailability = tx rejection.
 

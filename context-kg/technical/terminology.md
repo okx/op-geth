@@ -81,7 +81,8 @@ description: "Domain term glossary for unified terminology across backend skills
 | `TxData` | Interface for underlying tx data; implemented by LegacyTx, DynamicFeeTx, AccessListTx, BlobTx, SetCodeTx | `core/types/transaction.go` |
 | `TxIndexingError` | ethapi error indicating tx indexing still in progress; JSON-RPC code -32000 | `internal/ethapi/errors.go` |
 | `VMError` | VM execution error with stable integer error code | `core/vm/errors.go` |
-| `XLayerConfig` | XLayer-specific eth backend config: LegacyPp (migration) and Monitor (trace log) | `eth/ethconfig/config_xlayer.go` |
+| `P2PXLayerConfig` | XLayer-specific P2P config: `ETH69Compat bool` (default true) — controls ETH69 trim for Geth peers | `eth/ethconfig/config_xlayer.go` |
+| `XLayerConfig` | XLayer-specific eth backend config: LegacyPp (migration), Monitor (trace log), and P2P (ETH69 compat) | `eth/ethconfig/config_xlayer.go` |
 | `XLayerForkConfig` | Hardcoded fork time overrides for XLayer chains | `params/config_xlayer.go` |
 | `XLayerMainnetChainID` | Chain ID 196 for XLayer mainnet | `params/config_xlayer.go` |
 | `XLayerTestnetChainID` | Chain ID 1952 for XLayer testnet (Sepolia-based) | `params/config_xlayer.go` |

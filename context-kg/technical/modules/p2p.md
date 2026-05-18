@@ -25,7 +25,7 @@ description: "Module design for p2p: networking, peer discovery, RLPx transport,
 | `Server` | `Config`, `listener`, `discmix`, `peers` | Main P2P server |
 | `Config` | `MaxPeers`, `Protocols`, `BootstrapNodes`, `StaticNodes` | Server configuration |
 | `Peer` | `rw`, `caps`, `log` | Connected peer |
-| `transport_xlayer` | `doProtoHandshakeLegacy`, `trimETH69` | XLayer ETH69 compat layer |
+| `transport_xlayer` | `eth69CompatEnabled`, `eth69TrimmedCounter`, `SetETH69Compat`, `trimETH69Counted`, `doProtoHandshakeLegacy`, `isGeth` | XLayer ETH69 compat layer: flag-gated trim + counter metric |
 
 ## Dependencies
 
@@ -39,6 +39,6 @@ description: "Module design for p2p: networking, peer discovery, RLPx transport,
 
 [Pitfall] ETH69 stripped only by client-name heuristic: `isGeth()` checks for "Geth"/"geth" substring in peer name — custom forks not matching will negotiate ETH69 and may break. Source: `p2p/transport_xlayer.go`.
 
-[Pitfall] `trimETH69` modifies both outgoing caps AND received remote handshake — recorded peer capabilities will not match what was actually sent. Source: `p2p/transport_xlayer.go:25,37`.
+[Pitfall] **FIXED (XLOP-1045)**: `trimETH69Counted` now returns a copy of the handshake struct — original `protoHandshake` is never mutated. The caller reassigns the `their` local variable. Previously `trimETH69` modified the struct in place. Source: `p2p/transport_xlayer.go:66-82`.
 
-[Warning] ETH69 compatibility filter is name-based heuristic — forks or custom builds will not be filtered. Source: `p2p/transport_xlayer.go`.
+[Warning] ETH69 compatibility filter is name-based heuristic — forks or custom builds will not be filtered. Behavior is now flag-gated via `--p2p.eth69-compat` (default: true = trim active). Source: `p2p/transport_xlayer.go`.

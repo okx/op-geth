@@ -6,6 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
@@ -45,6 +46,14 @@ var (
 		Usage: "Enable transaction tracing",
 		Value: false,
 	}
+	// P2P ETH69 compatibility flag
+	ETH69CompatFlag = &cli.BoolFlag{
+		Name:     "p2p.eth69-compat",
+		Usage:    "Enable ETH69 capability trim for Geth peer compatibility (disable once upstream eth/69 interop is verified)",
+		Value:    true,
+		Category: flags.XLayerCategory,
+		EnvVars:  []string{"OP_P2P_ETH69_COMPAT"},
+	}
 
 	// XLayerFlags are the default flags for X Layer features
 	XLayerFlags = []cli.Flag{
@@ -53,6 +62,7 @@ var (
 		PPRPCTimeoutFlag,
 		TraceLogPath,
 		EnableTraceLog,
+		ETH69CompatFlag,
 	}
 )
 
@@ -60,6 +70,7 @@ var (
 func SetXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	setMigrationXLayer(ctx, cfg)
 	setMonitorXLayer(ctx, cfg)
+	setP2PXLayer(ctx, cfg)
 }
 
 func setMigrationXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
@@ -113,4 +124,11 @@ func setMonitorXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
 		// This matches reth's behavior of using a default path when enabled
 		cfg.XLayer.Monitor.TraceLogPath = "logs/trace.log"
 	}
+}
+
+func setP2PXLayer(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(ETH69CompatFlag.Name) {
+		cfg.XLayer.P2P.ETH69Compat = ctx.Bool(ETH69CompatFlag.Name)
+	}
+	p2p.SetETH69Compat(cfg.XLayer.P2P.ETH69Compat)
 }

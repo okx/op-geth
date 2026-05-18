@@ -53,7 +53,7 @@ description: "Highest-authority rules — all Skills defer to this on conflicts"
 
 [Rule] `core/vm/interface.go`: EVM state must be accessed exclusively through the `vm.StateDB` interface — never use a concrete state type in VM/opcode code. Reason: enables tracing, stateless execution, and test backends.
 
-[Rule] `p2p/transport_xlayer.go`: When remote peer is identified as a Geth node, ETH69 capability must be stripped before handshake. Reason: ETH69 protocol compatibility issue with standard Geth nodes.
+[Rule] `p2p/transport_xlayer.go`: When `--p2p.eth69-compat=true` (default), ETH69 capability is stripped for Geth peers before handshake via `trimETH69Counted`. When set to false, no stripping occurs and eth/69 is negotiated normally. Counter metric `p2p/handshake/eth69/trimmed` tracks connections where trim fired. Reason: ETH69 protocol compatibility issue with standard Geth nodes; flag allows safe rollout of eth/69 once upstream interop is verified.
 
 [Rule] `triedb/database.go`: TrieDB backend selection (hashdb vs pathdb) is determined at init; must never switch scheme on existing database. Reason: schema mismatch causes data corruption.
 
