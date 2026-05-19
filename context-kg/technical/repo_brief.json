@@ -1,0 +1,196 @@
+{
+  "version": "1",
+  "generated_at": "2026-05-13 10:41:28",
+  "generated_by": "jianguo.zhu@okg.com",
+  "repo": {
+    "name": "op-geth",
+    "remote_url": "git@gitlab.okg.com:github/op-geth.git",
+    "branch": "zjg/context-kg"
+  },
+  "stack_hint": {
+    "primary_language": "go",
+    "frameworks": ["go-ethereum (geth)", "OP Stack (Optimism)"],
+    "runtime": "go 1.24.0",
+    "polyglot": {
+      "go": "918",
+      "c": "15",
+      "javascript": "14",
+      "header": "83",
+      "assembly": "8",
+      "solidity": "5",
+      "python": "2"
+    }
+  },
+  "core_functions": [
+    "evm_execution",
+    "block_building_sequencer",
+    "block_import_validation",
+    "transaction_pool_management",
+    "state_trie_management",
+    "engine_api_cl_el_bridge",
+    "p2p_peer_discovery_sync",
+    "json_rpc_api_serving",
+    "chain_fork_management",
+    "rollup_l1_cost_calculation",
+    "xlayer_migration_routing",
+    "superchain_config_loading"
+  ],
+  "core_business": "OP Stack (Optimism) fork of go-ethereum serving as the execution layer for XLayer L2 chain (mainnet chainID 196, testnet chainID 1952). Handles EVM execution, block building/import via Engine API from op-node consensus client, transaction pool with rollup L1+operator fee calculation, state/trie management with LevelDB/Pebble/RocksDB backends, P2P sync, JSON-RPC API serving, and XLayer-specific migration routing to legacy Erigon node for pre-migration blocks.",
+  "core_modules": [
+    {
+      "path": "core",
+      "role": "core_business_module",
+      "description": "Blockchain core: canonical chain management, EVM execution, transaction pool, state database, raw storage, genesis initialization",
+      "sub_modules": [
+        {
+          "path": "core/vm",
+          "function": "Ethereum Virtual Machine: opcode interpreter, gas metering, precompiled contracts",
+          "key_components": ["EVM", "Interpreter", "StateDB", "Contract"]
+        },
+        {
+          "path": "core/txpool",
+          "function": "Transaction pool: validation, subpool management (legacy, blob), rollup cost, ingress filters",
+          "key_components": ["TxPool", "SubPool", "ValidateTransaction", "IngressFilter"]
+        },
+        {
+          "path": "core/state",
+          "function": "State database: account/storage state access, snapshot layer, journal",
+          "key_components": ["StateDB", "Database", "Snapshot"]
+        },
+        {
+          "path": "core/rawdb",
+          "function": "Raw database operations: block/receipt/header storage, ancient freezer, chain metadata",
+          "key_components": ["freezerdb", "nofreezedb", "ReadCanonicalHash"]
+        },
+        {
+          "path": "core/types",
+          "function": "Core data types: Block, Header, Transaction, Receipt with OP Stack extensions",
+          "key_components": ["Block", "Header", "Transaction", "Receipt"]
+        }
+      ]
+    },
+    {
+      "path": "eth",
+      "role": "core_business_module",
+      "description": "Ethereum service: full node backend, P2P handler, Engine API catalyst, downloader, filters, tracers",
+      "sub_modules": [
+        {
+          "path": "eth/catalyst",
+          "function": "Engine API: CL-EL bridge for block building and import via ForkchoiceUpdated/NewPayload/GetPayload",
+          "key_components": ["ConsensusAPI", "checkOptimismPayload", "checkOptimismPayloadAttributes"]
+        },
+        {
+          "path": "eth/downloader",
+          "function": "Block/state synchronization: full sync, snap sync, beacon sync",
+          "key_components": ["Downloader", "BeaconSync"]
+        },
+        {
+          "path": "eth/filters",
+          "function": "Log/event filtering and subscription management",
+          "key_components": ["FilterAPI", "FilterSystem"]
+        },
+        {
+          "path": "eth/tracers",
+          "function": "EVM execution tracing: call tracer, prestate tracer, flatcall tracer",
+          "key_components": ["TracerAPI", "callTracer"]
+        }
+      ]
+    },
+    {
+      "path": "consensus",
+      "role": "core_business_module",
+      "description": "Consensus engine interface and implementations: beacon (PoS), clique (PoA), ethash (PoW legacy)",
+      "sub_modules": [
+        {
+          "path": "consensus/beacon",
+          "function": "Beacon consensus engine for post-merge PoS",
+          "key_components": ["Beacon"]
+        }
+      ]
+    },
+    {
+      "path": "miner",
+      "role": "core_business_module",
+      "description": "Block building: payload assembly, transaction ordering, OP Stack sequencer support",
+      "sub_modules": []
+    },
+    {
+      "path": "node",
+      "role": "core_business_module",
+      "description": "Node lifecycle: service container, RPC server hosting (HTTP/WS/IPC/Auth), database opener",
+      "sub_modules": []
+    },
+    {
+      "path": "p2p",
+      "role": "core_business_module",
+      "description": "P2P networking: peer connections, discovery v4/v5, RLPx transport, XLayer ETH69 compatibility",
+      "sub_modules": []
+    },
+    {
+      "path": "rpc",
+      "role": "shared_library",
+      "description": "JSON-RPC 2.0 framework: service registry, reflection-based dispatch, subscription support",
+      "sub_modules": []
+    },
+    {
+      "path": "trie",
+      "role": "core_business_module",
+      "description": "Merkle Patricia Trie implementation",
+      "sub_modules": []
+    },
+    {
+      "path": "triedb",
+      "role": "core_business_module",
+      "description": "Trie database: path-based and hash-based backends for state trie node storage",
+      "sub_modules": [
+        {
+          "path": "triedb/pathdb",
+          "function": "Path-based state scheme with diff layers and state history",
+          "key_components": ["Database", "layerTree"]
+        },
+        {
+          "path": "triedb/hashdb",
+          "function": "Hash-based legacy state scheme",
+          "key_components": ["Database"]
+        }
+      ]
+    },
+    {
+      "path": "ethdb",
+      "role": "shared_library",
+      "description": "Database abstraction layer: KV store and ancient/freezer interfaces",
+      "sub_modules": []
+    },
+    {
+      "path": "params",
+      "role": "shared_library",
+      "description": "Chain parameters, fork configurations, OP Stack and XLayer overrides",
+      "sub_modules": []
+    },
+    {
+      "path": "common",
+      "role": "shared_library",
+      "description": "Shared types (Hash, Address), utilities, LRU caches, hex encoding, monotonic clock",
+      "sub_modules": []
+    },
+    {
+      "path": "internal/ethapi",
+      "role": "core_business_module",
+      "description": "Public Ethereum JSON-RPC API implementation via Backend interface",
+      "sub_modules": []
+    },
+    {
+      "path": "superchain",
+      "role": "shared_library",
+      "description": "OP Stack superchain network configuration loading from embedded TOML",
+      "sub_modules": []
+    },
+    {
+      "path": "cmd/geth",
+      "role": "packaging_bootstrap",
+      "description": "Main geth binary: CLI entry point, flag definitions, configuration loading",
+      "sub_modules": []
+    }
+  ],
+  "summary": "Backend Go 1.24 OP Stack fork of go-ethereum for XLayer L2 (chainID 196/1952): EVM, Engine API, txpool with rollup fees, Pebble/LevelDB storage, P2P sync, JSON-RPC API"
+}

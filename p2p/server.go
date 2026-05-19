@@ -511,6 +511,7 @@ func (srv *Server) setupLocalNode() error {
 		srv.ourHandshake.Caps = append(srv.ourHandshake.Caps, p.cap())
 	}
 	slices.SortFunc(srv.ourHandshake.Caps, Cap.Cmp)
+	TrimOurHandshakeCaps(srv.ourHandshake)
 
 	// Create the local node.
 	db, err := enode.OpenDB(srv.NodeDatabase)
@@ -990,7 +991,7 @@ func (srv *Server) setupConn(c *conn, dialDest *enode.Node) error {
 	}
 
 	// Run the capability negotiation handshake.
-	phs, err := c.doProtoHandshake(srv.ourHandshake)
+	phs, err := doProtoHandshakeForConn(c, srv.ourHandshake)
 	if err != nil {
 		clog.Trace("Failed p2p handshake", "err", err)
 		return fmt.Errorf("%w: %v", errProtoHandshakeError, err)
