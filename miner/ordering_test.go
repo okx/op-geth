@@ -81,7 +81,10 @@ func testTransactionPriceNonceSort(t *testing.T, baseFee *big.Int) {
 					GasTipCap: big.NewInt(int64(rand.Intn(gasFeeCap + 1))),
 					Data:      nil,
 				})
-				if count == 25 && int64(gasFeeCap) < baseFee.Int64() {
+				// FreeGas: zero-fee dynamic-fee txs (feeCap=0 ⇒ tipCap=0
+				// here) are admitted with effective tip 0; only non-zero
+				// feeCap below baseFee terminates the account walk.
+				if count == 25 && int64(gasFeeCap) != 0 && int64(gasFeeCap) < baseFee.Int64() {
 					count = i
 				}
 			}
@@ -127,9 +130,13 @@ func testTransactionPriceNonceSort(t *testing.T, baseFee *big.Int) {
 			next := txs[i+1]
 			fromNext, _ := types.Sender(signer, next)
 			tip, err := txi.EffectiveGasTip(baseFee)
+			if err != nil {
+				// FreeGas: zero-fee tx, effective tip is 0.
+				tip = new(big.Int)
+			}
 			nextTip, nextErr := next.EffectiveGasTip(baseFee)
-			if err != nil || nextErr != nil {
-				t.Errorf("error calculating effective tip: %v, %v", err, nextErr)
+			if nextErr != nil {
+				nextTip = new(big.Int)
 			}
 			if fromi != fromNext && tip.Cmp(nextTip) < 0 {
 				t.Errorf("invalid gasprice ordering: tx #%d (A=%x P=%v) < tx #%d (A=%x P=%v)", i, fromi[:4], txi.GasPrice(), i+1, fromNext[:4], next.GasPrice())

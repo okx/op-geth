@@ -174,6 +174,7 @@ type Message struct {
 
 	IsSystemTx     bool                 // IsSystemTx indicates the message, if also a deposit, does not emit gas usage.
 	IsDepositTx    bool                 // IsDepositTx indicates the message is force-included and can persist a mint.
+	IsFreeGasTx    bool                 // IsFreeGasTx indicates the message is exempt from fee deduction (per-block FreeGasConfig predeploy).
 	Mint           *big.Int             // Mint is the amount to mint before EVM processing, or nil if there is no minting.
 	RollupCostData types.RollupCostData // RollupCostData caches data to compute the fee we charge for data availability
 }
@@ -353,6 +354,40 @@ func (st *stateTransition) preCheck() error {
 			return nil
 		}
 		return st.gp.SubGas(st.msg.GasLimit) // gas used by deposits may not be used by other txs
+	}
+	if st.msg.IsFreeGasTx {
+		// Free-gas transactions: nonce must still be enforced (these are
+		// ordinary signed EOA txs), but the sender pays no fees. Treat the
+		// remaining gas as if pre-paid by the system: subtract the tx gas
+		// limit from the block gas pool (so a single block can only host a
+		// bounded amount of free-gas work), then skip buyGas entirely.
+		msg := st.msg
+		if !msg.SkipNonceChecks {
+			stNonce := st.state.GetNonce(msg.From)
+			if msgNonce := msg.Nonce; stNonce < msgNonce {
+				return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooHigh,
+					msg.From.Hex(), msgNonce, stNonce)
+			} else if stNonce > msgNonce {
+				return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooLow,
+					msg.From.Hex(), msgNonce, stNonce)
+			} else if stNonce+1 < stNonce {
+				return fmt.Errorf("%w: address %v, nonce: %d", ErrNonceMax,
+					msg.From.Hex(), stNonce)
+			}
+		}
+		if !msg.SkipTransactionChecks {
+			code := st.state.GetCode(msg.From)
+			_, delegated := types.ParseDelegation(code)
+			if len(code) > 0 && !delegated {
+				return fmt.Errorf("%w: address %v, len(code): %d", ErrSenderNoEOA, msg.From.Hex(), len(code))
+			}
+		}
+		if err := st.gp.SubGas(msg.GasLimit); err != nil {
+			return err
+		}
+		st.initialGas = msg.GasLimit
+		st.gasRemaining = msg.GasLimit
+		return nil
 	}
 	// Only check transactions that are not fake
 	msg := st.msg
@@ -674,6 +709,9 @@ func (st *stateTransition) innerExecute() (*ExecutionResult, error) {
 		// Skip fee payment when NoBaseFee is set and the fee fields
 		// are 0. This avoids a negative effectiveTip being applied to
 		// the coinbase when simulating calls.
+	} else if st.msg.IsFreeGasTx {
+		// Free-gas transactions: skip all fee distribution (coinbase tip,
+		// L1 base fee, L1 data fee, operator fee).
 	} else {
 		fee := new(uint256.Int).SetUint64(st.gasUsed())
 		fee.Mul(fee, effectiveTipU256)

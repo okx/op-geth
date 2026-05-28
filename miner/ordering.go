@@ -40,11 +40,19 @@ func newTxWithMinerFee(tx *txpool.LazyTransaction, from common.Address, baseFee 
 	tip := new(uint256.Int).Set(tx.GasTipCap)
 	if baseFee != nil {
 		if tx.GasFeeCap.Cmp(baseFee) < 0 {
-			return nil, types.ErrGasFeeCapTooLow
-		}
-		tip = new(uint256.Int).Sub(tx.GasFeeCap, baseFee)
-		if tip.Gt(tx.GasTipCap) {
-			tip = tx.GasTipCap
+			// FreeGas: admit dynamic-fee txs with both caps zeroed and rank
+			// them at the bottom of the heap (effective tip 0). All other
+			// fee-cap-below-basefee cases remain unprofitable and are dropped.
+			if tx.GasFeeCap.IsZero() && tx.GasTipCap.IsZero() {
+				tip = new(uint256.Int)
+			} else {
+				return nil, types.ErrGasFeeCapTooLow
+			}
+		} else {
+			tip = new(uint256.Int).Sub(tx.GasFeeCap, baseFee)
+			if tip.Gt(tx.GasTipCap) {
+				tip = tx.GasTipCap
+			}
 		}
 	}
 	return &txWithMinerFee{

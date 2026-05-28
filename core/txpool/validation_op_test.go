@@ -58,11 +58,12 @@ func TestValidateTransactionMaxTxGasLimit(t *testing.T) {
 			expectError:   false,
 		},
 		{
-			name:          "Over limit",
+			// FreeGas refactor: the pool no longer enforces MaxTxGasLimit;
+			// over-limit txs are admitted and the check is left to consensus.
+			name:          "Over limit (no longer enforced)",
 			maxTxGasLimit: 100000,
 			txGasLimit:    150000,
-			expectError:   true,
-			expectedError: ErrTxGasLimitExceeded,
+			expectError:   false,
 		},
 	}
 

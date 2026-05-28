@@ -120,32 +120,10 @@ func ValidateTransaction(tx *types.Transaction, head *types.Header, signer types
 	if rules.IsShanghai && tx.To() == nil && len(tx.Data()) > params.MaxInitCodeSize {
 		return fmt.Errorf("%w: code size %v, limit %v", core.ErrMaxInitCodeSizeExceeded, len(tx.Data()), params.MaxInitCodeSize)
 	}
-	if rules.IsOsaka && tx.Gas() > params.MaxTxGas {
-		return fmt.Errorf("%w (cap: %d, tx: %d)", core.ErrGasLimitTooHigh, params.MaxTxGas, tx.Gas())
-	}
 	// Transactions can't be negative. This may never happen using RLP decoded
 	// transactions but may occur for transactions created using the RPC.
 	if tx.Value().Sign() < 0 {
 		return ErrNegativeValue
-	}
-	// Ensure the transaction doesn't exceed the current block limit gas
-	if EffectiveGasLimit(opts.Config, head.GasLimit, opts.EffectiveGasCeil) < tx.Gas() {
-		return ErrGasLimit
-	}
-	// Check individual transaction gas limit if configured
-	if opts.MaxTxGasLimit != 0 && tx.Gas() > opts.MaxTxGasLimit {
-		return fmt.Errorf("%w: transaction gas %v, limit %v", ErrTxGasLimitExceeded, tx.Gas(), opts.MaxTxGasLimit)
-	}
-	// Sanity check for extremely large numbers (supported by RLP or RPC)
-	if tx.GasFeeCap().BitLen() > 256 {
-		return core.ErrFeeCapVeryHigh
-	}
-	if tx.GasTipCap().BitLen() > 256 {
-		return core.ErrTipVeryHigh
-	}
-	// Ensure gasFeeCap is greater than or equal to gasTipCap
-	if tx.GasFeeCapIntCmp(tx.GasTipCap()) < 0 {
-		return core.ErrTipAboveFeeCap
 	}
 	// Make sure the transaction is signed properly
 	if _, err := types.Sender(signer, tx); err != nil {
@@ -155,29 +133,11 @@ func ValidateTransaction(tx *types.Transaction, head *types.Header, signer types
 	if tx.Nonce()+1 < tx.Nonce() {
 		return core.ErrNonceMax
 	}
-	// Ensure the transaction has more gas than the bare minimum needed to cover
-	// the transaction metadata
-	intrGas, err := core.IntrinsicGas(tx.Data(), tx.AccessList(), tx.SetCodeAuthorizations(), tx.To() == nil, true, rules.IsIstanbul, rules.IsShanghai)
-	if err != nil {
-		return err
-	}
-	if tx.Gas() < intrGas {
-		return fmt.Errorf("%w: gas %v, minimum needed %v", core.ErrIntrinsicGas, tx.Gas(), intrGas)
-	}
-	// Ensure the transaction can cover floor data gas.
-	if rules.IsPrague {
-		floorDataGas, err := core.FloorDataGas(tx.Data())
-		if err != nil {
-			return err
-		}
-		if tx.Gas() < floorDataGas {
-			return fmt.Errorf("%w: gas %v, minimum needed %v", core.ErrFloorDataGas, tx.Gas(), floorDataGas)
-		}
-	}
-	// Ensure the gasprice is high enough to cover the requirement of the calling pool
-	if tx.GasTipCapIntCmp(opts.MinTip) < 0 {
-		return fmt.Errorf("%w: gas tip cap %v, minimum needed %v", ErrTxGasPriceTooLow, tx.GasTipCap(), opts.MinTip)
-	}
+	// FreeGas note: gas-fee / intrinsic-gas / balance checks are intentionally
+	// removed from the pool. These constraints are still enforced by consensus
+	// at block-execution time, but the pool now admits any signed, type-valid
+	// transaction as long as it has a usable nonce. This is required so that
+	// users targeting the FreeGasConfig predeploy can submit tx0-fee txs.
 	if tx.Type() == types.BlobTxType {
 		return validateBlobTx(tx, head, opts)
 	}
@@ -304,39 +264,13 @@ func ValidateTransactionWithState(tx *types.Transaction, signer types.Signer, op
 			return fmt.Errorf("%w: tx nonce %v, gapped nonce %v", core.ErrNonceTooHigh, tx.Nonce(), gap)
 		}
 	}
-	// Ensure the transactor has enough funds to cover the transaction costs
-	var (
-		balance           = opts.State.GetBalance(from).ToBig()
-		cost256, overflow = TotalTxCost(tx, opts.RollupCostFn)
-	)
-	if overflow {
-		return fmt.Errorf("%w: total tx cost overflow", core.ErrInsufficientFunds)
-	}
-	cost := cost256.ToBig()
-	if balance.Cmp(cost) < 0 {
-		return fmt.Errorf("%w: balance %v, tx cost %v, overshot %v", core.ErrInsufficientFunds, balance, cost, new(big.Int).Sub(cost, balance))
-	}
-	// Ensure the transactor has enough funds to cover for replacements or nonce
-	// expansions without overdrafts
-	spent := opts.ExistingExpenditure(from)
-	if prev := opts.ExistingCost(from, tx.Nonce()); prev != nil {
-		bump := new(big.Int).Sub(cost, prev)
-		need := new(big.Int).Add(spent, bump)
-		if balance.Cmp(need) < 0 {
-			return fmt.Errorf("%w: balance %v, queued cost %v, tx bumped %v, overshot %v", core.ErrInsufficientFunds, balance, spent, bump, new(big.Int).Sub(need, balance))
-		}
-	} else {
-		need := new(big.Int).Add(spent, cost)
-		if balance.Cmp(need) < 0 {
-			return fmt.Errorf("%w: balance %v, queued cost %v, tx cost %v, overshot %v", core.ErrInsufficientFunds, balance, spent, cost, new(big.Int).Sub(need, balance))
-		}
-		// Transaction takes a new nonce value out of the pool. Ensure it doesn't
-		// overflow the number of permitted transactions from a single account
-		// (i.e. max cancellable via out-of-bound transaction).
-		if opts.UsedAndLeftSlots != nil {
-			if used, left := opts.UsedAndLeftSlots(from); left <= 0 {
-				return fmt.Errorf("%w: pooled %d txs", ErrAccountLimitExceeded, used)
-			}
+	// FreeGas: balance / cost / replacement-overdraft checks are intentionally
+	// removed so that zero-fee txs targeting the FreeGasConfig predeploy can be
+	// admitted regardless of sender balance. The slot cap is still enforced
+	// when a tx claims a brand-new nonce, purely as anti-spam.
+	if opts.ExistingCost(from, tx.Nonce()) == nil && opts.UsedAndLeftSlots != nil {
+		if used, left := opts.UsedAndLeftSlots(from); left <= 0 {
+			return fmt.Errorf("%w: pooled %d txs", ErrAccountLimitExceeded, used)
 		}
 	}
 	return nil

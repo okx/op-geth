@@ -96,12 +96,17 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 		ProcessParentBlockHash(block.ParentHash(), evm)
 	}
 
+	// Snapshot the free-gas predeploy configuration once per block so every tx
+	// sees a consistent view.
+	freegas := ReadFreeGasState(evm)
+
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		msg, err := TransactionToMessage(tx, signer, header.BaseFee)
 		if err != nil {
 			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
+		msg.IsFreeGasTx = types.IsFreeGasTx(tx, freegas)
 		statedb.SetTxContext(tx.Hash(), i)
 		_, _, spanEnd := telemetry.StartSpan(ctx, "core.ApplyTransactionWithEVM",
 			telemetry.StringAttribute("tx.hash", tx.Hash().Hex()),
@@ -277,6 +282,66 @@ func ProcessBeaconBlockRoot(beaconRoot common.Hash, evm *vm.EVM) {
 	evm.StateDB.AddAddressToAccessList(params.BeaconRootsAddress)
 	_, _, _ = evm.Call(msg.From, *msg.To, msg.Data, 30_000_000, common.U2560)
 	evm.StateDB.Finalise(true)
+}
+
+// ReadFreeGasState invokes the two view methods of the FreeGasConfig predeploy
+// (isFreeGasEnabled() and getList()) and returns a snapshot of the result.
+//
+// The calls are run inside a statedb snapshot which is reverted before this
+// function returns, so the world state is never modified by the read. Any
+// failure (contract not deployed, revert, or malformed ABI return) is treated
+// as "disabled" and the returned FreeGasState reports Has() == false for every
+// address.
+func ReadFreeGasState(evm *vm.EVM) *types.FreeGasState {
+	disabled := &types.FreeGasState{Enabled: false}
+
+	// Bail early if the predeploy has no code. This avoids spinning up an EVM
+	// call against an empty account for the common case where the contract is
+	// not present on this chain.
+	if len(evm.StateDB.GetCode(types.FreeGasConfigAddr)) == 0 {
+		return disabled
+	}
+
+	prevTxCtx := evm.TxContext
+	snap := evm.StateDB.Snapshot()
+	defer func() {
+		evm.StateDB.RevertToSnapshot(snap)
+		evm.SetTxContext(prevTxCtx)
+	}()
+
+	probe := &Message{
+		From:      params.SystemAddress,
+		GasLimit:  1_000_000,
+		GasPrice:  common.Big0,
+		GasFeeCap: common.Big0,
+		GasTipCap: common.Big0,
+		To:        &types.FreeGasConfigAddr,
+	}
+	evm.SetTxContext(NewEVMTxContext(probe))
+
+	enabledRet, _, err := evm.Call(params.SystemAddress, types.FreeGasConfigAddr, types.IsFreeGasEnabledCalldata(), 1_000_000, common.U2560)
+	if err != nil {
+		return disabled
+	}
+	enabled, err := types.DecodeBool(enabledRet)
+	if err != nil || !enabled {
+		return disabled
+	}
+
+	listRet, _, err := evm.Call(params.SystemAddress, types.FreeGasConfigAddr, types.GetListCalldata(), 1_000_000, common.U2560)
+	if err != nil {
+		return disabled
+	}
+	addrs, err := types.DecodeAddressList(listRet)
+	if err != nil {
+		return disabled
+	}
+
+	set := make(map[common.Address]struct{}, len(addrs))
+	for _, a := range addrs {
+		set[a] = struct{}{}
+	}
+	return &types.FreeGasState{Enabled: true, List: set}
 }
 
 // ProcessParentBlockHash stores the parent block hash in the history storage contract

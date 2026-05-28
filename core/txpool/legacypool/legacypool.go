@@ -581,7 +581,10 @@ func (pool *LegacyPool) Pending(filter txpool.PendingFilter) map[common.Address]
 		if filter.MinTip != nil || filter.GasLimitCap != 0 {
 			for i, tx := range txs {
 				if filter.MinTip != nil {
-					if tx.EffectiveGasTipIntCmp(filter.MinTip, filter.BaseFee) < 0 {
+					// FreeGas: dynamic-fee txs with both caps zeroed bypass the
+					// MinTip filter so they remain eligible for inclusion.
+					zeroFee := tx.GasFeeCap().Sign() == 0 && tx.GasTipCap().Sign() == 0
+					if !zeroFee && tx.EffectiveGasTipIntCmp(filter.MinTip, filter.BaseFee) < 0 {
 						txs = txs[:i]
 						break
 					}

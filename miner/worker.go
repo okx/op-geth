@@ -98,6 +98,9 @@ type environment struct {
 
 	noTxs  bool            // true if we are reproducing a block, and do not have to check interop txs
 	rpcCtx context.Context // context to control block-building RPC work. No RPC allowed if nil.
+
+	// OP-Stack addition: per-block FreeGasConfig snapshot used to tag tx messages.
+	freegas *types.FreeGasState
 }
 
 // txFits reports whether the transaction fits into the block size limit.
@@ -444,6 +447,7 @@ func (miner *Miner) prepareWork(genParams *generateParams, witness bool) (*envir
 	if miner.chainConfig.IsPrague(header.Number, header.Time) {
 		core.ProcessParentBlockHash(header.ParentHash, env.evm)
 	}
+	env.freegas = core.ReadFreeGasState(env.evm)
 	return env, nil
 }
 
@@ -576,7 +580,13 @@ func (miner *Miner) applyTransaction(env *environment, tx *types.Transaction) (*
 		snap = env.state.Snapshot()
 		gp   = env.gasPool.Gas()
 	)
-	receipt, err := core.ApplyTransaction(env.evm, env.gasPool, env.state, env.header, tx, &env.header.GasUsed)
+	msg, err := core.TransactionToMessage(tx, env.signer, env.header.BaseFee)
+	if err != nil {
+		return nil, err
+	}
+	msg.IsFreeGasTx = types.IsFreeGasTx(tx, env.freegas)
+	env.state.SetTxContext(tx.Hash(), env.tcount)
+	receipt, err := core.ApplyTransactionWithEVM(msg, env.gasPool, env.state, env.header.Number, env.header.Hash(), env.header.Time, tx, &env.header.GasUsed, env.evm)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
 		env.gasPool.SetGas(gp)
