@@ -194,3 +194,76 @@ func TestTransactionTimeSort(t *testing.T) {
 		}
 	}
 }
+
+// TestNewTxWithMinerFee_GaslessBypass verifies that LazyTransactions flagged
+// with IsGaslessTx survive the feeCap >= baseFee admission rule in
+// newTxWithMinerFee, while normal txs with feeCap < baseFee still get rejected.
+func TestNewTxWithMinerFee_GaslessBypass(t *testing.T) {
+	t.Parallel()
+	baseFee := uint256.NewInt(100)
+
+	cases := []struct {
+		name        string
+		feeCap      *uint256.Int
+		tipCap      *uint256.Int
+		isGasless   bool
+		wantErr     bool
+		wantTipZero bool
+	}{
+		{
+			name:        "gasless_zero_caps_admitted",
+			feeCap:      uint256.NewInt(0),
+			tipCap:      uint256.NewInt(0),
+			isGasless:   true,
+			wantErr:     false,
+			wantTipZero: true,
+		},
+		{
+			name:      "non_gasless_zero_caps_rejected",
+			feeCap:    uint256.NewInt(0),
+			tipCap:    uint256.NewInt(0),
+			isGasless: false,
+			wantErr:   true,
+		},
+		{
+			name:      "non_gasless_below_basefee_rejected",
+			feeCap:    uint256.NewInt(50),
+			tipCap:    uint256.NewInt(10),
+			isGasless: false,
+			wantErr:   true,
+		},
+		{
+			name:        "gasless_synthesized_above_basefee_normal_path",
+			feeCap:      uint256.NewInt(150), // synthesized e.g. mockPrice + baseFee
+			tipCap:      uint256.NewInt(150),
+			isGasless:   true,
+			wantErr:     false,
+			wantTipZero: false, // effective tip = min(150, 150-100) = 50
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ltx := &txpool.LazyTransaction{
+				GasFeeCap:   tc.feeCap,
+				GasTipCap:   tc.tipCap,
+				IsGaslessTx: tc.isGasless,
+			}
+			wrapped, err := newTxWithMinerFee(ltx, common.Address{}, baseFee)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got fees=%v", wrapped.fees)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.wantTipZero && wrapped.fees.Sign() != 0 {
+				t.Fatalf("expected effective tip 0 for sub-basefee gasless tx, got %v", wrapped.fees)
+			}
+			if !tc.wantTipZero && wrapped.fees.Sign() == 0 {
+				t.Fatalf("expected non-zero effective tip, got 0")
+			}
+		})
+	}
+}
