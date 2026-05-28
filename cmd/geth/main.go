@@ -171,6 +171,8 @@ var (
 		utils.RollupComputePendingBlock,
 		utils.RollupHaltOnIncompatibleProtocolVersionFlag,
 		utils.RollupSuperchainUpgradesFlag,
+		utils.RollupAllowGaslessFlag,
+		utils.RollupGaslessMockGasPricePercentileFlag,
 		configFileFlag,
 		utils.LogDebugFlag,
 		utils.LogBacktraceAtFlag,

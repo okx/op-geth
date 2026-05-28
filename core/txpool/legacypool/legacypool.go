@@ -24,6 +24,7 @@ import (
 	"math"
 	"math/big"
 	"slices"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -161,6 +162,19 @@ type Config struct {
 	// FilterInterval defines how often already-added transactions are rechecked
 	// against ingress filters.
 	FilterInterval time.Duration
+
+	// AllowGasless controls whether the pool participates in the Gasless flow:
+	// accepting zero-priced txs, per-tx gating via the Gasless predeploy,
+	// swapping in the mock gas price for ordering, and running the background
+	// mock-price maintainer. When false the pool behaves as upstream.
+	AllowGasless bool
+
+	// GaslessMockGasPricePercentileBps is the percentile (expressed in basis
+	// points, 0..=10000) of the previous block's paid gas prices used as the
+	// mock gas price for ordering gasless txs. The default is 1000 (== 0.1).
+	// Zero-priced txs are excluded from the sample to avoid the
+	// "mock=0 → more zeros → mock stays 0" feedback loop.
+	GaslessMockGasPricePercentileBps uint16
 }
 
 // DefaultConfig contains the default configurations for the transaction pool.
@@ -180,6 +194,9 @@ var DefaultConfig = Config{
 
 	Lifetime:       3 * time.Hour,
 	FilterInterval: 12 * time.Second,
+
+	AllowGasless:                    false,
+	GaslessMockGasPricePercentileBps: 1000, // 0.1 in basis points
 }
 
 // sanitize checks the provided user configurations and changes anything that's
@@ -218,6 +235,10 @@ func (config *Config) sanitize() Config {
 		log.Warn("Sanitizing invalid txpool filter interval", "provided", conf.FilterInterval, "updated", DefaultConfig.FilterInterval)
 		conf.FilterInterval = DefaultConfig.FilterInterval
 	}
+	if conf.GaslessMockGasPricePercentileBps > 10000 {
+		log.Warn("Sanitizing out-of-range gasless mock gas-price percentile (bps)", "provided", conf.GaslessMockGasPricePercentileBps, "updated", DefaultConfig.GaslessMockGasPricePercentileBps)
+		conf.GaslessMockGasPricePercentileBps = DefaultConfig.GaslessMockGasPricePercentileBps
+	}
 	return conf
 }
 
@@ -255,6 +276,7 @@ type LegacyPool struct {
 	currentState  *state.StateDB               // Current state in the blockchain head
 	pendingNonces *noncer                      // Pending state tracking virtual nonces
 	reserver      txpool.Reserver              // Address reserver to ensure exclusivity across subpools
+	mockGasPrice  atomic.Pointer[big.Int]      // Background mock gas price for ordering gasless txs (nil → fallback to baseFee*10)
 
 	pending map[common.Address]*list // All currently processable transactions
 	queue   *queue
@@ -564,6 +586,8 @@ func (pool *LegacyPool) Pending(filter txpool.PendingFilter) map[common.Address]
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
+	checker := pool.gaslessChecker()
+	mockFee := pool.gaslessOrderingFee(filter.BaseFee)
 	pending := make(map[common.Address][]*txpool.LazyTransaction, len(pool.pending))
 	for addr, list := range pool.pending {
 		txs := list.Flatten()
@@ -572,7 +596,10 @@ func (pool *LegacyPool) Pending(filter txpool.PendingFilter) map[common.Address]
 		if filter.MinTip != nil || filter.GasLimitCap != 0 {
 			for i, tx := range txs {
 				if filter.MinTip != nil {
-					if tx.EffectiveGasTipIntCmp(filter.MinTip, filter.BaseFee) < 0 {
+					// Gasless: txs allowed by the Gasless predeploy bypass
+					// the MinTip floor so they can carry gasTipCap=0 /
+					// gasFeeCap=0 into block packing.
+					if !types.IsGaslessTxFor(tx, checker) && tx.EffectiveGasTipIntCmp(filter.MinTip, filter.BaseFee) < 0 {
 						txs = txs[:i]
 						break
 					}
@@ -602,22 +629,57 @@ func (pool *LegacyPool) Pending(filter txpool.PendingFilter) map[common.Address]
 			lazies := make([]*txpool.LazyTransaction, len(txs))
 			for i := 0; i < len(txs); i++ {
 				daBytes := txs[i].RollupCostData().EstimatedDASize()
+				feeCap := uint256.MustFromBig(txs[i].GasFeeCap())
+				tipCap := uint256.MustFromBig(txs[i].GasTipCap())
+				isGasless := types.IsGaslessTxFor(txs[i], checker)
+				// Gasless synthesis: zero-fee gasless txs receive a
+				// synthesized fee derived from the mock gas price so they
+				// compete with normal txs in the miner heap instead of
+				// always landing at the bottom. The underlying tx is
+				// unchanged — execution still sees zero fees.
+				if mockFee != nil && isGasless && feeCap.IsZero() && tipCap.IsZero() {
+					feeCap = mockFee
+					tipCap = mockFee
+				}
 				lazies[i] = &txpool.LazyTransaction{
-					Pool:      pool,
-					Hash:      txs[i].Hash(),
-					Tx:        txs[i],
-					Time:      txs[i].Time(),
-					GasFeeCap: uint256.MustFromBig(txs[i].GasFeeCap()),
-					GasTipCap: uint256.MustFromBig(txs[i].GasTipCap()),
-					Gas:       txs[i].Gas(),
-					BlobGas:   txs[i].BlobGas(),
-					DABytes:   daBytes,
+					Pool:        pool,
+					Hash:        txs[i].Hash(),
+					Tx:          txs[i],
+					Time:        txs[i].Time(),
+					GasFeeCap:   feeCap,
+					GasTipCap:   tipCap,
+					Gas:         txs[i].Gas(),
+					BlobGas:     txs[i].BlobGas(),
+					DABytes:     daBytes,
+					IsGaslessTx: isGasless,
 				}
 			}
 			pending[addr] = lazies
 		}
 	}
 	return pending
+}
+
+// gaslessOrderingFee returns the per-call synthesized fee grafted onto
+// zero-fee gasless LazyTransactions exported by Pending. Resolution order:
+//   - gasless disabled (!AllowGasless) → nil, callers leave the
+//     LazyTransaction's caps untouched.
+//   - the background-maintained mock gas price is set (non-nil, positive)
+//     → that value, copied so callers cannot mutate the cache.
+//   - otherwise, the supplied block base fee, or 0.02 GWEI when baseFee
+//     is nil (pre-London / unset).
+func (pool *LegacyPool) gaslessOrderingFee(baseFee *uint256.Int) *uint256.Int {
+	if !pool.config.AllowGasless {
+		return nil
+	}
+	if mp := pool.mockGasPrice.Load(); mp != nil && mp.Sign() > 0 {
+		return uint256.MustFromBig(new(big.Int).Set(mp))
+	}
+	if baseFee == nil {
+		baseFee = uint256.NewInt(2e7) // fallback to  0.02 GWEI
+	}
+	fallback := new(uint256.Int).Set(baseFee)
+	return fallback
 }
 
 // ValidateTxBasics checks whether a transaction is valid according to the consensus
@@ -636,6 +698,7 @@ func (pool *LegacyPool) ValidateTxBasics(tx *types.Transaction) error {
 		MinTip:           pool.gasTip.Load().ToBig(),
 		EffectiveGasCeil: pool.config.EffectiveGasCeil,
 		MaxTxGasLimit:    pool.config.MaxTxGasLimit,
+		GaslessChecker:   pool.gaslessChecker(),
 	}
 	return txpool.ValidateTransaction(tx, pool.currentHead.Load(), pool.signer, opts)
 }
@@ -1490,6 +1553,7 @@ func (pool *LegacyPool) reset(oldHead, newHead *types.Header) {
 
 	// OP-Stack addition
 	pool.resetRollupCostFn(newHead.Time, statedb)
+	pool.refreshMockGasPrice(newHead)
 
 	// Inject any transactions discarded due to reorgs
 	log.Debug("Reinjecting stale transactions", "count", len(reinject))
@@ -1503,6 +1567,85 @@ func (pool *LegacyPool) resetRollupCostFn(ts uint64, statedb *state.StateDB) {
 			return costFn(tx, ts)
 		}
 	}
+}
+
+// refreshMockGasPrice walks the supplied new-head block and samples the paid
+// effective gas prices of its included transactions, then stores the value at
+// the configured percentile as the new mock gas price. Zero-priced txs are
+// excluded from the sample so gasless traffic doesn't drag the percentile
+// toward zero. Empty blocks (or blocks consisting only of gasless txs) keep
+// the previous mock value unchanged.
+func (pool *LegacyPool) refreshMockGasPrice(head *types.Header) {
+	if !pool.config.AllowGasless || head == nil {
+		return
+	}
+	block := pool.chain.GetBlock(head.Hash(), head.Number.Uint64())
+	if block == nil {
+		return
+	}
+	if price := computeMockGasPrice(block.Transactions(), head.BaseFee, pool.config.GaslessMockGasPricePercentileBps); price != nil {
+		pool.mockGasPrice.Store(price)
+	}
+}
+
+// computeMockGasPrice returns the bps-th percentile of the paid effective gas
+// prices of the supplied transactions, or nil if no sample qualifies.
+//   - Deposit txs are excluded.
+//   - The effective gas price is EffectiveGasTipValue(baseFee) + baseFee (so
+//     pre-London legacy txs collapse to their raw gas price).
+//   - Non-positive prices (zero-fee gasless txs in particular) are excluded
+//     to avoid a "mock=0 → more zero-fee → mock stays 0" feedback loop.
+//   - bps is clamped to [0, 10000].
+//
+// Returns nil when there are no qualifying samples so callers can preserve
+// the previous mock value.
+func computeMockGasPrice(txs types.Transactions, baseFee *big.Int, bps uint16) *big.Int {
+	var prices []*big.Int
+	for _, tx := range txs {
+		if tx.Type() == types.DepositTxType {
+			continue
+		}
+		price, err := tx.EffectiveGasTip(baseFee)
+		if err != nil {
+			continue
+		}
+		if baseFee != nil {
+			price = new(big.Int).Add(price, baseFee)
+		}
+		if price.Sign() <= 0 {
+			continue
+		}
+		prices = append(prices, price)
+	}
+	if len(prices) == 0 {
+		return nil
+	}
+	sort.Slice(prices, func(i, j int) bool { return prices[i].Cmp(prices[j]) < 0 })
+	pct := int(bps)
+	if pct > 10000 {
+		pct = 10000
+	}
+	idx := (len(prices) - 1) * pct / 10000
+	return new(big.Int).Set(prices[idx])
+}
+
+// gaslessChecker returns a Gasless predeploy checker bound to a fresh head
+// statedb, or nil when gasless is disabled. Each call fetches its own statedb
+// via pool.chain.StateAt so the result is safe to invoke without holding
+// pool.mu (and so concurrent reorgs do not race with checker invocations).
+func (pool *LegacyPool) gaslessChecker() types.GaslessChecker {
+	if !pool.config.AllowGasless {
+		return nil
+	}
+	head := pool.currentHead.Load()
+	if head == nil {
+		return nil
+	}
+	statedb, err := pool.chain.StateAt(head.Root)
+	if err != nil || statedb == nil {
+		return nil
+	}
+	return core.NewGaslessCheckerForState(pool.chainconfig, head, statedb)
 }
 
 // promoteExecutables moves transactions that have become processable from the
