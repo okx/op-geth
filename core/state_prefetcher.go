@@ -100,6 +100,7 @@ func (p *statePrefetcher) Prefetch(block *types.Block, statedb *state.StateDB, c
 				fails.Add(1)
 				return nil // Also invalid block, bail out
 			}
+			msg.IsGaslessTx = types.IsGaslessTxFor(tx, MakeGaslessChecker(evm))
 			// Disable the nonce check
 			msg.SkipNonceChecks = true
 

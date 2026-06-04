@@ -67,6 +67,12 @@ type ValidationOptions struct {
 
 	EffectiveGasCeil uint64 // if non-zero, a gas ceiling to enforce independent of the header's gaslimit value
 	MaxTxGasLimit    uint64 // Maximum gas limit allowed per individual transaction
+
+	// GaslessChecker, when non-nil, gates the IsGaslessTxFor predicate against
+	// the Gasless predeploy. Transactions for which the checker reports
+	// allowed=true are exempted from gas-fee related admission rules
+	// (e.g. MinTip).
+	GaslessChecker types.GaslessChecker
 }
 
 // ValidationFunction is an method type which the pools use to perform the tx-validations which do not
@@ -174,7 +180,13 @@ func ValidateTransaction(tx *types.Transaction, head *types.Header, signer types
 			return fmt.Errorf("%w: gas %v, minimum needed %v", core.ErrFloorDataGas, tx.Gas(), floorDataGas)
 		}
 	}
-	// Ensure the gasprice is high enough to cover the requirement of the calling pool
+	// Ensure the gasprice is high enough to cover the requirement of the calling
+	// pool. Gasless transactions (allowed by the per-head Gasless predeploy
+	// via opts.GaslessChecker) are exempt from this floor so they can carry
+	// gasTipCap=0 / gasFeeCap=0.
+	if !types.IsGaslessTxFor(tx, opts.GaslessChecker) && (tx.GasPrice().Sign() == 0 || tx.GasTipCap().Sign() == 0 || tx.GasFeeCap().Sign() == 0) {
+		return fmt.Errorf("%w: gas price %v, tip %v, fee cap %v", ErrTxGasPriceTooLow, tx.GasPrice(), tx.GasTipCap(), tx.GasFeeCap())
+	}
 	if tx.GasTipCapIntCmp(opts.MinTip) < 0 {
 		return fmt.Errorf("%w: gas tip cap %v, minimum needed %v", ErrTxGasPriceTooLow, tx.GasTipCap(), opts.MinTip)
 	}

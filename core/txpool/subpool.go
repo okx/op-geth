@@ -43,6 +43,10 @@ type LazyTransaction struct {
 	BlobGas uint64 // Amount of blob gas required by the transaction
 
 	DABytes *big.Int // Amount of data availability bytes this transaction may require if this is a rollup
+
+	// IsGaslessTx flags gasless transactions surfaced by the sub-pool so the
+	// miner heap can admit them without enforcing the feeCap >= baseFee rule.
+	IsGaslessTx bool
 }
 
 // Resolve retrieves the full transaction belonging to a lazy handle if it is still
