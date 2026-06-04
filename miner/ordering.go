@@ -40,11 +40,18 @@ func newTxWithMinerFee(tx *txpool.LazyTransaction, from common.Address, baseFee 
 	tip := new(uint256.Int).Set(tx.GasTipCap)
 	if baseFee != nil {
 		if tx.GasFeeCap.Cmp(baseFee) < 0 {
-			return nil, types.ErrGasFeeCapTooLow
-		}
-		tip = new(uint256.Int).Sub(tx.GasFeeCap, baseFee)
-		if tip.Gt(tx.GasTipCap) {
-			tip = tx.GasTipCap
+			// Gasless: txs flagged by the sub-pool bypass the feeCap >= baseFee
+			// rule so they can be ranked alongside normal txs (their effective
+			// tip is clamped to 0 when no synthesized fee is set).
+			if !tx.IsGaslessTx {
+				return nil, types.ErrGasFeeCapTooLow
+			}
+			tip = new(uint256.Int)
+		} else {
+			tip = new(uint256.Int).Sub(tx.GasFeeCap, baseFee)
+			if tip.Gt(tx.GasTipCap) {
+				tip = tx.GasTipCap
+			}
 		}
 	}
 	return &txWithMinerFee{

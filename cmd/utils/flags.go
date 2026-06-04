@@ -1083,6 +1083,18 @@ var (
 		Category: flags.RollupCategory,
 		Value:    5000,
 	}
+	RollupAllowGaslessFlag = &cli.BoolFlag{
+		Name:     "rollup.allow-gasless",
+		Usage:    "Allow gasless (accept 0-price txs gated per-tx by the Gasless predeploy, swap ordering fee with a background-maintained mock price, and start the mock-price maintainer).",
+		Category: flags.RollupCategory,
+		Value:    false,
+	}
+	RollupGaslessMockGasPricePercentileFlag = &cli.Float64Flag{
+		Name:     "rollup.gasless-mock-gas-price-percentile",
+		Usage:    "Percentile (0.0..=1.0) of the previous block's paid gas prices used as the gasless mock price. 0.1 takes the price at 0.1*N from the sorted list. Stored internally as basis points.",
+		Category: flags.RollupCategory,
+		Value:    0.1,
+	}
 
 	// Metrics flags
 	MetricsEnabledFlag = &cli.BoolFlag{
@@ -1724,6 +1736,19 @@ func setTxPool(ctx *cli.Context, cfg *legacypool.Config) {
 	}
 	if ctx.IsSet(TxPoolMaxTxGasLimitFlag.Name) {
 		cfg.MaxTxGasLimit = ctx.Uint64(TxPoolMaxTxGasLimitFlag.Name)
+	}
+	if ctx.IsSet(RollupAllowGaslessFlag.Name) {
+		cfg.AllowGasless = ctx.Bool(RollupAllowGaslessFlag.Name)
+	}
+	if ctx.IsSet(RollupGaslessMockGasPricePercentileFlag.Name) {
+		pct := ctx.Float64(RollupGaslessMockGasPricePercentileFlag.Name)
+		if pct < 0 {
+			pct = 0
+		}
+		if pct > 1 {
+			pct = 1
+		}
+		cfg.GaslessMockGasPricePercentileBps = uint16(pct*10000 + 0.5)
 	}
 }
 

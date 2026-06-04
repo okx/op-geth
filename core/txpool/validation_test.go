@@ -113,3 +113,125 @@ func createTestTransaction(key *ecdsa.PrivateKey, nonce uint64) *types.Transacti
 	signedTx, _ := types.SignTx(tx, types.HomesteadSigner{}, key)
 	return signedTx
 }
+
+// TestValidateTransaction_GaslessMinTipBypass verifies that the MinTip floor
+// in ValidateTransaction is short-circuited when a GaslessChecker reports
+// allowed=true for the transaction, and enforced as normal otherwise.
+func TestValidateTransaction_GaslessMinTipBypass(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	to := common.HexToAddress("0xabcdef0000000000000000000000000000001234")
+	head := &types.Header{
+		Number:     big.NewInt(1),
+		GasLimit:   5_000_000,
+		Time:       1,
+		Difficulty: big.NewInt(1),
+	}
+	signer := types.LatestSigner(params.TestChainConfig)
+
+	mkDynFeeZeroTipped := func() *types.Transaction {
+		tx := types.NewTx(&types.DynamicFeeTx{
+			ChainID:   params.TestChainConfig.ChainID,
+			Nonce:     0,
+			To:        &to,
+			Gas:       100_000,
+			GasFeeCap: big.NewInt(0),
+			GasTipCap: big.NewInt(0),
+		})
+		signed, _ := types.SignTx(tx, signer, key)
+		return signed
+	}
+	mkDynFeePayingTip := func() *types.Transaction {
+		tx := types.NewTx(&types.DynamicFeeTx{
+			ChainID:   params.TestChainConfig.ChainID,
+			Nonce:     0,
+			To:        &to,
+			Gas:       100_000,
+			GasFeeCap: big.NewInt(1_000_000_000),
+			GasTipCap: big.NewInt(2),
+		})
+		signed, _ := types.SignTx(tx, signer, key)
+		return signed
+	}
+	// IsGaslessTxFor requires tx.Gas() <= allowance.GasLimit unconditionally,
+	// so the stub must report enough gas to cover the 100_000-gas test tx.
+	allowedChecker := types.GaslessChecker(func(*types.Transaction) (types.GaslessAllowance, error) {
+		return types.GaslessAllowance{Allowed: true, GasLimit: 1_000_000}, nil
+	})
+
+	cases := []struct {
+		name    string
+		tx      *types.Transaction
+		checker types.GaslessChecker
+		minTip  *big.Int
+		wantErr bool
+	}{
+		{
+			name:    "zero_tip_no_checker_rejected",
+			tx:      mkDynFeeZeroTipped(),
+			checker: nil,
+			minTip:  big.NewInt(1),
+			wantErr: true,
+		},
+		{
+			// With the gasless checker allowing, the any-fee-field-zero gate
+			// at the top of the price block is bypassed. MinTip is enforced
+			// separately and has no gasless exemption, so this case keeps
+			// MinTip=0 to isolate the gasless bypass.
+			name:    "zero_tip_checker_allows_admitted",
+			tx:      mkDynFeeZeroTipped(),
+			checker: allowedChecker,
+			minTip:  big.NewInt(0),
+			wantErr: false,
+		},
+		{
+			// Sanity: even when the checker allows the tx, a non-zero MinTip
+			// still rejects a zero-tip tx — the MinTip floor is operator-side
+			// and unaffected by the gasless predeploy.
+			name:    "zero_tip_checker_allows_but_mintip_rejects",
+			tx:      mkDynFeeZeroTipped(),
+			checker: allowedChecker,
+			minTip:  big.NewInt(1),
+			wantErr: true,
+		},
+		{
+			name:    "zero_tip_zero_mintip_admitted",
+			tx:      mkDynFeeZeroTipped(),
+			checker: nil,
+			minTip:  big.NewInt(0),
+			wantErr: true,
+		},
+		{
+			name:    "paying_tip_unaffected_by_checker",
+			tx:      mkDynFeePayingTip(),
+			checker: nil,
+			minTip:  big.NewInt(1),
+			wantErr: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := &ValidationOptions{
+				Config:         params.TestChainConfig,
+				Accept:         0xFF,
+				MaxSize:        32 * 1024,
+				MaxBlobCount:   6,
+				MinTip:         tc.minTip,
+				GaslessChecker: tc.checker,
+			}
+			err := ValidateTransaction(tc.tx, head, signer, opts)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !errors.Is(err, ErrTxGasPriceTooLow) {
+					t.Fatalf("expected ErrTxGasPriceTooLow, got %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
