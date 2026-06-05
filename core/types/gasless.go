@@ -35,8 +35,8 @@ var (
 
 // GaslessAddressFor returns the predeploy address of the Gasless contract for
 // the given chain id. The mapping is:
-//   - chain 196   → 0x420000000000000000000000000000000000002F
-//   - chain 1952  → 0xA53fEda2b0d946436f34B591A25c256d8a9ae4E0
+//   - chain 196   → 0x19787404b0c70021b4752028f7e3a92313885B27
+//   - chain 1952  → 0x19787404b0c70021b4752028f7e3a92313885B27
 //   - otherwise   → 0x4200000000000000000000000000000000000700
 func GaslessAddressFor(chainID *big.Int) common.Address {
 	if chainID == nil {
