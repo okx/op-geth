@@ -107,8 +107,16 @@ func gaslessCheckerForState(chainConfig *params.ChainConfig, header *types.Heade
 		Difficulty:  new(big.Int),
 		GasLimit:    header.GasLimit,
 	}
+	if header.Difficulty != nil && header.Difficulty.Sign() == 0 {
+		blockCtx.Random = &header.MixDigest
+	}
 	if header.BaseFee != nil {
 		blockCtx.BaseFee = new(big.Int).Set(header.BaseFee)
+	}
+	println("gaslessCheckerForState: IsMerge", chainConfig.IsLondon(header.Number), "IsLondon", chainConfig.IsLondon(header.Number))
+	if chainConfig.ShanghaiTime != nil {
+		println("gaslessCheckerForState", *chainConfig.ShanghaiTime)
+		println("gaslessCheckerForState", header.Time)
 	}
 	evm := vm.NewEVM(blockCtx, statedb, chainConfig, vm.Config{})
 	return MakeGaslessChecker(evm)
