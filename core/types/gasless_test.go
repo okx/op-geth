@@ -32,11 +32,11 @@ func TestGaslessAddressFor(t *testing.T) {
 		chainID *big.Int
 		want    common.Address
 	}{
-		{"nil_chain_id", nil, common.HexToAddress("0x4200000000000000000000000000000000000700")},
-		{"default_chain", big.NewInt(1), common.HexToAddress("0x4200000000000000000000000000000000000700")},
-		{"chain_196", big.NewInt(196), common.HexToAddress("0xA53fEda2b0d946436f34B591A25c256d8a9ae4E0")},
-		{"chain_1952", big.NewInt(1952), common.HexToAddress("0xA53fEda2b0d946436f34B591A25c256d8a9ae4E0")},
-		{"unknown_chain", big.NewInt(999), common.HexToAddress("0x4200000000000000000000000000000000000700")},
+		{"nil_chain_id", nil, defaultGaslessAddr},
+		{"default_chain", big.NewInt(1), defaultGaslessAddr},
+		{"chain_196", big.NewInt(196), gaslessAddrChain196},
+		{"chain_1952", big.NewInt(1952), gaslessAddrChain1952},
+		{"unknown_chain", big.NewInt(999), defaultGaslessAddr},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
