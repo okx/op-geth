@@ -145,7 +145,7 @@ func IsGaslessTxFor(tx *Transaction, checker GaslessChecker) bool {
 	allowance, err := checker(tx)
 	if err != nil || !allowance.Allowed {
 		if err != nil {
-			println("IsGaslessTxFor: checker error", err)
+                     println("IsGaslessTxFor: checker error", err.Error())
 		}
 		println("IsGaslessTxFor: checker error or not allowed", err, allowance.Allowed)
 		return false
