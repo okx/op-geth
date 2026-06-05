@@ -125,24 +125,33 @@ func GaslessDataPrefix(tx *Transaction) []byte {
 // The decision is delegated to the supplied checker so callers can re-use a
 // single EVM across many transactions.
 func IsGaslessTxFor(tx *Transaction, checker GaslessChecker) bool {
+	println("IsGaslessTxFor: checking tx", tx.Hash().Hex())
 	if checker == nil {
+		println("IsGaslessTxFor: nil checker")
 		return false
 	}
 	if tx.Type() == DepositTxType {
 		return false
 	}
 	if tx.inner.gasPrice().Sign() != 0 || tx.inner.gasFeeCap().Sign() != 0 || tx.inner.gasTipCap().Sign() != 0 {
+		println("IsGaslessTxFor: gasPrice is zero", tx.inner.gasPrice().String(), "gasFeeCap is zero", tx.inner.gasFeeCap().String(), "gasTipCap is zero", tx.inner.gasTipCap().String())
 		return false
 	}
 	to := tx.To()
 	if to == nil {
+		println("IsGaslessTxFor: nil to")
 		return false
 	}
 	allowance, err := checker(tx)
 	if err != nil || !allowance.Allowed {
+		if err != nil {
+			println("IsGaslessTxFor: checker error", err)
+		}
+		println("IsGaslessTxFor: checker error or not allowed", err, allowance.Allowed)
 		return false
 	}
 	if tx.Gas() > allowance.GasLimit {
+		println("IsGaslessTxFor: gas limit", tx.Gas(), "exceeds allowance", allowance.GasLimit)
 		return false
 	}
 	return true

@@ -195,7 +195,7 @@ var DefaultConfig = Config{
 	Lifetime:       3 * time.Hour,
 	FilterInterval: 12 * time.Second,
 
-	AllowGasless:                    false,
+	AllowGasless:                     false,
 	GaslessMockGasPricePercentileBps: 1000, // 0.1 in basis points
 }
 
@@ -1635,14 +1635,17 @@ func computeMockGasPrice(txs types.Transactions, baseFee *big.Int, bps uint16) *
 // pool.mu (and so concurrent reorgs do not race with checker invocations).
 func (pool *LegacyPool) gaslessChecker() types.GaslessChecker {
 	if !pool.config.AllowGasless {
+		println("gaslessChecker: gasless is disabled, returning nil checker")
 		return nil
 	}
 	head := pool.currentHead.Load()
 	if head == nil {
+		println("gaslessChecker: head is nil")
 		return nil
 	}
 	statedb, err := pool.chain.StateAt(head.Root)
 	if err != nil || statedb == nil {
+		println("gaslessChecker: failed to get state at head", "err", err, statedb == nil)
 		return nil
 	}
 	return core.NewGaslessCheckerForState(pool.chainconfig, head, statedb)
