@@ -176,10 +176,8 @@ func TestValidateTransaction_GaslessMinTipBypass(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// With the gasless checker allowing, the any-fee-field-zero gate
-			// at the top of the price block is bypassed. MinTip is enforced
-			// separately and has no gasless exemption, so this case keeps
-			// MinTip=0 to isolate the gasless bypass.
+			// With the gasless checker allowing, the single price check is
+			// short-circuited entirely, so a zero-tip tx is admitted.
 			name:    "zero_tip_checker_allows_admitted",
 			tx:      mkDynFeeZeroTipped(),
 			checker: allowedChecker,
@@ -187,21 +185,23 @@ func TestValidateTransaction_GaslessMinTipBypass(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// Sanity: even when the checker allows the tx, a non-zero MinTip
-			// still rejects a zero-tip tx — the MinTip floor is operator-side
-			// and unaffected by the gasless predeploy.
-			name:    "zero_tip_checker_allows_but_mintip_rejects",
+			// When the checker allows the tx, the MinTip floor is bypassed
+			// together with the rest of the price check — a gasless tx carries
+			// no tip by design, so even a non-zero MinTip admits it.
+			name:    "zero_tip_checker_allows_bypasses_mintip",
 			tx:      mkDynFeeZeroTipped(),
 			checker: allowedChecker,
 			minTip:  big.NewInt(1),
-			wantErr: true,
+			wantErr: false,
 		},
 		{
+			// No checker and MinTip=0: the only price gate is MinTip, and a
+			// zero tip does not fall below a zero floor, so the tx is admitted.
 			name:    "zero_tip_zero_mintip_admitted",
 			tx:      mkDynFeeZeroTipped(),
 			checker: nil,
 			minTip:  big.NewInt(0),
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name:    "paying_tip_unaffected_by_checker",

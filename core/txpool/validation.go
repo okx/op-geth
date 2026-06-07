@@ -180,16 +180,11 @@ func ValidateTransaction(tx *types.Transaction, head *types.Header, signer types
 			return fmt.Errorf("%w: gas %v, minimum needed %v", core.ErrFloorDataGas, tx.Gas(), floorDataGas)
 		}
 	}
-	// Ensure the gasprice is high enough to cover the requirement of the calling
-	// pool. Gasless transactions (allowed by the per-head Gasless predeploy
-	// via opts.GaslessChecker) are exempt from this floor so they can carry
-	// gasTipCap=0 / gasFeeCap=0.
-	if !types.IsGaslessTxFor(tx, opts.GaslessChecker) && (tx.GasPrice().Sign() == 0 || tx.GasTipCap().Sign() == 0 || tx.GasFeeCap().Sign() == 0) {
-		return fmt.Errorf("%w: gas price %v, tip %v, fee cap %v", ErrTxGasPriceTooLow, tx.GasPrice(), tx.GasTipCap(), tx.GasFeeCap())
-	}
-	if tx.GasTipCapIntCmp(opts.MinTip) < 0 {
+
+	if !types.IsGaslessTxFor(tx, opts.GaslessChecker) && tx.GasTipCapIntCmp(opts.MinTip) < 0 {
 		return fmt.Errorf("%w: gas tip cap %v, minimum needed %v", ErrTxGasPriceTooLow, tx.GasTipCap(), opts.MinTip)
 	}
+
 	if tx.Type() == types.BlobTxType {
 		return validateBlobTx(tx, head, opts)
 	}
