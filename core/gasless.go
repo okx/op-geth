@@ -107,6 +107,9 @@ func gaslessCheckerForState(chainConfig *params.ChainConfig, header *types.Heade
 		Difficulty:  new(big.Int),
 		GasLimit:    header.GasLimit,
 	}
+	if header.Difficulty != nil && header.Difficulty.Sign() == 0 {
+		blockCtx.Random = &header.MixDigest
+	}
 	if header.BaseFee != nil {
 		blockCtx.BaseFee = new(big.Int).Set(header.BaseFee)
 	}
