@@ -1,6 +1,6 @@
 // Copyright 2024 The go-ethereum Authors
 // This file is part of the go-ethereum library.
-//
+/
 // The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
@@ -28,7 +28,7 @@ import (
 // Default Gasless predeploy address. Chain-specific overrides live in
 // GaslessAddressFor.
 var (
-	defaultGaslessAddr   = common.HexToAddress("0x4200000000000000000000000000000000000700")
+	defaultGaslessAddr   = common.HexToAddress("0x70CA900387FCD29C2A71d511F10E5c961dc9363F")
 	gaslessAddrChain196  = common.HexToAddress("0x19787404b0c70021b4752028f7e3a92313885B27")
 	gaslessAddrChain1952 = common.HexToAddress("0x19787404b0c70021b4752028f7e3a92313885B27")
 )
