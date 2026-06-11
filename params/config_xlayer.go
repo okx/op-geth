@@ -9,9 +9,9 @@ import (
 
 // X Layer Chain IDs
 const (
-	XLayerMainnetChainID        = 196  // X Layer mainnet
-	XLayerTestnetChainID        = 1952 // X Layer testnet (Sepolia)
-	XLayerSepoliaTestnetChainID = 195  // X Layer Sepolia testnet (added for blacklist dispatch, XLOP-1099)
+	XLayerMainnetChainID = 196  // X Layer mainnet
+	XLayerTestnetChainID = 1952 // X Layer testnet (Sepolia)
+	XLayerDevnetChainID  = 195  // X Layer devnet (blacklist dispatch, XLOP-1099/1100)
 )
 
 // --- XLayer emergency-freeze blacklist (XLOP-1099) ---
@@ -25,16 +25,21 @@ const (
 // address of its L2BlacklistMirror contract. A chain_id is "blacklist enabled"
 // iff (and only iff) it is a key of this map.
 //
-// NOTE (blocking open item B-1, TD §11.4): the three production mirror
-// addresses are pending from the contracts repo. The values below are
-// deterministic placeholders so the dispatch logic (IsBlacklistEnabled /
-// BlacklistMirror) is testable; they MUST be replaced with the real deployed
-// addresses before the feature is enabled network-wide. Tests assert via the
-// map keys (IsBlacklistEnabled / BlacklistMirror), never literal addresses.
+// chain 195 (devnet) holds the real deterministic mirror address (XLOP-1100):
+// deployed from the test-mnemonic account index 19 at its L2 nonce 0, so the
+// address is stable across every devnet rebuild and must stay byte-identical
+// with xlayer-reth's hardcoded 195 slot.
+//
+// NOTE (blocking open item B-1, TD §11.4): the testnet (1952) and mainnet (196)
+// mirror addresses are still pending from the contracts repo; the values below
+// are deterministic placeholders so the dispatch logic is testable and MUST be
+// replaced with the real deployed addresses before the feature is enabled on
+// those networks. Tests assert via the map keys (IsBlacklistEnabled /
+// BlacklistMirror), never literal addresses.
 var XLayerBlacklistMirrorAddress = map[uint64]common.Address{
-	XLayerSepoliaTestnetChainID: common.HexToAddress("0x000000000000000000000000626C61636B6C6973740195"), // TODO(B-1): real 195 address
-	XLayerTestnetChainID:        common.HexToAddress("0x000000000000000000000000626C61636B6C6973741952"), // TODO(B-1): real 1952 address
-	XLayerMainnetChainID:        common.HexToAddress("0x000000000000000000000000626C61636B6C6973740196"), // TODO(B-1): real 196 address
+	XLayerDevnetChainID:  common.HexToAddress("0x73511669fd4dE447feD18BB79bAFeAC93aB7F31f"),       // devnet (XLOP-1100): deterministic deploy address
+	XLayerTestnetChainID: common.HexToAddress("0x000000000000000000000000626C61636B6C6973741952"), // TODO(B-1): real 1952 address
+	XLayerMainnetChainID: common.HexToAddress("0x000000000000000000000000626C61636B6C6973740196"), // TODO(B-1): real 196 address
 }
 
 // IsBlacklistEnabled reports whether chain-level blacklist interception is

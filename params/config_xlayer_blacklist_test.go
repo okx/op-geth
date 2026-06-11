@@ -14,7 +14,7 @@ func TestIsBlacklistEnabled(t *testing.T) {
 	}{
 		{"mainnet 196 (DM-6.1)", XLayerMainnetChainID, true},
 		{"testnet 1952 (DM-6.2)", XLayerTestnetChainID, true},
-		{"sepolia 195 (DM-6.3)", XLayerSepoliaTestnetChainID, true},
+		{"devnet 195 (DM-6.3)", XLayerDevnetChainID, true},
 		{"eth mainnet 1 (DM-6.4)", 1, false},
 		{"op mainnet 10 (DM-6.4)", 10, false},
 		{"zero (DM-6.5)", 0, false},
@@ -30,7 +30,7 @@ func TestIsBlacklistEnabled(t *testing.T) {
 
 func TestBlacklistMirror(t *testing.T) {
 	// DM-6.7: returns (addr,true) for the three enabled chains, (_,false) otherwise.
-	for _, id := range []uint64{XLayerSepoliaTestnetChainID, XLayerTestnetChainID, XLayerMainnetChainID} {
+	for _, id := range []uint64{XLayerDevnetChainID, XLayerTestnetChainID, XLayerMainnetChainID} {
 		addr, ok := BlacklistMirror(id)
 		if !ok {
 			t.Fatalf("BlacklistMirror(%d) ok=false, want true", id)
