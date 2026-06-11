@@ -32,6 +32,12 @@ description: "Service-level patterns: event broadcasting, caching, locking, roll
 
 [Convention] `RollupCostFunc` is wired per-subpool from the `RollupCostFuncProvider` interface. Missing wiring means L1 fees are excluded from balance checks — txs may pass pool validation but fail at execution.
 
+## Ingress Filtering
+
+[Convention] `txpool.IngressFilter.FilterTx` returns a **bool only** — every rejection from any registered filter collapses to the single generic error `core.ErrTxFilteredOut`. The interface cannot carry a filter-specific reason. To surface a filter-specific RPC error/message to the submitter, do NOT widen the interface: EXTEND the legacypool add loop with a **concrete-type special-case** (e.g. type-assert the filter or check a sentinel and map to a dedicated error like `core.ErrBlacklisted` → RPC `-32000` + text). `legacypool` already imports `core`/`core/txpool`, so this adds no new import edge and stays fork-local. Match the surfaced error with `errors.Is` against a sentinel, never string equality.
+
+[Convention] Register an `IngressFilter` only on the chains/conditions where it applies, and refresh any snapshot it depends on inside the pool `reset` path (commit + reorg) so the filter view tracks the canonical head. Keep the per-tx pass-through allocation-free — it is a high-frequency hot path; do not log per accepted tx.
+
 ## OP-Stack Gossip Control
 
 [Convention] Three independent gossip gates: `NoTxGossip` (disable all), `TxGossipTrustedPeersOnly` (only trusted peers), `TxGossipNetRestrict` (IP allowlist). All enforced at handler layer via `txGossipAllowed`. Peers failing checks receive `NilPool`.

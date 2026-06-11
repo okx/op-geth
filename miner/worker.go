@@ -86,6 +86,11 @@ type environment struct {
 	coinbase common.Address
 	evm      *vm.EVM
 
+	// XLayer emergency-freeze blacklist (XLOP-1099): per-block execution gate,
+	// nil when the chain is disabled or the list is empty. Shares the same
+	// decision anchor as the import path (TD R-1).
+	blGate *core.BlacklistGate
+
 	// OP-Stack addition: DA footprint block limit
 	daFootprintGasScalar uint16
 
@@ -498,7 +503,7 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 	}
 	state.StartPrefetcher("miner", bundle)
 	// Note the passed coinbase may be different with header.Coinbase.
-	return &environment{
+	env := &environment{
 		signer:   types.MakeSigner(miner.chainConfig, header.Number, header.Time),
 		state:    state,
 		size:     uint64(header.Size()),
@@ -508,7 +513,36 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 		witness:  state.Witness(),
 		evm:      vm.NewEVM(core.NewEVMBlockContext(header, miner.chain, &coinbase, miner.chainConfig, state), state, miner.chainConfig, vm.Config{}),
 		rpcCtx:   rpcCtx,
-	}, nil
+	}
+	miner.attachBlacklistGate(env)
+	return env, nil
+}
+
+// attachBlacklistGate sets up the XLayer blacklist execution gate on the build
+// path (XLOP-1099, FR-2/FR-3). It reads the block-head/parent snapshot once and,
+// when active, rebuilds env.evm so the EVM runs against a hooked state that fires
+// the observational tracer (multiplexed onto evm.Config.Tracer). This is the
+// same decision anchor as the import path (TD R-1). A nil gate (disabled chain /
+// empty list) leaves env.evm untouched (zero hot-path cost).
+func (miner *Miner) attachBlacklistGate(env *environment) {
+	chainID := miner.chainConfig.ChainID
+	if chainID == nil {
+		return
+	}
+	gate := core.NewBlacklistGate(env.state, chainID.Uint64())
+	if gate == nil {
+		return
+	}
+	env.blGate = gate
+	// Multiplex via CombineBlacklistHooks (rather than replacing) for symmetry
+	// with the import path (TD R-8). makeEnv builds env.evm with an empty
+	// vm.Config (no base tracer), so this preserves any future base tracer too.
+	hooks := core.CombineBlacklistHooks(env.evm.Config.Tracer, gate.Hooks())
+	hooked := state.NewHookedState(env.state, hooks)
+	env.evm = vm.NewEVM(
+		core.NewEVMBlockContext(env.header, miner.chain, &env.coinbase, miner.chainConfig, env.state),
+		hooked, miner.chainConfig, vm.Config{Tracer: hooks},
+	)
 }
 
 func (miner *Miner) commitTransaction(ctx context.Context, env *environment, tx *types.Transaction) (err error) {
@@ -558,6 +592,13 @@ func (miner *Miner) commitTransaction(ctx context.Context, env *environment, tx 
 
 	receipt, err := miner.applyTransaction(env, tx)
 	if err != nil {
+		// XLayer blacklist (XLOP-1099, FR-2): a committed normal-tx hit is dropped
+		// from the block and ejected from the mempool. applyTransaction already
+		// undid its state + gas via the outer snapshot.
+		if errors.Is(err, core.ErrBlacklistDrop) {
+			tx.SetRejected()
+			log.Warn("Dropping blacklisted transaction during block-building", "hash", tx.Hash())
+		}
 		return err
 	}
 	env.txs = append(env.txs, tx)
@@ -582,6 +623,10 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 	}
 	receipt, err := miner.applyTransaction(env, tx)
 	if err != nil {
+		if errors.Is(err, core.ErrBlacklistDrop) {
+			tx.SetRejected()
+			log.Warn("Dropping blacklisted blob transaction during block-building", "hash", tx.Hash())
+		}
 		return err
 	}
 	txNoBlob := tx.WithoutBlobTxSidecar()
@@ -603,7 +648,11 @@ func (miner *Miner) applyTransaction(env *environment, tx *types.Transaction) (*
 		snap = env.state.Snapshot()
 		gp   = env.gasPool.Snapshot()
 	)
-	receipt, err := core.ApplyTransaction(env.evm, env.gasPool, env.state, env.header, tx)
+	// XLayer blacklist build-path gate (XLOP-1099, FR-2/FR-3): when active, route
+	// through the shared gate. A committed normal-tx hit returns ErrBlacklistDrop,
+	// and the snapshot/gas-pool restore below fully undoes it so it is dropped
+	// from the block; a committed deposit hit is kept as included-as-reverted.
+	receipt, err := core.ApplyTransactionGatedForBuild(env.blGate, env.evm, env.gasPool, env.state, env.header, tx)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
 		env.gasPool.Set(gp)

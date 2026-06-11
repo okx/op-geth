@@ -70,6 +70,18 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 		gp          = NewGasPool(block.GasLimit())
 	)
 	var tracingStateDB = vm.StateDB(statedb)
+
+	// XLayer emergency-freeze blacklist execution gate (XLOP-1099, FR-2/FR-3/FR-4).
+	// Read the block-head/parent snapshot once and multiplex the observational
+	// tracer onto cfg.Tracer so detection runs on the shared apply path. nil gate
+	// (disabled chain / empty list) means the unmodified apply path is used.
+	var blGate *BlacklistGate
+	if config.ChainID != nil {
+		if blGate = NewBlacklistGate(statedb, config.ChainID.Uint64()); blGate != nil {
+			cfg.Tracer = CombineBlacklistHooks(cfg.Tracer, blGate.Hooks())
+		}
+	}
+
 	if hooks := cfg.Tracer; hooks != nil {
 		tracingStateDB = state.NewHookedState(statedb, hooks)
 	}
@@ -106,12 +118,11 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 			telemetry.Int64Attribute("tx.index", int64(i)),
 		)
 
-		receipt, err := ApplyTransactionWithEVM(msg, gp, statedb, blockNumber, blockHash, context.Time, tx, evm)
+		receipt, err := applyTransactionDispatch(blGate, msg, gp, statedb, blockNumber, blockHash, context.Time, tx, evm)
 		if err != nil {
 			spanEnd(&err)
 			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
-
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
 		spanEnd(nil)

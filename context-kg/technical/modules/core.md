@@ -13,6 +13,7 @@ description: "Module design for core: blockchain, state, txpool, VM, rawdb — t
 - Raw database: block/receipt/header storage, ancient freezer, chain metadata
 - Genesis initialization and XLayer first-block commitment
 - OP-Stack extensions: optimism metrics, OKX statistics logging, XLayer genesis/fork overrides
+- XLayer blacklist interception (fork-local, additive): a single state-transition decision anchor enforced on both the import and build paths (`core/blacklist_*_xlayer.go`, `core/txpool/blacklist_filter_xlayer.go`); a strict no-op until real mirror addresses are deployed
 
 ## NOT Responsible For
 

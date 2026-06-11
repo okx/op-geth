@@ -1055,7 +1055,14 @@ func (pool *LegacyPool) addTxsLocked(txs []*types.Transaction, errs []error) *ac
 		filtered := false
 		for _, filter := range pool.ingressFilters {
 			if !filter.FilterTx(pool.filterCtx, tx) {
-				errs[i] = core.ErrTxFilteredOut
+				// XLayer blacklist (XLOP-1099, FR-1/FR-7): surface the fixed
+				// sentinel so eth_sendRawTransaction returns -32000 with the
+				// blacklist message; all other filters keep the generic error.
+				if _, ok := filter.(*txpool.BlacklistFilter); ok {
+					errs[i] = core.ErrBlacklisted
+				} else {
+					errs[i] = core.ErrTxFilteredOut
+				}
 				log.Trace("Discarding filtered transaction", "hash", tx.Hash())
 				invalidTxMeter.Mark(1)
 				filtered = true
@@ -1495,6 +1502,16 @@ func (pool *LegacyPool) reset(oldHead, newHead *types.Header) {
 	pool.currentHead.Store(newHead)
 	pool.currentState = statedb
 	pool.pendingNonces = newNoncer(statedb)
+
+	// XLayer blacklist (XLOP-1099, FR-1 AC4): refresh each blacklist ingress
+	// filter's in-memory snapshot from the new-head state. reset fires on both
+	// commit and reorg, so a reorg naturally rebuilds the snapshot from the new
+	// chain head with no stale-chain residue.
+	for _, filter := range pool.ingressFilters {
+		if bl, ok := filter.(*txpool.BlacklistFilter); ok {
+			bl.Refresh(statedb)
+		}
+	}
 
 	// OP-Stack addition
 	pool.resetRollupCostFn(newHead.Time, statedb)

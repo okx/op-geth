@@ -150,6 +150,13 @@ var (
 	// being included in the pool.
 	ErrTxFilteredOut = errors.New("transaction filtered out")
 
+	// ErrBlacklisted indicates the XLayer emergency-freeze blacklist ingress filter
+	// rejected the transaction because its top-level sender or recipient is on the
+	// blacklist (XLOP-1099, FR-1 / FR-7). The message is a fixed, dynamic-field-free
+	// string surfaced verbatim to RPC clients as a JSON-RPC -32000 error. Match with
+	// errors.Is, never string comparison (KG pitfall: xlayer-migration).
+	ErrBlacklisted = errors.New("xlayer-blacklist: sender or recipient is on the blacklist")
+
 	// ErrSystemTxNotSupported is returned for any deposit tx with IsSystemTx=true after the Regolith fork
 	ErrSystemTxNotSupported = errors.New("system tx not supported")
 )

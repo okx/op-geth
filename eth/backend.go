@@ -389,6 +389,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		chainID := uint256.MustFromBig(chainConfig.ChainID)
 		poolFilters = append(poolFilters, txpool.NewInteropFilter(eth, *chainID))
 	}
+	// XLayer blacklist (XLOP-1099, FR-1): register the ingress filter on the
+	// enabled XLayer chains only. Unrecognized chains add no filter (no-op).
+	if chainConfig.ChainID != nil && params.IsBlacklistEnabled(chainConfig.ChainID.Uint64()) {
+		poolFilters = append(poolFilters, txpool.NewBlacklistFilter(chainConfig.ChainID.Uint64()))
+	}
 	eth.txPool, err = txpool.New(config.TxPool.PriceLimit, eth.blockchain, txPools, poolFilters)
 	if err != nil {
 		return nil, err
