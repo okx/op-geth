@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 // BlacklistFilter rejects a transaction whose top-level sender or recipient is
@@ -39,6 +40,17 @@ func NewBlacklistFilter(chainID uint64) *BlacklistFilter {
 	return f
 }
 
+// NewBlacklistFilterWithSnapshot builds a filter pre-seeded with a snapshot,
+// bypassing the on-chain read. Used by tests (and tooling) to construct a filter
+// with a known list without deploying a mirror contract.
+func NewBlacklistFilterWithSnapshot(chainID uint64, snap *core.Snapshot) *BlacklistFilter {
+	f := NewBlacklistFilter(chainID)
+	if snap != nil {
+		f.snap.Store(snap)
+	}
+	return f
+}
+
 // FilterTx implements txpool.IngressFilter. It returns true (allow) when the
 // snapshot is empty (disabled chain or empty list) or neither top-level address
 // is blacklisted; false (reject) on a hit.
@@ -60,12 +72,13 @@ func (f *BlacklistFilter) FilterTx(ctx context.Context, tx *types.Transaction) b
 	return true
 }
 
-// Refresh rebuilds the in-memory snapshot from the given block-head state. It is
-// invoked at the end of LegacyPool.reset, which fires on both commit and reorg
-// (FR-1 AC4) — so after a reorg the snapshot is rebuilt from the new head with
-// no stale-chain residue.
-func (f *BlacklistFilter) Refresh(headState vm.StateDB) {
-	snap := core.ReadBlacklistSnapshot(headState, f.chainID)
+// Refresh rebuilds the in-memory snapshot from the given block-head state via
+// the mirror contract's view ABI. header/config are needed to build the
+// read-only EVM for the view call. It is invoked at the end of LegacyPool.reset,
+// which fires on both commit and reorg (FR-1 AC4) — so after a reorg the snapshot
+// is rebuilt from the new head with no stale-chain residue.
+func (f *BlacklistFilter) Refresh(headState vm.StateDB, header *types.Header, config *params.ChainConfig) {
+	snap := core.ReadBlacklistSnapshot(headState, header, config, f.chainID)
 	f.snap.Store(snap)
 	core.MetricBlacklistCacheSize(snap.Size())
 }

@@ -77,7 +77,7 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 	// (disabled chain / empty list) means the unmodified apply path is used.
 	var blGate *BlacklistGate
 	if config.ChainID != nil {
-		if blGate = NewBlacklistGate(statedb, config.ChainID.Uint64()); blGate != nil {
+		if blGate = NewBlacklistGate(statedb, header, config, config.ChainID.Uint64()); blGate != nil {
 			cfg.Tracer = CombineBlacklistHooks(cfg.Tracer, blGate.Hooks())
 		}
 	}

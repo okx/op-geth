@@ -1,7 +1,6 @@
 package core
 
 import (
-	"errors"
 	"math/big"
 	"testing"
 
@@ -45,8 +44,7 @@ func TestDeposit_BlacklistedHit(t *testing.T) {
 	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB") // not exempt
 
 	sdb := newTestStateDB(t)
-	writeMirrorList(t, sdb, chainID, []common.Address{listed})
-	gate := NewBlacklistGate(sdb, chainID)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
 	if gate == nil {
 		t.Fatal("expected active gate")
 	}
@@ -80,6 +78,191 @@ func TestDeposit_BlacklistedHit(t *testing.T) {
 	}
 }
 
+// TestDeposit_BlacklistedHit_CumulativeGasUsed is the C-1 regression: an
+// intercepted deposit must report receipt.CumulativeGasUsed == tx.Gas() (full
+// gasLimit), matching gp.Used() and the canonical failed-deposit accounting. A
+// plain SubGas would leave CumulativeGasUsed at the natural consumed gas and
+// diverge the receipts root from xlayer-reth.
+func TestDeposit_BlacklistedHit_CumulativeGasUsed(t *testing.T) {
+	const chainID = params.XLayerMainnetChainID
+	config := depositTestConfig()
+	listed := common.HexToAddress("0x00000000000000000000000000000000000000AA")
+	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB")
+
+	sdb := newTestStateDB(t)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	evm := newBuildPathEVM(config, sdb, gate)
+
+	const gas = 100000
+	tx := depositTx(depositor, listed, 1000, 100, gas)
+	gp := NewGasPool(30_000_000)
+
+	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if receipt.CumulativeGasUsed != tx.Gas() {
+		t.Fatalf("CumulativeGasUsed = %d, want %d (full gasLimit; C-1)", receipt.CumulativeGasUsed, tx.Gas())
+	}
+	if receipt.CumulativeGasUsed != gp.Used() {
+		t.Fatalf("CumulativeGasUsed (%d) != gp.Used() (%d) — receipt/header gas mismatch", receipt.CumulativeGasUsed, gp.Used())
+	}
+}
+
+// TestDeposit_BlacklistedHit_CumulativeAcrossTxs: on a shared block gas pool, a
+// tx following an intercepted deposit must see CumulativeGasUsed advance by the
+// deposit's full gasLimit (not its natural usage). This is the build-path
+// (worker) coverage of the cumulative C-1 fix across multiple txs.
+func TestDeposit_BlacklistedHit_CumulativeAcrossTxs(t *testing.T) {
+	const chainID = params.XLayerMainnetChainID
+	config := depositTestConfig()
+	listed := common.HexToAddress("0x00000000000000000000000000000000000000AA")
+	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB")
+	recipient := common.HexToAddress("0x00000000000000000000000000000000000000CC") // not listed
+
+	sdb := newTestStateDB(t)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	evm := newBuildPathEVM(config, sdb, gate)
+	gp := NewGasPool(30_000_000) // shared across both txs
+
+	const depGas = 100000
+	dep := depositTx(depositor, listed, 1000, 100, depGas)
+	r1, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), dep)
+	if err != nil {
+		t.Fatalf("deposit apply err: %v", err)
+	}
+	if r1.CumulativeGasUsed != dep.Gas() {
+		t.Fatalf("deposit CumulativeGasUsed = %d, want %d", r1.CumulativeGasUsed, dep.Gas())
+	}
+
+	normalTx, from := signValueTx(t, recipient, 100)
+	sdb.AddBalance(from, uint256.NewInt(1e18), 0 /* BalanceChangeUnspecified */)
+	r2, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), normalTx)
+	if err != nil {
+		t.Fatalf("normal apply err: %v", err)
+	}
+	if r2.Status != types.ReceiptStatusSuccessful {
+		t.Fatalf("normal tx status = %d, want 1", r2.Status)
+	}
+	if want := r1.CumulativeGasUsed + r2.GasUsed; r2.CumulativeGasUsed != want {
+		t.Fatalf("second CumulativeGasUsed = %d, want %d (= deposit full gasLimit %d + normal %d)",
+			r2.CumulativeGasUsed, want, r1.CumulativeGasUsed, r2.GasUsed)
+	}
+}
+
+// TestDeposit_NaturalSuccess_CumulativeUnchanged: control — a non-intercepted
+// (successful) deposit is unaffected by the C-1 fix; its CumulativeGasUsed
+// equals its own natural GasUsed (single tx in the pool).
+func TestDeposit_NaturalSuccess_CumulativeUnchanged(t *testing.T) {
+	const chainID = params.XLayerMainnetChainID
+	config := depositTestConfig()
+	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB")
+	recipient := common.HexToAddress("0x00000000000000000000000000000000000000CC") // not listed
+
+	sdb := newTestStateDB(t)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot(nil)) // empty list → nil gate (no hit possible)
+	evm := newBuildPathEVM(config, sdb, gate)
+	gp := NewGasPool(30_000_000)
+
+	tx := depositTx(depositor, recipient, 1000, 100, 100000)
+	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if receipt.Status != types.ReceiptStatusSuccessful {
+		t.Fatalf("status = %d, want 1 (not intercepted)", receipt.Status)
+	}
+	if receipt.CumulativeGasUsed != receipt.GasUsed {
+		t.Fatalf("CumulativeGasUsed = %d, want == GasUsed %d (single-tx, natural)", receipt.CumulativeGasUsed, receipt.GasUsed)
+	}
+}
+
+// TestDeposit_BlacklistedHit_ExtraZero exercises the `extra > 0` guard's false
+// edge: when the deposit's natural gas usage already equals its gasLimit
+// (extra==0), ChargeUsed is skipped, yet CumulativeGasUsed must already equal
+// the full gasLimit (no double count). gasLimit is set to the intrinsic gas of a
+// bare value transfer (21000).
+func TestDeposit_BlacklistedHit_ExtraZero(t *testing.T) {
+	const chainID = params.XLayerMainnetChainID
+	config := depositTestConfig()
+	listed := common.HexToAddress("0x00000000000000000000000000000000000000AA")
+	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB")
+
+	sdb := newTestStateDB(t)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	evm := newBuildPathEVM(config, sdb, gate)
+
+	const gas = params.TxGas // 21000 — intrinsic of a value transfer; deposit uses exactly this, so extra==0
+	tx := depositTx(depositor, listed, 1000, 100, gas)
+	gp := NewGasPool(30_000_000)
+
+	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if receipt.Status != types.ReceiptStatusFailed {
+		t.Fatalf("status = %d, want 0", receipt.Status)
+	}
+	if receipt.CumulativeGasUsed != tx.Gas() {
+		t.Fatalf("CumulativeGasUsed = %d, want %d (extra==0: cumulative already == gasLimit)", receipt.CumulativeGasUsed, tx.Gas())
+	}
+	if gp.Used() != tx.Gas() {
+		t.Fatalf("gp.Used() = %d, want %d", gp.Used(), tx.Gas())
+	}
+}
+
+// TestImportPath_DepositHit_CumulativeAcrossTxs covers the IMPORT path
+// (dropNormalHit=false, the StateProcessor.Process entry) cumulative behaviour:
+// an intercepted deposit followed by a normal tx on a shared gas pool advances
+// CumulativeGasUsed by the deposit's full gasLimit. Mirrors the build-path
+// coverage on the other apply entry.
+func TestImportPath_DepositHit_CumulativeAcrossTxs(t *testing.T) {
+	const chainID = params.XLayerMainnetChainID
+	config := depositTestConfig()
+	listed := common.HexToAddress("0x00000000000000000000000000000000000000AA")
+	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB")
+	recipient := common.HexToAddress("0x00000000000000000000000000000000000000CC")
+
+	sdb := newTestStateDB(t)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	evm := newBuildPathEVM(config, sdb, gate)
+	gp := NewGasPool(30_000_000)
+	signer := types.MakeSigner(config, big.NewInt(1), 1)
+
+	dep := depositTx(depositor, listed, 1000, 100, 100000)
+	dmsg, err := TransactionToMessage(dep, signer, nil)
+	if err != nil {
+		t.Fatalf("deposit msg: %v", err)
+	}
+	r1, hit, err := applyTransactionWithBlacklistGate(gate, dmsg, gp, sdb, big.NewInt(1), common.Hash{}, 1, dep, evm, false /* import path */)
+	if err != nil {
+		t.Fatalf("import-path deposit err: %v", err)
+	}
+	if !hit || r1.Status != types.ReceiptStatusFailed {
+		t.Fatalf("deposit not intercepted on import path (hit=%v status=%d)", hit, r1.Status)
+	}
+	if r1.CumulativeGasUsed != dep.Gas() {
+		t.Fatalf("deposit CumulativeGasUsed = %d, want %d", r1.CumulativeGasUsed, dep.Gas())
+	}
+
+	normalTx, from := signValueTx(t, recipient, 100)
+	sdb.AddBalance(from, uint256.NewInt(1e18), 0)
+	nmsg, err := TransactionToMessage(normalTx, signer, nil)
+	if err != nil {
+		t.Fatalf("normal msg: %v", err)
+	}
+	r2, _, err := applyTransactionWithBlacklistGate(gate, nmsg, gp, sdb, big.NewInt(1), common.Hash{}, 1, normalTx, evm, false)
+	if err != nil {
+		t.Fatalf("import-path normal err: %v", err)
+	}
+	if r2.Status != types.ReceiptStatusSuccessful {
+		t.Fatalf("normal tx status = %d, want 1", r2.Status)
+	}
+	if want := r1.CumulativeGasUsed + r2.GasUsed; r2.CumulativeGasUsed != want {
+		t.Fatalf("second CumulativeGasUsed = %d, want %d (import path)", r2.CumulativeGasUsed, want)
+	}
+}
+
 // TestDeposit_ExemptSenderNotIntercepted: a deposit from a deposit-exempt sender
 // (system / L1-attributes) carrying a listed address is NEVER intercepted, even
 // though it transfers value to the listed address (DM-3.2, IsDepositExemptSender
@@ -100,8 +283,7 @@ func TestDeposit_ExemptSenderNotIntercepted(t *testing.T) {
 	for _, es := range exemptSenders {
 		t.Run(es.name, func(t *testing.T) {
 			sdb := newTestStateDB(t)
-			writeMirrorList(t, sdb, chainID, []common.Address{listed})
-			gate := NewBlacklistGate(sdb, chainID)
+			gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
 			evm := newBuildPathEVM(config, sdb, gate)
 
 			tx := depositTx(es.from, listed, 1000, 100, 100000)
@@ -128,20 +310,54 @@ func TestDeposit_ExemptSenderNotIntercepted(t *testing.T) {
 	}
 }
 
-// TestImportPath_NormalHitStatusZero: on the import path (dropNormalHit=false), a
-// committed normal-tx hit is NOT dropped — it is kept with a deterministic
-// status=0 receipt (an adversarial block is validated identically across clients).
-func TestImportPath_NormalHitStatusZero(t *testing.T) {
+// TestApplyTransactionDispatch_L2HitNotIntercepted drives the actual import
+// entry point (applyTransactionDispatch, used by StateProcessor.Process): an L2
+// tx touching a listed address is executed normally (status=1, transfer kept) —
+// the follower does not intercept L2 txs.
+func TestApplyTransactionDispatch_L2HitNotIntercepted(t *testing.T) {
 	const chainID = params.XLayerMainnetChainID
 	config := buildPathTestConfig()
 	listed := common.HexToAddress("0x00000000000000000000000000000000000000AA")
 
 	sdb := newTestStateDB(t)
 	tx, from := signValueTx(t, listed, 100)
-	sdb.AddBalance(from, uint256.NewInt(1e18), 0 /* tracing.BalanceChangeUnspecified */)
-	writeMirrorList(t, sdb, chainID, []common.Address{listed})
+	sdb.AddBalance(from, uint256.NewInt(1e18), 0)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	evm := newBuildPathEVM(config, sdb, gate)
+	signer := types.MakeSigner(config, big.NewInt(1), 1)
+	msg, err := TransactionToMessage(tx, signer, nil)
+	if err != nil {
+		t.Fatalf("TransactionToMessage: %v", err)
+	}
 
-	gate := NewBlacklistGate(sdb, chainID)
+	receipt, err := applyTransactionDispatch(gate, msg, NewGasPool(30_000_000), sdb, big.NewInt(1), common.Hash{}, 1, tx, evm)
+	if err != nil {
+		t.Fatalf("dispatch err: %v", err)
+	}
+	if receipt.Status != types.ReceiptStatusSuccessful {
+		t.Fatalf("status = %d, want 1 (import dispatch must not intercept L2 tx)", receipt.Status)
+	}
+	if got := sdb.GetBalance(listed).Uint64(); got != 100 {
+		t.Fatalf("listed balance = %d, want 100 (transfer kept)", got)
+	}
+}
+
+// TestImportPath_L2NormalHit_NotIntercepted: on the import path
+// (dropNormalHit=false), an L2 (non-deposit) tx that touches a listed address is
+// NOT intercepted by the follower. L2 interception is the sequencer's job (it
+// drops such txs at build time); a follower executes the block as-is and follows
+// the sequencer. So the tx executes normally: status=1, value transfer kept,
+// sender nonce bumped — and the gate reports hit=false (no interception action).
+func TestImportPath_L2NormalHit_NotIntercepted(t *testing.T) {
+	const chainID = params.XLayerMainnetChainID
+	config := buildPathTestConfig()
+	listed := common.HexToAddress("0x00000000000000000000000000000000000000AA")
+
+	sdb := newTestStateDB(t)
+	tx, from := signValueTx(t, listed, 100)
+	const startBal = uint64(1e18)
+	sdb.AddBalance(from, uint256.NewInt(startBal), 0 /* tracing.BalanceChangeUnspecified */)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
 	evm := newBuildPathEVM(config, sdb, gate)
 	signer := types.MakeSigner(config, big.NewInt(1), 1)
 	msg, err := TransactionToMessage(tx, signer, nil)
@@ -152,18 +368,24 @@ func TestImportPath_NormalHitStatusZero(t *testing.T) {
 	receipt, hit, err := applyTransactionWithBlacklistGate(
 		gate, msg, NewGasPool(30_000_000), sdb, big.NewInt(1), common.Hash{}, 1, tx, evm, false /* dropNormalHit */)
 	if err != nil {
-		t.Fatalf("import path must not return an error for a normal hit, got %v", err)
+		t.Fatalf("import path err: %v", err)
 	}
-	if errors.Is(err, ErrBlacklistDrop) {
-		t.Fatal("import path must NOT drop (dropNormalHit=false)")
+	if hit {
+		t.Fatal("L2 normal tx must NOT be intercepted on the import path (follower follows seq)")
 	}
-	if !hit {
-		t.Fatal("expected hit")
+	if receipt.Status != types.ReceiptStatusSuccessful {
+		t.Fatalf("status = %d, want 1 (L2 tx executed normally, not intercepted)", receipt.Status)
 	}
-	if receipt.Status != types.ReceiptStatusFailed {
-		t.Fatalf("status = %d, want 0 (import-path normal hit kept as status=0)", receipt.Status)
+	if got := sdb.GetBalance(listed).Uint64(); got != 100 {
+		t.Fatalf("listed balance = %d, want 100 (transfer kept; not intercepted)", got)
 	}
-	if !sdb.GetBalance(listed).IsZero() {
-		t.Fatalf("listed balance = %s, want 0 (effects reverted)", sdb.GetBalance(listed))
+	if got := sdb.GetNonce(from); got != 1 {
+		t.Fatalf("sender nonce = %d, want 1 (tx applied normally)", got)
+	}
+	// Sender paid value + gas fee, not reverted (tx executed normally). With
+	// GasPrice=1 (signValueTx) the gas fee equals receipt.GasUsed.
+	wantSenderBal := startBal - 100 - receipt.GasUsed
+	if got := sdb.GetBalance(from).Uint64(); got != wantSenderBal {
+		t.Fatalf("sender balance = %d, want %d (start %d - value 100 - gas %d)", got, wantSenderBal, startBal, receipt.GasUsed)
 	}
 }

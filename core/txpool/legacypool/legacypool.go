@@ -1509,7 +1509,7 @@ func (pool *LegacyPool) reset(oldHead, newHead *types.Header) {
 	// chain head with no stale-chain residue.
 	for _, filter := range pool.ingressFilters {
 		if bl, ok := filter.(*txpool.BlacklistFilter); ok {
-			bl.Refresh(statedb)
+			bl.Refresh(statedb, newHead, pool.chainconfig)
 		}
 	}
 

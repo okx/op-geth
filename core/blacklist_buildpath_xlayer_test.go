@@ -82,9 +82,7 @@ func TestBuildPath_NormalHitDropped(t *testing.T) {
 	sdb := newTestStateDB(t)
 	tx, from := signValueTx(t, listed, 100)
 	sdb.AddBalance(from, uint256.NewInt(1e18), tracing.BalanceChangeUnspecified)
-	writeMirrorList(t, sdb, chainID, []common.Address{listed})
-
-	gate := NewBlacklistGate(sdb, chainID)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
 	if gate == nil {
 		t.Fatal("expected active gate")
 	}
@@ -115,9 +113,7 @@ func TestBuildPath_NonHitKept(t *testing.T) {
 	sdb := newTestStateDB(t)
 	tx, from := signValueTx(t, recipient, 100)
 	sdb.AddBalance(from, uint256.NewInt(1e18), tracing.BalanceChangeUnspecified)
-	writeMirrorList(t, sdb, chainID, []common.Address{listed})
-
-	gate := NewBlacklistGate(sdb, chainID)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
 	evm := newBuildPathEVM(config, sdb, gate)
 
 	receipt, err := ApplyTransactionGatedForBuild(gate, evm, NewGasPool(30_000_000), sdb, buildPathHeader(), tx)

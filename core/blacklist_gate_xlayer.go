@@ -9,15 +9,20 @@
 // observational (core/tracing.Hooks, cannot abort); the decision is made AFTER
 // ApplyMessage returns, using committed effects only.
 //
-// Outcome differs by path for a committed NORMAL-tx hit (a tx that should never
-// be in an honest block):
-//   - import path  (dropNormalHit=false): keep as included-with status=0 so a
-//     follower validating an adversarial block produces a deterministic result.
+// Outcome differs by path for a committed NORMAL (L2, non-deposit) tx hit:
 //   - build path   (dropNormalHit=true):  signal the miner to drop the tx from
 //     the block entirely (ErrBlacklistDrop) and eject it from the mempool; the
-//     miner's outer snapshot fully undoes state + gas.
+//     miner's outer snapshot fully undoes state + gas. The sequencer is the sole
+//     enforcement point for L2 txs (they can only enter via its mempool).
+//   - import path  (dropNormalHit=false): NOT intercepted — the follower executes
+//     the L2 tx as-is and follows the sequencer. An honest sequencer never
+//     includes a blacklisted L2 tx (it drops them at build time), so this is only
+//     reached for an adversarial/foreign block; force-failing an already-included
+//     L2 tx would leave an inconsistent post-state (nonce/gas reverted but gas
+//     counted) and risk cross-client divergence, so followers do not do it.
 // A committed DEPOSIT hit is identical on both paths: included-as-reverted with
-// status=0, gasUsed=tx.Gas(), full gasLimit charged to the block.
+// status=0, gasUsed=tx.Gas(), full gasLimit charged to the block — because L1->L2
+// deposits bypass the sequencer (forced inclusion) and must be gated by consensus.
 //
 // Safety note: while a chain is "blacklist enabled" by chain_id, the gate is a
 // strict no-op until a non-empty L2BlacklistMirror is deployed (empty snapshot
@@ -58,18 +63,32 @@ type BlacklistGate struct {
 	tracer  *BlacklistTracer
 }
 
-// NewBlacklistGate reads the block-head snapshot for chainID from the parent
-// state and returns a gate, or nil if the chain is disabled or the list empty.
-// statedb MUST be the block-head/parent state (read once before the tx loop).
-func NewBlacklistGate(statedb vm.StateDB, chainID uint64) *BlacklistGate {
+// NewBlacklistGate reads the block-head snapshot for chainID via the mirror
+// contract's view ABI and returns a gate, or nil if the chain is disabled or the
+// list empty. statedb MUST be the block-head/parent state; header/config are
+// needed to build the read-only EVM for the view call (read once before the tx
+// loop).
+func NewBlacklistGate(statedb vm.StateDB, header *types.Header, config *params.ChainConfig, chainID uint64) *BlacklistGate {
 	if !params.IsBlacklistEnabled(chainID) {
 		return nil
 	}
 	start := time.Now()
-	snap := ReadBlacklistSnapshot(statedb, chainID)
+	snap := ReadBlacklistSnapshot(statedb, header, config, chainID)
 	MetricBlacklistSnapshotRead(time.Since(start).Nanoseconds())
 	MetricBlacklistCacheSize(snap.Size())
 	if snap.Size() == 0 {
+		return nil
+	}
+	return &BlacklistGate{chainID: chainID, snap: snap, tracer: NewBlacklistTracer()}
+}
+
+// NewBlacklistGateFromSnapshot builds a gate from an already-built snapshot,
+// bypassing the on-chain read. It is a test seam: gate/tracer/deposit behaviour
+// tests inject a list via NewSnapshot without deploying a mirror contract.
+// Returns nil for an empty snapshot (matching NewBlacklistGate's "no list = no
+// gate" contract).
+func NewBlacklistGateFromSnapshot(chainID uint64, snap *Snapshot) *BlacklistGate {
+	if snap == nil || snap.Size() == 0 {
 		return nil
 	}
 	return &BlacklistGate{chainID: chainID, snap: snap, tracer: NewBlacklistTracer()}
@@ -148,7 +167,9 @@ func chainBalanceChange(a, b tracing.BalanceChangeHook) tracing.BalanceChangeHoo
 
 // applyTransactionDispatch routes an import-path tx through the blacklist-gated
 // apply path when a gate is active, or the unmodified ApplyTransactionWithEVM
-// otherwise. Import path keeps normal-tx hits as status=0 (dropNormalHit=false).
+// otherwise. Import path (dropNormalHit=false): L2 (non-deposit) txs are NOT
+// intercepted — followers execute them as-is and follow the sequencer; only
+// L1->L2 deposit hits are gated (included-as-reverted).
 func applyTransactionDispatch(gate *BlacklistGate, msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, blockTime uint64, tx *types.Transaction, evm *vm.EVM) (*types.Receipt, error) {
 	if gate == nil {
 		return ApplyTransactionWithEVM(msg, gp, statedb, blockNumber, blockHash, blockTime, tx, evm)
@@ -206,6 +227,17 @@ func applyTransactionWithBlacklistGate(gate *BlacklistGate, msg *Message, gp *Ga
 
 	var category string
 	hit, category = gate.evaluate(msg, tx, statedb, blockNumber, blockHash, blockTime)
+	// Import/validation path (dropNormalHit=false): followers do NOT intercept L2
+	// (non-deposit) txs. L2 interception is solely the sequencer's responsibility —
+	// the sequencer drops blacklisted L2 txs at build time, so an honest block never
+	// contains one. A follower executes the block as-is and follows the sequencer;
+	// it must NOT force-fail an already-included L2 tx (doing so would leave an
+	// inconsistent post-state: nonce/gas reverted but gas still counted, and would
+	// risk cross-client divergence). Only L1->L2 deposits — which bypass the
+	// sequencer via forced inclusion — are gated identically on every path.
+	if hit && !tx.IsDepositTx() && !dropNormalHit {
+		hit = false
+	}
 	if hit {
 		MetricBlacklistExecRevert(category)
 		// Build path: a committed normal-tx hit is dropped from the block. Return
@@ -243,9 +275,15 @@ func applyTransactionWithBlacklistGate(gate *BlacklistGate, msg *Message, gp *Ga
 			}
 			statedb.SetNonce(msg.From, nonce+1, tracing.NonceChangeEoACall)
 			// Count the full gasLimit into the block (DM-3.6): consume the gas not
-			// already consumed by the (now-reverted) execution.
+			// already consumed by the (now-reverted) execution. ChargeUsed deducts
+			// `extra` from remaining AND adds it to cumulativeUsed, so both
+			// gp.Used() (→ header.GasUsed) and gp.CumulativeUsed() (→
+			// receipt.CumulativeGasUsed) reflect the full gasLimit — matching the
+			// canonical failed-deposit accounting and keeping receipts root
+			// byte-identical with xlayer-reth (C-1 fix). A plain SubGas here would
+			// leave cumulativeUsed stale and diverge the receipts root.
 			if extra := tx.Gas() - result.UsedGas; extra > 0 {
-				_ = gp.SubGas(extra)
+				_ = gp.ChargeUsed(extra)
 			}
 		}
 	}

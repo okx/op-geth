@@ -529,7 +529,7 @@ func (miner *Miner) attachBlacklistGate(env *environment) {
 	if chainID == nil {
 		return
 	}
-	gate := core.NewBlacklistGate(env.state, chainID.Uint64())
+	gate := core.NewBlacklistGate(env.state, env.header, miner.chainConfig, chainID.Uint64())
 	if gate == nil {
 		return
 	}
