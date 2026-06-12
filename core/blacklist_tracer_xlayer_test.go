@@ -202,3 +202,46 @@ func TestEvaluate_EmptySnapshotNoOp(t *testing.T) {
 		t.Fatalf("nil snapshot must short-circuit to no-op")
 	}
 }
+
+// --- deposit variant: skips check① (decision B, XLOP-1100) ---
+
+func TestEvaluateDeposit_SkipsCallTouch(t *testing.T) {
+	// A committed CALL touch of 0xAAA with no event and no ETH movement: the
+	// deposit path (EvaluateDeposit) must NOT hit (check① skipped); the same trace
+	// via Evaluate (L2) still hits via check①, proving only deposits skip it.
+	tr := NewBlacklistTracer()
+	h := tr.Hooks()
+	h.OnTxStart(nil, nil, common.Address{})
+	h.OnEnter(0, 0, addrBBB, addrCCC, nil, 0, nil) // root
+	h.OnEnter(1, 0, addrCCC, addrAAA, nil, 0, nil) // inner committed touch of 0xAAA
+	h.OnExit(1, nil, 0, nil, false)
+	h.OnExit(0, nil, 0, nil, false)
+
+	if hit, _ := tr.EvaluateDeposit(snapOf(addrAAA), nil, zeroBalance); hit {
+		t.Fatal("deposit must skip check① (pure CALL touch must not hit)")
+	}
+	if hit, cat := tr.Evaluate(snapOf(addrAAA), nil, zeroBalance); !hit || cat != HookCall {
+		t.Fatalf("L2 Evaluate must still hit via check①, got hit=%v cat=%q", hit, cat)
+	}
+}
+
+func TestEvaluateDeposit_StillHitsLogAndBalance(t *testing.T) {
+	t.Run("event hit", func(t *testing.T) {
+		tr := NewBlacklistTracer()
+		tr.Hooks().OnTxStart(nil, nil, common.Address{})
+		hit, cat := tr.EvaluateDeposit(snapOf(addrAAA), []*types.Log{erc20Transfer(addrBBB, addrAAA)}, zeroBalance)
+		if !hit || cat != HookLog {
+			t.Fatalf("deposit event hit: got hit=%v cat=%q, want true/log", hit, cat)
+		}
+	})
+	t.Run("balance hit", func(t *testing.T) {
+		tr := NewBlacklistTracer()
+		h := tr.Hooks()
+		h.OnTxStart(nil, nil, common.Address{})
+		bc(h, addrAAA, 0, 100, tracing.BalanceChangeTransfer)
+		hit, cat := tr.EvaluateDeposit(snapOf(addrAAA), nil, balances(map[common.Address]int64{addrAAA: 100}))
+		if !hit || cat != HookEthBalance {
+			t.Fatalf("deposit balance hit: got hit=%v cat=%q, want true/eth_balance", hit, cat)
+		}
+	})
+}

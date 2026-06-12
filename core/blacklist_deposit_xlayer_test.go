@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
@@ -208,6 +209,90 @@ func TestDeposit_BlacklistedHit_ExtraZero(t *testing.T) {
 	}
 	if gp.Used() != tx.Gas() {
 		t.Fatalf("gp.Used() = %d, want %d", gp.Used(), tx.Gas())
+	}
+}
+
+// TestDeposit_PureCallTouch_NotIntercepted locks decision B's coverage edge
+// (XLOP-1100): a deposit that only CALL-touches a listed address (value=0,
+// mint=0, no Transfer event, no ETH movement) is NO LONGER intercepted now that
+// check① is dropped for deposits — it is included normally (status=1). Under the
+// old all-three-checks path this same deposit was included-as-reverted (status=0),
+// so this test fails if the deposit gate still runs check①.
+func TestDeposit_PureCallTouch_NotIntercepted(t *testing.T) {
+	const chainID = params.XLayerMainnetChainID
+	config := depositTestConfig()
+	listed := common.HexToAddress("0x00000000000000000000000000000000000000AA")
+	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB")
+
+	sdb := newTestStateDB(t)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	if gate == nil {
+		t.Fatal("expected active gate")
+	}
+	evm := newBuildPathEVM(config, sdb, gate)
+
+	// to=listed, value=0, mint=0 → only a top-level CALL touch of the listed
+	// address; no Transfer event, no ETH balance change, so check②/③ do not fire.
+	tx := depositTx(depositor, listed, 0, 0, 100000)
+	gp := NewGasPool(30_000_000)
+
+	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if receipt.Status != types.ReceiptStatusSuccessful {
+		t.Fatalf("status = %d, want 1 (pure CALL-touch deposit no longer intercepted)", receipt.Status)
+	}
+}
+
+// emitTransferToAAARuntime is hand-written runtime bytecode (no PUSH0, so it runs
+// on the build-path EVM's pre-Shanghai instruction set) that always emits
+// ERC20 Transfer(msg.sender, 0xAA, 1) via LOG3. Used to drive a real check②
+// (committed Transfer event) hit on a deposit.
+//
+//	PUSH1 1; PUSH1 0; MSTORE              ; mem[0:32]=1 (value)
+//	PUSH32 0x..AA                         ; topic2 = to = 0xAA (listed)
+//	CALLER                                ; topic1 = from = msg.sender
+//	PUSH32 <Transfer sig>                 ; topic0
+//	PUSH1 0x20; PUSH1 0; LOG3; STOP
+const emitTransferToAAARuntime = "60016000527f00000000000000000000000000000000000000000000000000000000000000aa337fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef60206000a300"
+
+// TestDeposit_EventHit_IncludedAsReverted is the end-to-end deposit check②
+// (Transfer event) case: a deposit calls a non-listed contract that emits a real
+// committed Transfer(_, 0xAA) event. With check① skipped for deposits, the hit
+// comes solely from check② (no value moved → no check③), and the deposit must be
+// included-as-reverted (status=0, gasUsed=gasLimit). Pairs the event-path
+// judgment with the included-as-reverted processing end to end.
+func TestDeposit_EventHit_IncludedAsReverted(t *testing.T) {
+	const chainID = params.XLayerMainnetChainID
+	config := depositTestConfig()
+	listed := common.HexToAddress("0x00000000000000000000000000000000000000AA") // == topic2 in the stub
+	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB")
+	emitter := common.HexToAddress("0x00000000000000000000000000000000000000E1") // not listed
+
+	sdb := newTestStateDB(t)
+	sdb.SetCode(emitter, common.FromHex(emitTransferToAAARuntime), tracing.CodeChangeGenesis)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	if gate == nil {
+		t.Fatal("expected active gate")
+	}
+	evm := newBuildPathEVM(config, sdb, gate)
+
+	// deposit to the emitter, value=0: the only committed effect is the emitted
+	// Transfer(_, 0xAA) → check② hit (check① skipped, check③ no balance move).
+	tx := depositTx(depositor, emitter, 0, 0, 100000)
+	sdb.SetTxContext(tx.Hash(), 0) // logs are indexed by tx hash; gate reads GetLogs(tx.Hash())
+	gp := NewGasPool(30_000_000)
+
+	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if receipt.Status != types.ReceiptStatusFailed {
+		t.Fatalf("status = %d, want 0 (deposit Transfer-event hit → included-as-reverted)", receipt.Status)
+	}
+	if receipt.GasUsed != tx.Gas() {
+		t.Fatalf("gasUsed = %d, want %d (full gasLimit override)", receipt.GasUsed, tx.Gas())
 	}
 }
 

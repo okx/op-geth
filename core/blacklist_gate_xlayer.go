@@ -320,5 +320,14 @@ func (g *BlacklistGate) evaluate(msg *Message, tx *types.Transaction, statedb *s
 		return false, ""
 	}
 	logs := statedb.GetLogs(tx.Hash(), blockNumber.Uint64(), blockHash, blockTime)
+	// Deposits skip check① (committed CALL touch) — cross-client alignment with
+	// xlayer-reth, whose follower path cannot mount an inspector (decision B,
+	// XLOP-1100). Deposits are consensus-critical (included-as-reverted), so both
+	// clients judge them on check②+③ only. Normal L2 txs still run all three (the
+	// sequencer build path has an inspector; L2 interception is sequencer-only and
+	// does not enter consensus).
+	if tx.IsDepositTx() {
+		return g.tracer.EvaluateDeposit(g.snap, logs, statedb.GetBalance)
+	}
 	return g.tracer.Evaluate(g.snap, logs, statedb.GetBalance)
 }

@@ -221,13 +221,34 @@ func (t *BlacklistTracer) balanceHit(snap *Snapshot, balanceOf func(common.Addre
 // Evaluate runs all three committed-effect checks against the block-head
 // snapshot. It returns whether the tx hit the blacklist and the metric category
 // of the first matched check (priority: call > log > balance). balanceOf must
-// read the committed (post-ApplyMessage, pre-revert) state.
+// read the committed (post-ApplyMessage, pre-revert) state. Used for normal L2
+// txs (sequencer build path has an inspector, so check① is available).
 func (t *BlacklistTracer) Evaluate(snap *Snapshot, logs []*types.Log, balanceOf func(common.Address) *uint256.Int) (bool, string) {
+	return t.evaluate(snap, logs, balanceOf, false)
+}
+
+// EvaluateDeposit is the deposit-tx variant that skips check① (committed CALL
+// touch), running only check② (Transfer event) + check③ (ETH balance). This is
+// a consensus-critical cross-client alignment (decision B, XLOP-1100): xlayer-reth
+// cannot mount an inspector on its follower verification path (upstream
+// OpBlockExecutor's EVM type is pinned), so it cannot build the frame tree check①
+// needs. Since deposits are included-as-reverted and must produce byte-identical
+// receipts on both clients, op-geth drops check① on deposits too. The only lost
+// coverage is a deposit that merely CALL-touches a listed address with no Transfer
+// event and no ETH movement (matrix A-7/B-13 pure-touch) — an attacker deposit
+// always moves assets, so it always trips ②/③; no real-world gap.
+func (t *BlacklistTracer) EvaluateDeposit(snap *Snapshot, logs []*types.Log, balanceOf func(common.Address) *uint256.Int) (bool, string) {
+	return t.evaluate(snap, logs, balanceOf, true)
+}
+
+func (t *BlacklistTracer) evaluate(snap *Snapshot, logs []*types.Log, balanceOf func(common.Address) *uint256.Int, skipCallTouch bool) (bool, string) {
 	if snap == nil || snap.Size() == 0 {
 		return false, ""
 	}
-	if hit, _ := t.committedTouch(snap); hit {
-		return true, HookCall
+	if !skipCallTouch {
+		if hit, _ := t.committedTouch(snap); hit {
+			return true, HookCall
+		}
 	}
 	if scanTransferLogs(snap, logs) {
 		return true, HookLog
