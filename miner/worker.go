@@ -75,6 +75,10 @@ type environment struct {
 	coinbase common.Address
 	evm      *vm.EVM
 
+	// gaslessGasUsed tracks the cumulative gas consumed by gasless transactions
+	// already included in the block, used to enforce GaslessBlockGasLimit.
+	gaslessGasUsed uint64
+
 	// OP-Stack addition: DA footprint block limit
 	daFootprintGasScalar uint16
 
@@ -93,6 +97,20 @@ type environment struct {
 // txFits reports whether the transaction fits into the block size limit.
 func (env *environment) txFitsSize(tx *types.Transaction) bool {
 	return env.size+tx.Size() < params.MaxBlockSize-maxBlockSizeBufferZone
+}
+
+// gaslessGasFits reports whether a gasless transaction that may consume up to
+// txGas more gas can still be included without exceeding the per-block gasless
+// gas budget. txGas is the transaction's gas limit, used as a conservative
+// upper bound on its actual gas usage. A zero limit disables the check.
+func gaslessGasFits(used, txGas, limit uint64) bool {
+	if limit == 0 {
+		return true
+	}
+	if txGas > limit {
+		return false
+	}
+	return used <= limit-txGas
 }
 
 const (
@@ -547,8 +565,9 @@ func (miner *Miner) applyTransaction(env *environment, tx *types.Transaction) (*
 
 func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *transactionsByPriceAndNonce, interrupt *atomic.Int32) error {
 	var (
-		isCancun = miner.chainConfig.IsCancun(env.header.Number, env.header.Time)
-		gasLimit = env.header.GasLimit
+		isCancun        = miner.chainConfig.IsCancun(env.header.Number, env.header.Time)
+		gasLimit        = env.header.GasLimit
+		gaslessGasLimit = miner.config.GaslessBlockGasLimit
 	)
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
@@ -615,6 +634,16 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 		// If we don't have enough space for the next transaction, skip the account.
 		if env.gasPool.Gas() < ltx.Gas {
 			log.Trace("Not enough gas left for transaction", "hash", ltx.Hash, "left", env.gasPool.Gas(), "needed", ltx.Gas)
+			txs.Pop()
+			continue
+		}
+
+		// OP-Stack addition: cap the total gas gasless transactions may consume
+		// in a single block. We reserve against the tx's gas limit (a conservative
+		// upper bound) and account the actual gas used once it is committed.
+		if ltx.IsGaslessTx && !gaslessGasFits(env.gaslessGasUsed, ltx.Gas, gaslessGasLimit) {
+			log.Trace("Gasless block gas limit reached, skipping gasless transaction",
+				"hash", ltx.Hash, "used", env.gaslessGasUsed, "needed", ltx.Gas, "limit", gaslessGasLimit)
 			txs.Pop()
 			continue
 		}
@@ -718,6 +747,11 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 			blockDABytes = daBytesAfter
 			if isJovian {
 				*env.header.BlobGasUsed += txDAFootprint
+			}
+			// Account the actual gas used by committed gasless transactions
+			// against the per-block gasless gas budget.
+			if ltx.IsGaslessTx && len(env.receipts) > 0 {
+				env.gaslessGasUsed += env.receipts[len(env.receipts)-1].GasUsed
 			}
 			txs.Shift()
 

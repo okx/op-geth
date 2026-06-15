@@ -79,12 +79,18 @@ type Config struct {
 	EffectiveGasCeil uint64   // if non-zero, a gas ceiling to apply independent of the header's gaslimit value
 	MaxDATxSize      *big.Int `toml:",omitempty"` // if non-nil, don't include any txs with data availability size larger than this in any built block
 	MaxDABlockSize   *big.Int `toml:",omitempty"` // if non-nil, then don't build a block requiring more than this amount of total data availability
+
+	GaslessBlockGasLimit uint64 // if non-zero, the maximum total gas that gasless transactions may consume in a single block
 }
 
 // DefaultConfig contains default settings for miner.
 var DefaultConfig = Config{
 	GasCeil:  60_000_000,
 	GasPrice: big.NewInt(params.Wei),
+
+	// By default a single block may include at most 60M gas worth of gasless
+	// transactions, independent of the block gas limit.
+	GaslessBlockGasLimit: 60_000_000,
 
 	// The default recommit time is chosen as two seconds since
 	// consensus-layer usually will wait a half slot of time(6s)

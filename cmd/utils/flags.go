@@ -599,6 +599,12 @@ var (
 		Value:    0,
 		Category: flags.MinerCategory,
 	}
+	MinerGaslessBlockGasLimitFlag = &cli.Uint64Flag{
+		Name:     "miner.gasless-block-gaslimit",
+		Usage:    "If non-zero, the maximum total gas that gasless transactions may consume in a single block.",
+		Value:    ethconfig.Defaults.Miner.GaslessBlockGasLimit,
+		Category: flags.MinerCategory,
+	}
 	MinerGasPriceFlag = &flags.BigFlag{
 		Name:     "miner.gasprice",
 		Usage:    "Minimum gas price for mining a transaction",
@@ -1776,6 +1782,9 @@ func setMiner(ctx *cli.Context, cfg *miner.Config) {
 	}
 	if ctx.IsSet(MinerEffectiveGasLimitFlag.Name) {
 		cfg.EffectiveGasCeil = ctx.Uint64(MinerEffectiveGasLimitFlag.Name)
+	}
+	if ctx.IsSet(MinerGaslessBlockGasLimitFlag.Name) {
+		cfg.GaslessBlockGasLimit = ctx.Uint64(MinerGaslessBlockGasLimitFlag.Name)
 	}
 	if ctx.IsSet(MinerGasPriceFlag.Name) {
 		cfg.GasPrice = flags.GlobalBig(ctx, MinerGasPriceFlag.Name)

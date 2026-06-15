@@ -127,6 +127,7 @@ var (
 		utils.MiningEnabledFlag, // deprecated
 		utils.MinerGasLimitFlag,
 		utils.MinerEffectiveGasLimitFlag,
+		utils.MinerGaslessBlockGasLimitFlag,
 		utils.MinerGasPriceFlag,
 		utils.MinerEtherbaseFlag, // deprecated
 		utils.MinerExtraDataFlag,
