@@ -41,7 +41,7 @@ func (t *rlpxTransport) doProtoHandshakeLegacy(our *protoHandshake) (their *prot
 }
 
 func isGeth(name string) bool {
-	return strings.Contains(name, "Geth") || strings.Contains(name, "geth")
+	return strings.HasPrefix(name, "Geth/")
 }
 
 func trimETH69(phs *protoHandshake) *protoHandshake {
