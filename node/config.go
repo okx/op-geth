@@ -207,6 +207,10 @@ type Config struct {
 	// JWTSecret is the path to the hex-encoded jwt secret.
 	JWTSecret string `toml:",omitempty"`
 
+	// KMSJWTSecret holds the pre-loaded JWT secret bytes from KMS.
+	// When non-nil, obtainJWTSecret() uses this value directly instead of reading from file.
+	KMSJWTSecret []byte `toml:"-"`
+
 	// EnablePersonal enables the deprecated personal namespace.
 	EnablePersonal bool `toml:"-"`
 

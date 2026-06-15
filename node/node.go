@@ -363,6 +363,10 @@ func ObtainJWTSecret(fileName string) ([]byte, error) {
 // or from the default location. If neither of those are present, it generates
 // a new secret and stores to the default location.
 func (n *Node) obtainJWTSecret(cliParam string) ([]byte, error) {
+	if n.config.KMSJWTSecret != nil {
+		log.Info("Using JWT secret from KMS", "crc32", fmt.Sprintf("%#x", crc32.ChecksumIEEE(n.config.KMSJWTSecret)))
+		return n.config.KMSJWTSecret, nil
+	}
 	fileName := cliParam
 	if len(fileName) == 0 {
 		// no path provided, use default
