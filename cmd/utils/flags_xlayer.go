@@ -46,6 +46,20 @@ var (
 		Value: false,
 	}
 
+	// KMS key name override flags
+	KMSNodeKeyNameFlag = &cli.StringFlag{
+		Name:     "kms.nodekey-name",
+		Usage:    "KMS key name for the devp2p node private key (default: op-geth.nodekeyhex)",
+		Category: flags.XLayerCategory,
+		EnvVars:  []string{"OP_GETH_KMS_NODEKEY_NAME"},
+	}
+	KMSJWTSecretNameFlag = &cli.StringFlag{
+		Name:     "kms.jwtsecret-name",
+		Usage:    "KMS key name for the auth RPC JWT secret (default: op-geth.jwtsecret)",
+		Category: flags.XLayerCategory,
+		EnvVars:  []string{"OP_GETH_KMS_JWTSECRET_NAME"},
+	}
+
 	// XLayerFlags are the default flags for X Layer features
 	XLayerFlags = []cli.Flag{
 		MigrationBlockFlag,
@@ -53,6 +67,8 @@ var (
 		PPRPCTimeoutFlag,
 		TraceLogPath,
 		EnableTraceLog,
+		KMSNodeKeyNameFlag,
+		KMSJWTSecretNameFlag,
 	}
 )
 

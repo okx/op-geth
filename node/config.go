@@ -207,6 +207,14 @@ type Config struct {
 	// JWTSecret is the path to the hex-encoded jwt secret.
 	JWTSecret string `toml:",omitempty"`
 
+	// JWTSecretValue holds a pre-loaded JWT secret (e.g. from KMS).
+	// When non-nil, obtainJWTSecret returns this value directly without file I/O.
+	JWTSecretValue []byte `toml:"-"`
+
+	// KMSEnabled indicates that secrets were loaded from KMS.
+	// When true, auto-generate fallback paths are disabled (defense-in-depth).
+	KMSEnabled bool `toml:"-"`
+
 	// EnablePersonal enables the deprecated personal namespace.
 	EnablePersonal bool `toml:"-"`
 
@@ -372,6 +380,10 @@ func (c *Config) NodeKey() *ecdsa.PrivateKey {
 	// Use any specifically configured key.
 	if c.P2P.PrivateKey != nil {
 		return c.P2P.PrivateKey
+	}
+	// Defense-in-depth: KMS enabled means the key MUST have been pre-injected
+	if c.KMSEnabled {
+		log.Crit("KMS enabled but node key was not pre-injected - configuration error")
 	}
 	// Generate ephemeral key if no datadir is being used.
 	if c.DataDir == "" {

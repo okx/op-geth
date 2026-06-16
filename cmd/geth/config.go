@@ -170,6 +170,34 @@ func loadBaseConfig(ctx *cli.Context) gethConfig {
 // makeConfigNode loads geth configuration and creates a blank node instance.
 func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	cfg := loadBaseConfig(ctx)
+
+	// KMS init must precede node.New() which calls Config.NodeKey()
+	if err := utils.InitKMSIfEnabled(); err != nil {
+		utils.Fatalf("KMS initialization failed: %v", err)
+	}
+	if utils.IsKMSEnabled() {
+		cfg.Node.KMSEnabled = true
+
+		// Warn if --nodekeyhex is also set (addresses adversarial review finding #1)
+		if ctx.IsSet(utils.NodeKeyHexFlag.Name) {
+			log.Warn("--nodekeyhex flag is ignored when KMS is enabled; remove from startup command to avoid exposing secrets in process args")
+		}
+
+		// 1. Node key
+		nodeKeyName := utils.DefaultKMSKeyNodeKey
+		if ctx.IsSet(utils.KMSNodeKeyNameFlag.Name) {
+			nodeKeyName = ctx.String(utils.KMSNodeKeyNameFlag.Name)
+		}
+		utils.SetNodeKeyFromKMS(&cfg.Node.P2P, nodeKeyName)
+
+		// 2. JWT secret
+		jwtKeyName := utils.DefaultKMSKeyJWTSecret
+		if ctx.IsSet(utils.KMSJWTSecretNameFlag.Name) {
+			jwtKeyName = ctx.String(utils.KMSJWTSecretNameFlag.Name)
+		}
+		cfg.Node.JWTSecretValue = utils.GetJWTSecretFromKMS(jwtKeyName)
+	}
+
 	stack, err := node.New(&cfg.Node)
 	if err != nil {
 		utils.Fatalf("Failed to create the protocol stack: %v", err)

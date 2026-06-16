@@ -76,9 +76,12 @@ require (
 	golang.org/x/time v0.9.0
 	golang.org/x/tools v0.29.0
 	google.golang.org/protobuf v1.34.2
+	gitlab.okg.com/okcoin-commons/ok-kms-go v1.0.9
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 )
+
+replace gitlab.okg.com/okcoin-commons/ok-kms-go v1.0.9 => ./kms_stub
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.7.0 // indirect

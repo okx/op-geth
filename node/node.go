@@ -363,6 +363,12 @@ func ObtainJWTSecret(fileName string) ([]byte, error) {
 // or from the default location. If neither of those are present, it generates
 // a new secret and stores to the default location.
 func (n *Node) obtainJWTSecret(cliParam string) ([]byte, error) {
+	// Pre-injected value (e.g., from KMS) takes absolute precedence
+	if len(n.config.JWTSecretValue) > 0 {
+		log.Info("Using pre-injected JWT secret", "crc32", fmt.Sprintf("%#x", crc32.ChecksumIEEE(n.config.JWTSecretValue)))
+		return n.config.JWTSecretValue, nil
+	}
+
 	fileName := cliParam
 	if len(fileName) == 0 {
 		// no path provided, use default
