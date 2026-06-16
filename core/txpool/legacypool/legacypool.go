@@ -195,7 +195,7 @@ var DefaultConfig = Config{
 	Lifetime:       3 * time.Hour,
 	FilterInterval: 12 * time.Second,
 
-	AllowGasless:                    false,
+	AllowGasless:                     false,
 	GaslessMockGasPricePercentileBps: 1000, // 0.1 in basis points
 }
 
@@ -480,10 +480,18 @@ func (pool *LegacyPool) SetGasTip(tip *big.Int) {
 	if newTip.Cmp(old) > 0 {
 		// pool.priced is sorted by GasFeeCap, so we have to iterate through pool.all instead
 		drop := pool.all.TxsBelowTip(tip)
+		// Gasless txs carry a zero tip but are exempt from the min-tip rule (they
+		// pay no fees on-chain).
+		checker := pool.gaslessChecker()
+		removed := 0
 		for _, tx := range drop {
+			if types.IsGaslessTxFor(tx, checker) {
+				continue
+			}
 			pool.removeTx(tx.Hash(), false, true)
+			removed++
 		}
-		pool.priced.Removed(len(drop))
+		pool.priced.Removed(removed)
 	}
 	log.Info("Legacy pool tip threshold updated", "tip", newTip)
 }
@@ -706,6 +714,7 @@ func (pool *LegacyPool) ValidateTxBasics(tx *types.Transaction) error {
 // validateTx checks whether a transaction is valid according to the consensus
 // rules and adheres to some heuristic limits of the local node (price and size).
 func (pool *LegacyPool) validateTx(tx *types.Transaction) error {
+	gaslessChecker := pool.gaslessChecker()
 	opts := &txpool.ValidationOptionsWithState{
 		State: pool.currentState,
 
@@ -720,6 +729,10 @@ func (pool *LegacyPool) validateTx(tx *types.Transaction) error {
 		ExistingCost: func(addr common.Address, nonce uint64) *big.Int {
 			if list := pool.pending[addr]; list != nil {
 				if tx := list.txs.Get(nonce); tx != nil {
+					// Gasless txs only ever spent their value on-chain.
+					if types.IsGaslessTxFor(tx, gaslessChecker) {
+						return tx.Value()
+					}
 					// The total cost is guaranteed to not overflow because it got already
 					// successfully added to the list.
 					cost, _ := txpool.TotalTxCost(tx, pool.rollupCostFn)
@@ -728,7 +741,8 @@ func (pool *LegacyPool) validateTx(tx *types.Transaction) error {
 			}
 			return nil
 		},
-		RollupCostFn: pool.rollupCostFn,
+		RollupCostFn:   pool.rollupCostFn,
+		GaslessChecker: gaslessChecker,
 	}
 	if err := txpool.ValidateTransactionWithState(tx, pool.signer, opts); err != nil {
 		return err
@@ -845,6 +859,9 @@ func (pool *LegacyPool) add(tx *types.Transaction) (replaced bool, err error) {
 	}
 	// If the transaction pool is full, discard underpriced transactions
 	if uint64(pool.all.Slots()+numSlots(tx)) > pool.config.GlobalSlots+pool.config.GlobalQueue {
+		// Refresh the priced list's gasless checker so gasless txs are exempted
+		// from the underpriced/eviction logic below (nil when gasless disabled).
+		pool.priced.setGaslessChecker(pool.gaslessChecker())
 		// If the new transaction is underpriced, don't accept it
 		if pool.priced.Underpriced(tx) {
 			log.Trace("Discarding underpriced transaction", "hash", hash, "gasTipCap", tx.GasTipCap(), "gasFeeCap", tx.GasFeeCap())

@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/holiman/uint256"
 )
 
 func TestGaslessAddressFor(t *testing.T) {
@@ -106,6 +107,35 @@ func TestDecodeGaslessAllowance(t *testing.T) {
 		binary.BigEndian.PutUint64(out[32+24:64], limit)
 		return out
 	}
+	// buildRaw lets us craft an arbitrary 32-byte bool word (boolWord) together
+	// with a normally-encoded uint64 gasLimit word, so we can lock in the strict
+	// canonical bool decoding for non-canonical inputs.
+	buildRaw := func(boolWord [32]byte, limit uint64) []byte {
+		out := make([]byte, 64)
+		copy(out[:32], boolWord[:])
+		binary.BigEndian.PutUint64(out[32+24:64], limit)
+		return out
+	}
+	// canonical true word: all-zero except byte[31] == 1.
+	canonicalTrue := [32]byte{}
+	canonicalTrue[31] = 1
+	// non-canonical truthy: byte[31] == 2.
+	nonCanon2 := [32]byte{}
+	nonCanon2[31] = 2
+	// non-canonical truthy: byte[31] == 0xff.
+	nonCanonFF := [32]byte{}
+	nonCanonFF[31] = 0xff
+	// high byte set, last byte zero.
+	highByteSet := [32]byte{}
+	highByteSet[0] = 1
+	// extra high bit alongside a canonical-looking last byte.
+	extraHighBit := [32]byte{}
+	extraHighBit[30] = 1
+	extraHighBit[31] = 1
+	// canonical-looking last byte but a dirty interior byte.
+	dirtyInterior := [32]byte{}
+	dirtyInterior[15] = 0x80
+	dirtyInterior[31] = 1
 	cases := []struct {
 		name      string
 		in        []byte
@@ -117,6 +147,22 @@ func TestDecodeGaslessAllowance(t *testing.T) {
 		{"disallowed_zero_limit", build(false, 0), true, GaslessAllowance{Allowed: false, GasLimit: 0}, false},
 		{"allowed_zero_limit", build(true, 0), true, GaslessAllowance{Allowed: true, GasLimit: 0}, false},
 		{"too_short", make([]byte, 32), false, GaslessAllowance{}, true},
+
+		// --- strict canonical bool decoding (fail-closed) ---
+		// Canonical true via raw word, with a nonzero gasLimit, decodes true.
+		{"canonical_true_raw", buildRaw(canonicalTrue, 123_456), true, GaslessAllowance{Allowed: true, GasLimit: 123_456}, false},
+		// All-zero word → false. gasLimit still parsed independently.
+		{"all_zero_raw", buildRaw([32]byte{}, 777), true, GaslessAllowance{Allowed: false, GasLimit: 777}, false},
+		// byte[31] == 2 is non-canonical truthy → MUST be false; gasLimit still decoded.
+		{"noncanon_last_byte_2", buildRaw(nonCanon2, 250_000), true, GaslessAllowance{Allowed: false, GasLimit: 250_000}, false},
+		// byte[31] == 0xff → MUST be false.
+		{"noncanon_last_byte_ff", buildRaw(nonCanonFF, 0), true, GaslessAllowance{Allowed: false, GasLimit: 0}, false},
+		// high byte set, last byte zero → false.
+		{"high_byte_set_last_zero", buildRaw(highByteSet, 0), true, GaslessAllowance{Allowed: false, GasLimit: 0}, false},
+		// extra high bit alongside canonical last byte → false.
+		{"extra_high_bit_with_canonical_last", buildRaw(extraHighBit, 0), true, GaslessAllowance{Allowed: false, GasLimit: 0}, false},
+		// canonical last byte but dirty interior byte → false. gasLimit still decoded.
+		{"canonical_last_dirty_interior", buildRaw(dirtyInterior, 999_999), true, GaslessAllowance{Allowed: false, GasLimit: 999_999}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -263,6 +309,42 @@ func TestIsGaslessTxFor(t *testing.T) {
 		})
 		if IsGaslessTxFor(tx, allowed(0)) {
 			t.Fatal("expected false when gasPrice != 0")
+		}
+	})
+
+	// Deposit txs must NEVER be classified gasless, even when all fees are zero
+	// and the checker reports allowed=true: the type check in IsGaslessTxFor
+	// excludes them. Other types (e.g. EIP-7702 SetCode) are not type-excluded.
+	t.Run("deposit_tx_never_gasless", func(t *testing.T) {
+		tx := NewTx(&DepositTx{
+			To:    &addr,
+			Value: big.NewInt(0),
+			Gas:   50_000,
+			// Deposit txs carry no fee fields; nothing but the type excludes it.
+		})
+		if IsGaslessTxFor(tx, allowed(1_000_000)) {
+			t.Fatal("expected false: deposit tx must never be gasless")
+		}
+	})
+
+	t.Run("setcode_tx_can_be_gasless", func(t *testing.T) {
+		// SetCode is not type-excluded (parity with reth); auth-list
+		// well-formedness is checked later in preCheck, not here.
+		tx := NewTx(&SetCodeTx{
+			ChainID:   uint256.NewInt(1),
+			Nonce:     0,
+			To:        addr,
+			Gas:       50_000,
+			GasTipCap: uint256.NewInt(0),
+			GasFeeCap: uint256.NewInt(0),
+			Value:     uint256.NewInt(0),
+			AuthList: []SetCodeAuthorization{{
+				ChainID: *uint256.NewInt(1),
+				Address: addr,
+			}},
+		})
+		if !IsGaslessTxFor(tx, allowed(1_000_000)) {
+			t.Fatal("expected true: zero-fee whitelisted SetCodeTx should be gasless")
 		}
 	})
 }

@@ -21,7 +21,10 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 func mkDynFee(t *testing.T, feeCap, tipCap int64) *types.Transaction {
@@ -98,8 +101,8 @@ func TestComputeMockGasPrice_ExcludesZeroFee(t *testing.T) {
 		mkDynFee(t, 0, 0),
 		mkDynFee(t, 0, 0),
 		mkDynFee(t, 0, 0),
-		mkDynFee(t, 100, 1),   // effective = 6
-		mkDynFee(t, 100, 95),  // effective = 100
+		mkDynFee(t, 100, 1),  // effective = 6
+		mkDynFee(t, 100, 95), // effective = 100
 	}
 	got := computeMockGasPrice(txs, baseFee, 5000) // median of [6, 100]
 	if got == nil {
@@ -162,6 +165,291 @@ func TestComputeMockGasPrice_FeeCapBelowBaseFeeExcluded(t *testing.T) {
 	if got.Int64() != 15 {
 		t.Fatalf("got %d, want 15 (only feeCap>=baseFee tx contributes)", got.Int64())
 	}
+}
+
+// mkGasless builds a zero-fee dynamic-fee tx with a non-nil `to` (the shape an
+// IsGaslessTxFor check requires). The nonce lets callers create distinct hashes.
+func mkGasless(t *testing.T, nonce uint64) *types.Transaction {
+	t.Helper()
+	to := common.HexToAddress("0x00000000000000000000000000000000000ca511")
+	return types.NewTx(&types.DynamicFeeTx{
+		ChainID:   big.NewInt(1),
+		Nonce:     nonce,
+		To:        &to,
+		Gas:       21000,
+		GasFeeCap: big.NewInt(0),
+		GasTipCap: big.NewInt(0),
+	})
+}
+
+// whitelistChecker returns a GaslessChecker that reports allowed=true (with an
+// ample gas limit) for exactly the given transaction hashes and false otherwise.
+func whitelistChecker(txs ...*types.Transaction) types.GaslessChecker {
+	allowed := make(map[common.Hash]struct{}, len(txs))
+	for _, tx := range txs {
+		allowed[tx.Hash()] = struct{}{}
+	}
+	return func(tx *types.Transaction) (types.GaslessAllowance, error) {
+		if _, ok := allowed[tx.Hash()]; ok {
+			return types.GaslessAllowance{Allowed: true, GasLimit: 1_000_000}, nil
+		}
+		return types.GaslessAllowance{Allowed: false}, nil
+	}
+}
+
+// newTestPricedList builds a standalone pricedList over a lookup pre-populated
+// with the given transactions, mirroring how the pool tracks them
+// (lookup.Add + priced.Put). The returned list has baseFee=nil so the heaps sort
+// by gasFeeCap, which keeps zero-fee gasless txs at the bottom of the heap.
+func newTestPricedList(txs ...*types.Transaction) *pricedList {
+	all := newLookup()
+	priced := newPricedList(all)
+	for _, tx := range txs {
+		all.Add(tx)
+		priced.Put(tx)
+	}
+	return priced
+}
+
+// inHeaps reports whether the tx is present in either the urgent or floating heap.
+func inHeaps(l *pricedList, tx *types.Transaction) bool {
+	for _, h := range []*priceHeap{&l.urgent, &l.floating} {
+		for _, t := range h.list {
+			if t.Hash() == tx.Hash() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// gaslessPredeployCode is minimal EVM bytecode for the Gasless predeploy that
+// ignores its calldata and returns the ABI tuple (bool allowed=true, uint64
+// gasLimit=0xffffffff) — i.e. it whitelists every probed transaction with an
+// ample gas limit. Layout returned:
+//
+//	mem[0:32]  = 0x..01  (canonical ABI true)
+//	mem[32:64] = 0x..ffffffff (gas limit, right-aligned)
+var gaslessPredeployCode = []byte{
+	0x60, 0x01, 0x60, 0x00, 0x52, // PUSH1 1 PUSH1 0 MSTORE
+	0x63, 0xff, 0xff, 0xff, 0xff, 0x60, 0x20, 0x52, // PUSH4 0xffffffff PUSH1 0x20 MSTORE
+	0x60, 0x40, 0x60, 0x00, 0xf3, // PUSH1 0x40 PUSH1 0x00 RETURN
+}
+
+// TestSetGasTip_GaslessNotEvicted verifies: raising the pool's minimum
+// gas tip evicts sub-threshold normal txs but spares gasless (zero-tip) txs,
+// because the SetGasTip eviction path consults the gasless checker.
+func TestSetGasTip_GaslessNotEvicted(t *testing.T) {
+	cfg := testTxPoolConfig
+	cfg.AllowGasless = true
+	pool, _ := setupPoolWithTxPoolConfig(params.TestChainConfig, cfg)
+	defer pool.Close()
+
+	// Deploy the whitelist predeploy into the head state so pool.gaslessChecker()
+	// classifies the zero-fee txs below as gasless.
+	predeploy := types.GaslessAddressFor(params.TestChainConfig.ChainID)
+	pool.mu.Lock()
+	pool.currentState.SetCode(predeploy, gaslessPredeployCode, tracing.CodeChangeUnspecified)
+	pool.mu.Unlock()
+
+	signer := types.LatestSignerForChainID(params.TestChainConfig.ChainID)
+
+	// Two senders: one for a gasless (zero-tip) tx, one for a normal low-tip tx.
+	gaslessKey, _ := crypto.GenerateKey()
+	gaslessAddr := crypto.PubkeyToAddress(gaslessKey.PublicKey)
+	normalKey, _ := crypto.GenerateKey()
+	normalAddr := crypto.PubkeyToAddress(normalKey.PublicKey)
+
+	to := common.HexToAddress("0x00000000000000000000000000000000000ca511")
+	gaslessTx, _ := types.SignTx(types.NewTx(&types.DynamicFeeTx{
+		ChainID:   params.TestChainConfig.ChainID,
+		Nonce:     0,
+		To:        &to,
+		Gas:       21000,
+		GasFeeCap: big.NewInt(0),
+		GasTipCap: big.NewInt(0),
+	}), signer, gaslessKey)
+	// Normal tx with a small tip, below the threshold we will set.
+	normalTx, _ := types.SignTx(types.NewTx(&types.DynamicFeeTx{
+		ChainID:   params.TestChainConfig.ChainID,
+		Nonce:     0,
+		To:        &to,
+		Gas:       21000,
+		GasFeeCap: big.NewInt(1_000_000_000),
+		GasTipCap: big.NewInt(1),
+	}), signer, normalKey)
+
+	// Sanity-check the deployed predeploy actually whitelists the gasless tx.
+	if checker := pool.gaslessChecker(); checker == nil || !types.IsGaslessTxFor(gaslessTx, checker) {
+		t.Fatal("predeploy did not classify the zero-fee tx as gasless")
+	}
+
+	// Place both txs into the pending set via the low-level promote path (as
+	// TestDropping does), so we control the pool contents precisely.
+	testAddBalance(pool, gaslessAddr, big.NewInt(1_000_000_000_000_000_000))
+	testAddBalance(pool, normalAddr, big.NewInt(1_000_000_000_000_000_000))
+
+	pool.mu.Lock()
+	// Reserve the senders so the SetGasTip eviction path (removeTx with
+	// unreserve=true) can release them without the reserver panicking.
+	_ = pool.reserver.Hold(gaslessAddr)
+	_ = pool.reserver.Hold(normalAddr)
+	pool.all.Add(gaslessTx)
+	pool.priced.Put(gaslessTx)
+	pool.promoteTx(gaslessAddr, gaslessTx.Hash(), gaslessTx)
+
+	pool.all.Add(normalTx)
+	pool.priced.Put(normalTx)
+	pool.promoteTx(normalAddr, normalTx.Hash(), normalTx)
+	pool.mu.Unlock()
+
+	if pool.Get(gaslessTx.Hash()) == nil || pool.Get(normalTx.Hash()) == nil {
+		t.Fatal("setup: both txs should be present before SetGasTip")
+	}
+
+	// Raise the min tip above the normal tx's tip (1) but the gasless tx carries a
+	// zero tip and must be exempt.
+	pool.SetGasTip(big.NewInt(1_000))
+
+	if pool.Get(gaslessTx.Hash()) == nil {
+		t.Fatal("gasless tx was evicted by SetGasTip, but must be spared")
+	}
+	if pool.Get(normalTx.Hash()) != nil {
+		t.Fatal("sub-threshold normal tx should have been evicted by SetGasTip")
+	}
+}
+
+// TestSetGasTip_GaslessEvictedWhenDisabled is the guard for FIX 2(a): when
+// AllowGasless is false (checker nil), a zero-tip tx is NOT exempt and is evicted
+// by a min-tip raise like any other sub-threshold tx.
+func TestSetGasTip_GaslessEvictedWhenDisabled(t *testing.T) {
+	pool, _ := setupPoolWithConfig(params.TestChainConfig) // AllowGasless defaults to false
+	defer pool.Close()
+
+	signer := types.LatestSignerForChainID(params.TestChainConfig.ChainID)
+	key, _ := crypto.GenerateKey()
+	addr := crypto.PubkeyToAddress(key.PublicKey)
+	to := common.HexToAddress("0x00000000000000000000000000000000000ca511")
+	zeroTip, _ := types.SignTx(types.NewTx(&types.DynamicFeeTx{
+		ChainID:   params.TestChainConfig.ChainID,
+		Nonce:     0,
+		To:        &to,
+		Gas:       21000,
+		GasFeeCap: big.NewInt(0),
+		GasTipCap: big.NewInt(0),
+	}), signer, key)
+
+	if pool.gaslessChecker() != nil {
+		t.Fatal("checker must be nil when AllowGasless is disabled")
+	}
+
+	testAddBalance(pool, addr, big.NewInt(1_000_000_000_000_000_000))
+	pool.mu.Lock()
+	_ = pool.reserver.Hold(addr)
+	pool.all.Add(zeroTip)
+	pool.priced.Put(zeroTip)
+	pool.promoteTx(addr, zeroTip.Hash(), zeroTip)
+	pool.mu.Unlock()
+
+	if pool.Get(zeroTip.Hash()) == nil {
+		t.Fatal("setup: zero-tip tx should be present before SetGasTip")
+	}
+	pool.SetGasTip(big.NewInt(1_000))
+	if pool.Get(zeroTip.Hash()) != nil {
+		t.Fatal("with gasless disabled, a zero-tip tx must be evicted by SetGasTip")
+	}
+}
+
+// TestPricedList_GaslessNotUnderpriced verifies FIX 2(b): with a gasless checker
+// installed, pricedList.Underpriced returns false for a gasless tx even though it
+// is the cheapest possible (zero fee), while a normal cheap tx is still flagged
+// underpriced. When the checker is nil (gasless disabled) the gasless-looking tx
+// IS underpriced — the exemption is fully gated.
+func TestPricedList_GaslessNotUnderpriced(t *testing.T) {
+	// Populate the list with a couple of paying txs so the heaps are non-empty.
+	paying1 := mkDynFee(t, 100, 5)
+	paying2 := mkDynFee(t, 100, 9)
+	// Two zero-fee gasless txs not yet tracked — the admission candidates.
+	gasless := mkGasless(t, 0)
+	// A normal cheap tx (zero fee but not whitelisted): must be underpriced.
+	cheap := mkGasless(t, 1) // same zero-fee shape, but not in the whitelist
+
+	build := func() *pricedList { return newTestPricedList(paying1, paying2) }
+
+	t.Run("checker_set_gasless_not_underpriced", func(t *testing.T) {
+		l := build()
+		l.setGaslessChecker(whitelistChecker(gasless))
+		l.Reheap() // distribute into urgent/floating like the pool does
+		if l.Underpriced(gasless) {
+			t.Fatal("gasless tx must not be underpriced when checker allows it")
+		}
+		if !l.Underpriced(cheap) {
+			t.Fatal("normal zero-fee tx must be underpriced for contrast")
+		}
+	})
+
+	t.Run("nil_checker_gasless_is_underpriced", func(t *testing.T) {
+		l := build()
+		l.setGaslessChecker(nil) // gasless disabled
+		l.Reheap()
+		if !l.Underpriced(gasless) {
+			t.Fatal("with no checker, a zero-fee tx must be underpriced (exemption gated)")
+		}
+	})
+}
+
+// TestPricedList_GaslessSparedByDiscard verifies FIX 2(c): pricedList.Discard
+// never returns gasless txs as victims even though they rank lowest, and the
+// gasless txs survive in the heaps afterwards. With a nil checker the same
+// zero-fee txs ARE discarded.
+func TestPricedList_GaslessSparedByDiscard(t *testing.T) {
+	// Gasless (zero-fee) txs rank lowest, so they would be evicted first.
+	gasless1 := mkGasless(t, 0)
+	gasless2 := mkGasless(t, 1)
+	// Paying txs that should be the actual eviction victims.
+	paying1 := mkDynFee(t, 100, 3)
+	paying2 := mkDynFee(t, 100, 7)
+
+	t.Run("checker_set_gasless_spared", func(t *testing.T) {
+		l := newTestPricedList(gasless1, gasless2, paying1, paying2)
+		l.setGaslessChecker(whitelistChecker(gasless1, gasless2))
+		l.Reheap()
+
+		drop, ok := l.Discard(1)
+		if !ok {
+			t.Fatal("expected Discard to succeed evicting a paying tx")
+		}
+		for _, tx := range drop {
+			if l.isGasless(tx) {
+				t.Fatalf("Discard returned a gasless tx as a victim: %s", tx.Hash())
+			}
+		}
+		// Both gasless txs must remain present in the heaps.
+		if !inHeaps(l, gasless1) || !inHeaps(l, gasless2) {
+			t.Fatal("gasless txs must survive Discard and remain in the heaps")
+		}
+	})
+
+	t.Run("nil_checker_gasless_discarded", func(t *testing.T) {
+		l := newTestPricedList(gasless1, gasless2, paying1, paying2)
+		l.setGaslessChecker(nil) // gasless disabled
+		l.Reheap()
+
+		drop, ok := l.Discard(1)
+		if !ok {
+			t.Fatal("expected Discard to succeed")
+		}
+		// With no exemption, the cheapest (a zero-fee tx) is a valid victim.
+		var droppedGaslessShaped bool
+		for _, tx := range drop {
+			if tx.Hash() == gasless1.Hash() || tx.Hash() == gasless2.Hash() {
+				droppedGaslessShaped = true
+			}
+		}
+		if !droppedGaslessShaped {
+			t.Fatal("with no checker, a zero-fee tx must be eligible for eviction (exemption gated)")
+		}
+	})
 }
 
 func TestComputeMockGasPrice_AllBelowBaseFeeReturnsNil(t *testing.T) {

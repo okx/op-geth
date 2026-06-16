@@ -271,12 +271,14 @@ func (api *API) traceChain(start, end *types.Block, config *TraceConfig, closed 
 			// Fetch and execute the block trace taskCh
 			for task := range taskCh {
 				var (
-					signer   = types.MakeSigner(api.backend.ChainConfig(), task.block.Number(), task.block.Time())
-					blockCtx = core.NewEVMBlockContext(task.block.Header(), api.chainContext(ctx), nil, api.backend.ChainConfig(), task.statedb)
+					signer         = types.MakeSigner(api.backend.ChainConfig(), task.block.Number(), task.block.Time())
+					blockCtx       = core.NewEVMBlockContext(task.block.Header(), api.chainContext(ctx), nil, api.backend.ChainConfig(), task.statedb)
+					gaslessChecker = core.NewGaslessCheckerForState(api.backend.ChainConfig(), task.block.Header(), task.statedb)
 				)
 				// Trace all the transactions contained within
 				for i, tx := range task.block.Transactions() {
 					msg, _ := core.TransactionToMessage(tx, signer, task.block.BaseFee())
+					msg.IsGaslessTx = types.IsGaslessTxFor(tx, gaslessChecker)
 					txctx := &Context{
 						BlockHash:   task.block.Hash(),
 						BlockNumber: task.block.Number(),
@@ -576,11 +578,13 @@ func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config 
 	if chainConfig.IsPrague(block.Number(), block.Time()) {
 		core.ProcessParentBlockHash(block.ParentHash(), evm)
 	}
+	gaslessChecker := core.MakeGaslessChecker(evm)
 	for i, tx := range block.Transactions() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		msg, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
+		msg.IsGaslessTx = types.IsGaslessTxFor(tx, gaslessChecker)
 		statedb.SetTxContext(tx.Hash(), i)
 		if _, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(msg.GasLimit)); err != nil {
 			log.Warn("Tracing intermediate roots did not complete", "txindex", i, "txhash", tx.Hash(), "err", err)
@@ -651,14 +655,16 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 	}
 	// Native tracers have low overhead
 	var (
-		txs       = block.Transactions()
-		blockHash = block.Hash()
-		signer    = types.MakeSigner(api.backend.ChainConfig(), block.Number(), block.Time())
-		results   = make([]*txTraceResult, len(txs))
+		txs            = block.Transactions()
+		blockHash      = block.Hash()
+		signer         = types.MakeSigner(api.backend.ChainConfig(), block.Number(), block.Time())
+		results        = make([]*txTraceResult, len(txs))
+		gaslessChecker = core.MakeGaslessChecker(evm)
 	)
 	for i, tx := range txs {
 		// Generate the next state snapshot fast without tracing
 		msg, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
+		msg.IsGaslessTx = types.IsGaslessTxFor(tx, gaslessChecker)
 		txctx := &Context{
 			BlockHash:   blockHash,
 			BlockNumber: block.Number(),
@@ -698,6 +704,7 @@ func (api *API) traceBlockParallel(ctx context.Context, block *types.Block, stat
 			// Fetch and execute the next transaction trace tasks
 			for task := range jobs {
 				msg, _ := core.TransactionToMessage(txs[task.index], signer, block.BaseFee())
+				msg.IsGaslessTx = types.IsGaslessTxFor(txs[task.index], core.NewGaslessCheckerForState(api.backend.ChainConfig(), block.Header(), task.statedb))
 				txctx := &Context{
 					BlockHash:   blockHash,
 					BlockNumber: block.Number(),
@@ -723,6 +730,7 @@ func (api *API) traceBlockParallel(ctx context.Context, block *types.Block, stat
 	var failed error
 	blockCtx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil, api.backend.ChainConfig(), statedb)
 	evm := vm.NewEVM(blockCtx, statedb, api.backend.ChainConfig(), vm.Config{})
+	gaslessChecker := core.MakeGaslessChecker(evm)
 
 txloop:
 	for i, tx := range txs {
@@ -737,6 +745,7 @@ txloop:
 
 		// Generate the next state snapshot fast without tracing
 		msg, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
+		msg.IsGaslessTx = types.IsGaslessTxFor(tx, gaslessChecker)
 		statedb.SetTxContext(tx.Hash(), i)
 		if _, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(msg.GasLimit)); err != nil {
 			failed = err
@@ -818,9 +827,11 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 	if chainConfig.IsPrague(block.Number(), block.Time()) {
 		core.ProcessParentBlockHash(block.ParentHash(), evm)
 	}
+	gaslessChecker := core.MakeGaslessChecker(evm)
 	for i, tx := range block.Transactions() {
 		// Prepare the transaction for un-traced execution
 		msg, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
+		msg.IsGaslessTx = types.IsGaslessTxFor(tx, gaslessChecker)
 		if txHash != (common.Hash{}) && tx.Hash() != txHash {
 			// Process the tx to update state, but don't trace it.
 			_, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(msg.GasLimit))
@@ -939,6 +950,7 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 	if err != nil {
 		return nil, err
 	}
+	msg.IsGaslessTx = types.IsGaslessTxFor(tx, core.NewGaslessCheckerForState(api.backend.ChainConfig(), block.Header(), statedb))
 	txctx := &Context{
 		BlockHash:   blockHash,
 		BlockNumber: block.Number(),

@@ -25,9 +25,12 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/holiman/uint256"
 )
 
 func TestValidateTransactionEIP2681(t *testing.T) {
@@ -228,6 +231,144 @@ func TestValidateTransaction_GaslessMinTipBypass(t *testing.T) {
 				}
 				if !errors.Is(err, ErrTxGasPriceTooLow) {
 					t.Fatalf("expected ErrTxGasPriceTooLow, got %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestValidateTransactionWithState_GaslessBalanceCheck verifies that the stateful
+// admission balance check only requires balance >= tx.Value() for a gasless tx
+// (the consensus gasless branch skips buyGas), while non-gasless txs (and gasless
+// txs with balance below their value) are still rejected for insufficient funds.
+func TestValidateTransactionWithState_GaslessBalanceCheck(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	from := crypto.PubkeyToAddress(key.PublicKey)
+	to := common.HexToAddress("0xabcdef0000000000000000000000000000001234")
+	signer := types.LatestSigner(params.TestChainConfig)
+
+	// A nonzero rollup/L1 cost, added on top of the regular tx cost by TotalTxCost.
+	rollupCost := uint256.NewInt(500_000)
+	rollupCostFn := func(types.RollupTransaction) *uint256.Int {
+		return new(uint256.Int).Set(rollupCost)
+	}
+
+	// The transferred value of the gasless tx. The full cost (with paying fees)
+	// is value + gas*price + rollupCost; the gasless admission cost is just value.
+	txValue := big.NewInt(1_000)
+
+	// A zero-fee gasless-shaped tx (no gas fees). IsGaslessTxFor still requires
+	// the checker to allow it and gas <= allowance.GasLimit.
+	mkGaslessTx := func() *types.Transaction {
+		tx := types.NewTx(&types.DynamicFeeTx{
+			ChainID:   params.TestChainConfig.ChainID,
+			Nonce:     0,
+			To:        &to,
+			Gas:       100_000,
+			GasFeeCap: big.NewInt(0),
+			GasTipCap: big.NewInt(0),
+			Value:     txValue,
+		})
+		signed, _ := types.SignTx(tx, signer, key)
+		return signed
+	}
+	// A normal fee-paying tx whose full cost (fees + rollup + value) exceeds a
+	// value-only balance. It must never be treated as gasless.
+	mkNormalTx := func() *types.Transaction {
+		tx := types.NewTx(&types.DynamicFeeTx{
+			ChainID:   params.TestChainConfig.ChainID,
+			Nonce:     0,
+			To:        &to,
+			Gas:       100_000,
+			GasFeeCap: big.NewInt(1_000_000_000),
+			GasTipCap: big.NewInt(1),
+			Value:     txValue,
+		})
+		signed, _ := types.SignTx(tx, signer, key)
+		return signed
+	}
+
+	allowedChecker := types.GaslessChecker(func(*types.Transaction) (types.GaslessAllowance, error) {
+		return types.GaslessAllowance{Allowed: true, GasLimit: 1_000_000}, nil
+	})
+
+	// newStateWithBalance returns a fresh statedb with `from` funded by `bal`.
+	newStateWithBalance := func(t *testing.T, bal *big.Int) *state.StateDB {
+		t.Helper()
+		statedb, err := state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
+		if err != nil {
+			t.Fatalf("failed to create statedb: %v", err)
+		}
+		statedb.SetBalance(from, uint256.MustFromBig(bal), tracing.BalanceChangeUnspecified)
+		return statedb
+	}
+
+	cases := []struct {
+		name    string
+		tx      *types.Transaction
+		checker types.GaslessChecker
+		balance *big.Int
+		wantErr bool
+	}{
+		{
+			// Gasless tx, balance >= value but far below the full cost (could not
+			// pay gas/L1/operator fees): accepted because only value is required.
+			name:    "gasless_balance_covers_value_only_accepted",
+			tx:      mkGaslessTx(),
+			checker: allowedChecker,
+			balance: txValue, // exactly the value, nothing for fees
+			wantErr: false,
+		},
+		{
+			// Gasless tx but balance below the transferred value: still rejected.
+			name:    "gasless_balance_below_value_rejected",
+			tx:      mkGaslessTx(),
+			checker: allowedChecker,
+			balance: new(big.Int).Sub(txValue, big.NewInt(1)),
+			wantErr: true,
+		},
+		{
+			// Same zero-fee tx but no checker (gasless disabled): falls back to the
+			// full-cost check. value alone is not enough, so it is rejected.
+			name:    "gasless_shaped_no_checker_value_only_rejected",
+			tx:      mkGaslessTx(),
+			checker: nil,
+			balance: txValue,
+			wantErr: true,
+		},
+		{
+			// Non-gasless fee-paying tx with balance below the full cost: rejected
+			// (no regression — the value-only relaxation must not leak to it).
+			name:    "normal_tx_below_full_cost_rejected",
+			tx:      mkNormalTx(),
+			checker: allowedChecker, // checker present but tx is not gasless (pays fees)
+			balance: txValue,
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			statedb := newStateWithBalance(t, tc.balance)
+			opts := &ValidationOptionsWithState{
+				State:               statedb,
+				RollupCostFn:        rollupCostFn,
+				ExistingExpenditure: func(common.Address) *big.Int { return new(big.Int) },
+				ExistingCost:        func(common.Address, uint64) *big.Int { return nil },
+				GaslessChecker:      tc.checker,
+			}
+			err := ValidateTransactionWithState(tc.tx, signer, opts)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !errors.Is(err, core.ErrInsufficientFunds) {
+					t.Fatalf("expected ErrInsufficientFunds, got %v", err)
 				}
 			} else if err != nil {
 				t.Fatalf("unexpected error: %v", err)

@@ -598,9 +598,23 @@ type pricedList struct {
 	// Number of stale price points to (re-heap trigger).
 	stales atomic.Int64
 
-	all              *lookup    // Pointer to the map of all transactions
-	urgent, floating priceHeap  // Heaps of prices of all the stored **remote** transactions
-	reheapMu         sync.Mutex // Mutex asserts that only one routine is reheaping the list
+	all              *lookup              // Pointer to the map of all transactions
+	urgent, floating priceHeap            // Heaps of prices of all the stored **remote** transactions
+	reheapMu         sync.Mutex           // Mutex asserts that only one routine is reheaping the list
+	gaslessChecker   types.GaslessChecker // gaslessChecker
+}
+
+// setGaslessChecker installs a (possibly nil) Gasless checker used to exempt
+// gasless txs from raw-price pool management. A nil checker disables the
+// exemption entirely.
+func (l *pricedList) setGaslessChecker(checker types.GaslessChecker) {
+	l.gaslessChecker = checker
+}
+
+// isGasless reports whether tx is a fee-exempt gasless tx, defaulting to false
+// when no checker is configured (gasless disabled).
+func (l *pricedList) isGasless(tx *types.Transaction) bool {
+	return types.IsGaslessTxFor(tx, l.gaslessChecker)
 }
 
 const (
@@ -638,6 +652,11 @@ func (l *pricedList) Removed(count int) {
 // Underpriced checks whether a transaction is cheaper than (or as cheap as) the
 // lowest priced (remote) transaction currently being tracked.
 func (l *pricedList) Underpriced(tx *types.Transaction) bool {
+	// Gasless txs are fee-exempt and must never be judged underpriced, otherwise
+	// a full pool would reject legitimate gasless txs despite their zero fee.
+	if l.isGasless(tx) {
+		return false
+	}
 	// Note: with two queues, being underpriced is defined as being worse than the worst item
 	// in all non-empty queues if there is any. If both queues are empty then nothing is underpriced.
 	return (l.underpricedFor(&l.urgent, tx) || len(l.urgent.list) == 0) &&
@@ -672,12 +691,18 @@ func (l *pricedList) underpricedFor(h *priceHeap, tx *types.Transaction) bool {
 // If noPending is set to true, we will only consider the floating list
 func (l *pricedList) Discard(slots int) (types.Transactions, bool) {
 	drop := make(types.Transactions, 0, slots) // Remote underpriced transactions to drop
+	var spared types.Transactions
 	for slots > 0 {
 		if len(l.urgent.list)*floatingRatio > len(l.floating.list)*urgentRatio {
 			// Discard stale transactions if found during cleanup
 			tx := heap.Pop(&l.urgent).(*types.Transaction)
 			if l.all.Get(tx.Hash()) == nil { // Removed or migrated
 				l.stales.Add(-1)
+				continue
+			}
+			// Gasless txs are exempt from eviction, set aside and skip
+			if l.isGasless(tx) {
+				spared = append(spared, tx)
 				continue
 			}
 			// Non stale transaction found, move to floating heap
@@ -693,10 +718,19 @@ func (l *pricedList) Discard(slots int) (types.Transactions, bool) {
 				l.stales.Add(-1)
 				continue
 			}
+			// Gasless txs are exempt from eviction, set aside and skip
+			if l.isGasless(tx) {
+				spared = append(spared, tx)
+				continue
+			}
 			// Non stale transaction found, discard it
 			drop = append(drop, tx)
 			slots -= numSlots(tx)
 		}
+	}
+	// Restore the exempted gasless transactions back into the urgent heap.
+	for _, tx := range spared {
+		heap.Push(&l.urgent, tx)
 	}
 	// If we still can't make enough room for the new transaction
 	if slots > 0 {
