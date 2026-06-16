@@ -37,8 +37,8 @@ description: "Module design for p2p: networking, peer discovery, RLPx transport,
 
 ## Module-Specific Pitfalls
 
-[Pitfall] ETH69 stripped only by client-name heuristic: `isGeth()` checks for "Geth"/"geth" substring in peer name — custom forks not matching will negotiate ETH69 and may break. Source: `p2p/transport_xlayer.go`.
+[Pitfall] ETH69 stripped only by client-name heuristic: `isGeth()` checks for `Geth/` prefix in peer name (`strings.HasPrefix`) — fork nodes (`l2-geth`, `op-geth`) are correctly excluded, but non-`Geth/`-prefixed ETH68-only peers will bypass the filter. Source: `p2p/transport_xlayer.go`.
 
 [Pitfall] `trimETH69` modifies both outgoing caps AND received remote handshake — recorded peer capabilities will not match what was actually sent. Source: `p2p/transport_xlayer.go:25,37`.
 
-[Warning] ETH69 compatibility filter is name-based heuristic — forks or custom builds will not be filtered. Source: `p2p/transport_xlayer.go`.
+[Warning] ETH69 compatibility filter is name-based heuristic — non-`Geth/`-prefixed clients will not be filtered. Source: `p2p/transport_xlayer.go`.
