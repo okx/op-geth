@@ -22,9 +22,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/tracing"
+	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/holiman/uint256"
 )
 
 func mkDynFee(t *testing.T, feeCap, tipCap int64) *types.Transaction {
@@ -464,4 +466,92 @@ func TestComputeMockGasPrice_AllBelowBaseFeeReturnsNil(t *testing.T) {
 	if got != nil {
 		t.Fatalf("got %v, want nil (no qualifying samples)", got)
 	}
+}
+
+// fixedCostProvider implements rollupCostFuncProvider for list-level tests: it
+// adds a flat rollup (L1/operator) cost to every non-gasless tx and exposes a
+// configurable gasless checker.
+type fixedCostProvider struct {
+	rollupCost *uint256.Int
+	checker    types.GaslessChecker
+}
+
+func (p fixedCostProvider) RollupCostFunc() txpool.RollupCostFunc {
+	return func(types.RollupTransaction) *uint256.Int { return p.rollupCost }
+}
+
+func (p fixedCostProvider) GaslessChecker() types.GaslessChecker { return p.checker }
+
+func mkGaslessValue(value uint64) *types.Transaction {
+	to := common.HexToAddress("0x00000000000000000000000000000000000ca511")
+	return types.NewTx(&types.DynamicFeeTx{
+		ChainID:   big.NewInt(1),
+		Nonce:     0,
+		To:        &to,
+		Gas:       21000,
+		GasFeeCap: big.NewInt(0),
+		GasTipCap: big.NewInt(0),
+		Value:     new(big.Int).SetUint64(value),
+	})
+}
+
+// TestListGaslessExemptFromBalanceFilter verifies that the per-account list's
+// balance accounting charges a gasless tx only its value, not the fee-inclusive
+// TotalTxCost (value + L1 data fee + operator fee).
+func TestListGaslessExemptFromBalanceFilter(t *testing.T) {
+	const value = uint64(1_000)
+	l1Cost := uint256.NewInt(500) // nonzero rollup/L1 cost charged to non-gasless txs
+	balance := uint256.NewInt(value)
+
+	t.Run("gasless_kept_while_underfunded_normal_dropped", func(t *testing.T) {
+		gasless := mkGaslessValue(value)
+		// A pricey normal tx at the next nonce so costcap exceeds the balance and
+		// Filter actually walks the per-tx loop (rather than short-circuiting).
+		normal := types.NewTx(&types.DynamicFeeTx{
+			ChainID:   big.NewInt(1),
+			Nonce:     1,
+			To:        &common.Address{},
+			Gas:       21000,
+			GasFeeCap: big.NewInt(1_000_000_000),
+			GasTipCap: big.NewInt(1_000_000_000),
+		})
+		l := newRollupList(true, fixedCostProvider{rollupCost: l1Cost, checker: whitelistChecker(gasless)})
+		if ok, _ := l.Add(gasless, 0); !ok {
+			t.Fatal("Add rejected gasless tx")
+		}
+		// Gasless tx contributes only its value to totalcost, not value+L1Cost.
+		if l.totalcost.Cmp(uint256.NewInt(value)) != 0 {
+			t.Fatalf("totalcost after gasless Add = %v, want value-only %d", l.totalcost, value)
+		}
+		if ok, _ := l.Add(normal, 0); !ok {
+			t.Fatal("Add rejected normal tx")
+		}
+
+		l.Filter(balance, 30_000_000)
+		if !l.Contains(0) {
+			t.Fatal("gasless tx wrongly evicted by balance filter")
+		}
+		if l.Contains(1) {
+			t.Fatal("underfunded normal tx should have been evicted")
+		}
+	})
+
+	t.Run("gasless_shaped_tx_evicted_when_not_whitelisted", func(t *testing.T) {
+		// Same zero-fee tx, but the checker does not whitelist it (nil checker =>
+		// gasless disabled), so it is charged the full value+L1Cost and evicted
+		// because the account cannot cover the L1 data fee.
+		tx := mkGaslessValue(value)
+		l := newRollupList(true, fixedCostProvider{rollupCost: l1Cost, checker: nil})
+		if ok, _ := l.Add(tx, 0); !ok {
+			t.Fatal("Add rejected tx")
+		}
+		want := new(uint256.Int).Add(uint256.NewInt(value), l1Cost)
+		if l.totalcost.Cmp(want) != 0 {
+			t.Fatalf("totalcost = %v, want full cost %v", l.totalcost, want)
+		}
+		drops, _ := l.Filter(balance, 30_000_000)
+		if len(drops) != 1 {
+			t.Fatalf("non-gasless underfunded tx should be evicted: got %d drops", len(drops))
+		}
+	})
 }

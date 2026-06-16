@@ -314,6 +314,7 @@ func newList(strict bool) *list {
 
 type rollupCostFuncProvider interface {
 	RollupCostFunc() txpool.RollupCostFunc
+	GaslessChecker() types.GaslessChecker
 }
 
 // newRollupList creates a new transaction list with a rollup cost function pointer
@@ -331,6 +332,23 @@ func (l *list) rollupCostFn() txpool.RollupCostFunc {
 	// This can still return nil, but we won't dereference a nil pointer of lists
 	// that got regularly created using newList instead of newRollupList.
 	return l.rollupCostFnPrv.RollupCostFunc()
+}
+
+func (l *list) gaslessChecker() types.GaslessChecker {
+	if l.rollupCostFnPrv == nil {
+		return nil
+	}
+	return l.rollupCostFnPrv.GaslessChecker()
+}
+
+// txCost returns the balance the account must hold to keep tx in the pool.
+// Gasless txs pay no fees on-chain (L2 execution, L1 data and operator fees are
+// all waived), so they only need to cover their value.
+func (l *list) txCost(tx *types.Transaction, checker types.GaslessChecker) (*uint256.Int, bool) {
+	if types.IsGaslessTxFor(tx, checker) {
+		return uint256.FromBig(tx.Value())
+	}
+	return txpool.TotalTxCost(tx, l.rollupCostFn())
 }
 
 // Contains returns whether the  list contains a transaction
@@ -369,7 +387,7 @@ func (l *list) Add(tx *types.Transaction, priceBump uint64) (bool, *types.Transa
 		}
 	}
 	// Add new tx cost to totalcost
-	cost, overflow := txpool.TotalTxCost(tx, l.rollupCostFn())
+	cost, overflow := l.txCost(tx, l.gaslessChecker())
 	if overflow {
 		return false, nil
 	}
@@ -423,8 +441,9 @@ func (l *list) Filter(costLimit *uint256.Int, gasLimit uint64) (types.Transactio
 	l.gascap = gasLimit
 
 	// Filter out all the transactions above the account's funds
+	checker := l.gaslessChecker()
 	removed := l.txs.Filter(func(tx *types.Transaction) bool {
-		cost, of := txpool.TotalTxCost(tx, l.rollupCostFn())
+		cost, of := l.txCost(tx, checker)
 		if of {
 			panic("Filter: tx total cost overflow")
 		}

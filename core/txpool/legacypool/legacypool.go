@@ -294,6 +294,7 @@ type LegacyPool struct {
 	changesSinceReorg int // A counter for how many drops we've performed in-between reorg.
 
 	rollupCostFn txpool.RollupCostFunc // Additional rollup cost function, optional field, may be nil.
+	gaslessCheck types.GaslessChecker  // Head-bound gasless checker, rebuilt on reset; nil when gasless disabled.
 
 	ingressFilters []txpool.IngressFilter // Filters to apply to incoming transactions
 	filterCtx      context.Context        // Filters may use this context with external resources
@@ -372,6 +373,7 @@ func (pool *LegacyPool) Init(gasTip uint64, head *types.Header, reserver txpool.
 
 	// OP-Stack addition
 	pool.resetRollupCostFn(head.Time, statedb)
+	pool.gaslessCheck = pool.gaslessChecker()
 
 	pool.wg.Add(1)
 	go pool.scheduleReorgLoop()
@@ -578,6 +580,10 @@ func (pool *LegacyPool) ToJournal() map[common.Address]types.Transactions {
 
 func (pool *LegacyPool) RollupCostFunc() txpool.RollupCostFunc {
 	return pool.rollupCostFn
+}
+
+func (pool *LegacyPool) GaslessChecker() types.GaslessChecker {
+	return pool.gaslessCheck
 }
 
 // Pending retrieves all currently processable transactions, grouped by origin
@@ -1570,6 +1576,7 @@ func (pool *LegacyPool) reset(oldHead, newHead *types.Header) {
 
 	// OP-Stack addition
 	pool.resetRollupCostFn(newHead.Time, statedb)
+	pool.gaslessCheck = pool.gaslessChecker()
 	pool.refreshMockGasPrice(newHead)
 
 	// Inject any transactions discarded due to reorgs
