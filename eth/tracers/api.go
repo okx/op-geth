@@ -277,6 +277,7 @@ func (api *API) traceChain(start, end *types.Block, config *TraceConfig, closed 
 				// Trace all the transactions contained within
 				for i, tx := range task.block.Transactions() {
 					msg, _ := core.TransactionToMessage(tx, signer, task.block.BaseFee())
+					api.markGasless(msg, tx, task.block.Header(), task.statedb)
 					txctx := &Context{
 						BlockHash:   task.block.Hash(),
 						BlockNumber: task.block.Number(),
@@ -581,6 +582,7 @@ func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config 
 			return nil, err
 		}
 		msg, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
+		api.markGasless(msg, tx, block.Header(), statedb)
 		statedb.SetTxContext(tx.Hash(), i)
 		if _, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(msg.GasLimit)); err != nil {
 			log.Warn("Tracing intermediate roots did not complete", "txindex", i, "txhash", tx.Hash(), "err", err)
@@ -659,6 +661,7 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 	for i, tx := range txs {
 		// Generate the next state snapshot fast without tracing
 		msg, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
+		api.markGasless(msg, tx, block.Header(), statedb)
 		txctx := &Context{
 			BlockHash:   blockHash,
 			BlockNumber: block.Number(),
@@ -698,6 +701,7 @@ func (api *API) traceBlockParallel(ctx context.Context, block *types.Block, stat
 			// Fetch and execute the next transaction trace tasks
 			for task := range jobs {
 				msg, _ := core.TransactionToMessage(txs[task.index], signer, block.BaseFee())
+				api.markGasless(msg, txs[task.index], block.Header(), task.statedb)
 				txctx := &Context{
 					BlockHash:   blockHash,
 					BlockNumber: block.Number(),
@@ -737,6 +741,7 @@ txloop:
 
 		// Generate the next state snapshot fast without tracing
 		msg, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
+		api.markGasless(msg, tx, block.Header(), statedb)
 		statedb.SetTxContext(tx.Hash(), i)
 		if _, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(msg.GasLimit)); err != nil {
 			failed = err
@@ -821,6 +826,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 	for i, tx := range block.Transactions() {
 		// Prepare the transaction for un-traced execution
 		msg, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
+		api.markGasless(msg, tx, block.Header(), statedb)
 		if txHash != (common.Hash{}) && tx.Hash() != txHash {
 			// Process the tx to update state, but don't trace it.
 			_, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(msg.GasLimit))
@@ -881,6 +887,22 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 	return dumps, nil
 }
 
+// markGasless sets msg.IsGaslessTx to mirror the canonical StateProcessor, which
+// classifies on-chain gasless txs before execution. Replay/trace paths build the
+// message directly via TransactionToMessage and must apply the same gating, or a
+// real gasless tx would be replayed through the fee-charging path (buyGas) and
+// diverge from its on-chain gas/balance/error result. The allowance probe runs
+// on a dedicated, non-tracing EVM created inside NewGaslessCheckerForState and
+// snapshots/reverts the state, so it neither pollutes user-visible trace output
+// nor alters the replay state.
+func (api *API) markGasless(msg *core.Message, tx *types.Transaction, header *types.Header, statedb vm.StateDB) {
+	if msg == nil {
+		return
+	}
+	checker := core.NewGaslessCheckerForState(api.backend.ChainConfig(), header, statedb)
+	msg.IsGaslessTx = types.IsGaslessTxFor(tx, checker)
+}
+
 // containsTx reports whether the transaction with a certain hash
 // is contained within the specified block.
 func containsTx(block *types.Block, hash common.Hash) bool {
@@ -939,6 +961,7 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 	if err != nil {
 		return nil, err
 	}
+	api.markGasless(msg, tx, block.Header(), statedb)
 	txctx := &Context{
 		BlockHash:   blockHash,
 		BlockNumber: block.Number(),

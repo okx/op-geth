@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/holiman/uint256"
 )
 
 func TestGaslessAddressFor(t *testing.T) {
@@ -251,6 +252,25 @@ func TestIsGaslessTxFor(t *testing.T) {
 		tx := newDynFeeTx(t, &addr, big.NewInt(0), big.NewInt(0), 100_000)
 		if !IsGaslessTxFor(tx, allowed(100_000)) {
 			t.Fatal("expected true at exact gas limit")
+		}
+	})
+
+	t.Run("setcode_tx_rejected", func(t *testing.T) {
+		// A zero-fee EIP-7702 SetCode tx, even with an empty auth list and an
+		// allowing predeploy, must NOT be classified as gasless: the gasless
+		// fee-exemption path skips the SetCode authorization-list validity
+		// checks (ErrEmptyAuthList et al.).
+		tx := NewTx(&SetCodeTx{
+			ChainID:   uint256.NewInt(1),
+			Nonce:     0,
+			To:        addr,
+			Gas:       50_000,
+			GasFeeCap: new(uint256.Int),
+			GasTipCap: new(uint256.Int),
+			AuthList:  nil, // empty authorization list
+		})
+		if IsGaslessTxFor(tx, allowed(100_000)) {
+			t.Fatal("expected false for SetCode tx type")
 		}
 	})
 

@@ -195,7 +195,7 @@ var DefaultConfig = Config{
 	Lifetime:       3 * time.Hour,
 	FilterInterval: 12 * time.Second,
 
-	AllowGasless:                    false,
+	AllowGasless:                     false,
 	GaslessMockGasPricePercentileBps: 1000, // 0.1 in basis points
 }
 
@@ -328,6 +328,9 @@ func New(config Config, chain BlockChain) *LegacyPool {
 		initDoneCh:      make(chan struct{}),
 	}
 	pool.priced = newPricedList(pool.all)
+	// Let the priced list exempt live gasless txs from fee-based rejection and
+	// congestion eviction (single source of truth: pool.gaslessChecker).
+	pool.priced.newGaslessChecker = pool.gaslessChecker
 
 	// OP Stack diff
 	pool.queue.withRollupCostFnProvider(pool)
@@ -480,10 +483,20 @@ func (pool *LegacyPool) SetGasTip(tip *big.Int) {
 	if newTip.Cmp(old) > 0 {
 		// pool.priced is sorted by GasFeeCap, so we have to iterate through pool.all instead
 		drop := pool.all.TxsBelowTip(tip)
+		// Resolve the gasless checker once for the whole sweep so the head state
+		// is fetched a single time rather than per candidate tx.
+		checker := pool.gaslessChecker()
+		removed := 0
 		for _, tx := range drop {
+			// Keep live gasless txs: their zero tip sits below every threshold,
+			// but they are fee-exempt by design and must not be price-starved.
+			if checker != nil && types.MaybeGaslessShape(tx) && types.IsGaslessTxFor(tx, checker) {
+				continue
+			}
 			pool.removeTx(tx.Hash(), false, true)
+			removed++
 		}
-		pool.priced.Removed(len(drop))
+		pool.priced.Removed(removed)
 	}
 	log.Info("Legacy pool tip threshold updated", "tip", newTip)
 }

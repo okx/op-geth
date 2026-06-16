@@ -219,6 +219,12 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 		)
 		core.ProcessParentBlockHash(prevHash, evm)
 	}
+	// Mirror StateProcessor: classify gasless txs once per block before execution
+	// so that replayed on-chain gasless txs are not run through the fee-charging
+	// path (buyGas) and diverge from their canonical result. The allowance probe
+	// runs on a dedicated, non-tracing EVM bound to the same context/state, so it
+	// does not pollute --trace output (it also snapshots/reverts the state).
+	gaslessChecker := core.MakeGaslessChecker(vm.NewEVM(vmContext, statedb, chainConfig, vm.Config{}))
 	for i := 0; txIt.Next(); i++ {
 		tx, err := txIt.Tx()
 		if err != nil {
@@ -238,6 +244,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 			rejectedTxs = append(rejectedTxs, &rejectedTx{i, err.Error()})
 			continue
 		}
+		msg.IsGaslessTx = types.IsGaslessTxFor(tx, gaslessChecker)
 		txBlobGas := uint64(0)
 		if tx.Type() == types.BlobTxType {
 			txBlobGas = uint64(params.BlobTxBlobGasPerBlob * len(tx.BlobHashes()))

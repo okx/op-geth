@@ -114,11 +114,38 @@ func GaslessDataPrefix(tx *Transaction) []byte {
 	return tx.Data()
 }
 
+// MaybeGaslessShape reports whether tx has the structural shape of a gasless
+// transaction — everything that can be decided without invoking the predeploy:
+//   - it is an ordinary call/value tx (legacy, access-list or dynamic-fee),
+//   - its gasPrice, gasFeeCap and gasTipCap are all zero,
+//   - its `to` is non-nil.
+//
+// It is a cheap pre-filter so fee-based callers (txpool admission/eviction) can
+// skip the predeploy probe — and any head-state fetch behind the checker — for
+// the overwhelming majority of (fee-paying) transactions, which can never be
+// gasless. Only ordinary call/value transaction types are eligible: special
+// types carry type-specific consensus validity rules that the gasless
+// fee-exemption path in state_transition deliberately skips (deposits are
+// system txs, blob txs have blob-gas accounting, and EIP-7702 SetCode txs
+// require a non-empty, well-formed authorization list). Gating gasless to the
+// plain types via an allowlist also keeps any future tx type excluded by
+// default.
+func MaybeGaslessShape(tx *Transaction) bool {
+	switch tx.Type() {
+	case LegacyTxType, AccessListTxType, DynamicFeeTxType:
+		// eligible
+	default:
+		return false
+	}
+	if tx.inner.gasPrice().Sign() != 0 || tx.inner.gasFeeCap().Sign() != 0 || tx.inner.gasTipCap().Sign() != 0 {
+		return false
+	}
+	return tx.To() != nil
+}
+
 // IsGaslessTxFor reports whether the given transaction qualifies for gasless
 // execution. A tx is gasless iff:
-//   - it is not a deposit tx,
-//   - its gasPrice, gasFeeCap and gasTipCap are all zero,
-//   - its `to` is non-nil,
+//   - it has the gasless shape (see MaybeGaslessShape), and
 //   - the predeploy's getGaslessAllowance(to, dataPrefix) returns allowed=true
 //     and the tx's gas limit does not exceed the returned gasLimit.
 //
@@ -128,14 +155,7 @@ func IsGaslessTxFor(tx *Transaction, checker GaslessChecker) bool {
 	if checker == nil {
 		return false
 	}
-	if tx.Type() == DepositTxType {
-		return false
-	}
-	if tx.inner.gasPrice().Sign() != 0 || tx.inner.gasFeeCap().Sign() != 0 || tx.inner.gasTipCap().Sign() != 0 {
-		return false
-	}
-	to := tx.To()
-	if to == nil {
+	if !MaybeGaslessShape(tx) {
 		return false
 	}
 	allowance, err := checker(tx)
@@ -147,4 +167,3 @@ func IsGaslessTxFor(tx *Transaction, checker GaslessChecker) bool {
 	}
 	return true
 }
-
