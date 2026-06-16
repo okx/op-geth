@@ -277,6 +277,10 @@ type ValidationOptionsWithState struct {
 
 	// RollupCostFn is an optional extension, to validate total rollup costs of a tx
 	RollupCostFn RollupCostFunc
+
+	// GaslessChecker, when non-nil, gates the IsGaslessTxFor predicate against
+	// the Gasless predeploy.
+	GaslessChecker types.GaslessChecker
 }
 
 // ValidateTransactionWithState is a helper method to check whether a transaction
@@ -311,6 +315,10 @@ func ValidateTransactionWithState(tx *types.Transaction, signer types.Signer, op
 		return fmt.Errorf("%w: total tx cost overflow", core.ErrInsufficientFunds)
 	}
 	cost := cost256.ToBig()
+	// For gasless txs the sender pays no fees on-chain, so the admission cost is just the transferred value.
+	if types.IsGaslessTxFor(tx, opts.GaslessChecker) {
+		cost = tx.Value()
+	}
 	if balance.Cmp(cost) < 0 {
 		return fmt.Errorf("%w: balance %v, tx cost %v, overshot %v", core.ErrInsufficientFunds, balance, cost, new(big.Int).Sub(cost, balance))
 	}

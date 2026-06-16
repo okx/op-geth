@@ -314,6 +314,7 @@ func newList(strict bool) *list {
 
 type rollupCostFuncProvider interface {
 	RollupCostFunc() txpool.RollupCostFunc
+	GaslessChecker() types.GaslessChecker
 }
 
 // newRollupList creates a new transaction list with a rollup cost function pointer
@@ -331,6 +332,23 @@ func (l *list) rollupCostFn() txpool.RollupCostFunc {
 	// This can still return nil, but we won't dereference a nil pointer of lists
 	// that got regularly created using newList instead of newRollupList.
 	return l.rollupCostFnPrv.RollupCostFunc()
+}
+
+func (l *list) gaslessChecker() types.GaslessChecker {
+	if l.rollupCostFnPrv == nil {
+		return nil
+	}
+	return l.rollupCostFnPrv.GaslessChecker()
+}
+
+// txCost returns the balance the account must hold to keep tx in the pool.
+// Gasless txs pay no fees on-chain (L2 execution, L1 data and operator fees are
+// all waived), so they only need to cover their value.
+func (l *list) txCost(tx *types.Transaction, checker types.GaslessChecker) (*uint256.Int, bool) {
+	if types.IsGaslessTxFor(tx, checker) {
+		return uint256.FromBig(tx.Value())
+	}
+	return txpool.TotalTxCost(tx, l.rollupCostFn())
 }
 
 // Contains returns whether the  list contains a transaction
@@ -369,7 +387,7 @@ func (l *list) Add(tx *types.Transaction, priceBump uint64) (bool, *types.Transa
 		}
 	}
 	// Add new tx cost to totalcost
-	cost, overflow := txpool.TotalTxCost(tx, l.rollupCostFn())
+	cost, overflow := l.txCost(tx, l.gaslessChecker())
 	if overflow {
 		return false, nil
 	}
@@ -423,8 +441,9 @@ func (l *list) Filter(costLimit *uint256.Int, gasLimit uint64) (types.Transactio
 	l.gascap = gasLimit
 
 	// Filter out all the transactions above the account's funds
+	checker := l.gaslessChecker()
 	removed := l.txs.Filter(func(tx *types.Transaction) bool {
-		cost, of := txpool.TotalTxCost(tx, l.rollupCostFn())
+		cost, of := l.txCost(tx, checker)
 		if of {
 			panic("Filter: tx total cost overflow")
 		}
@@ -598,9 +617,23 @@ type pricedList struct {
 	// Number of stale price points to (re-heap trigger).
 	stales atomic.Int64
 
-	all              *lookup    // Pointer to the map of all transactions
-	urgent, floating priceHeap  // Heaps of prices of all the stored **remote** transactions
-	reheapMu         sync.Mutex // Mutex asserts that only one routine is reheaping the list
+	all              *lookup              // Pointer to the map of all transactions
+	urgent, floating priceHeap            // Heaps of prices of all the stored **remote** transactions
+	reheapMu         sync.Mutex           // Mutex asserts that only one routine is reheaping the list
+	gaslessChecker   types.GaslessChecker // gaslessChecker
+}
+
+// setGaslessChecker installs a (possibly nil) Gasless checker used to exempt
+// gasless txs from raw-price pool management. A nil checker disables the
+// exemption entirely.
+func (l *pricedList) setGaslessChecker(checker types.GaslessChecker) {
+	l.gaslessChecker = checker
+}
+
+// isGasless reports whether tx is a fee-exempt gasless tx, defaulting to false
+// when no checker is configured (gasless disabled).
+func (l *pricedList) isGasless(tx *types.Transaction) bool {
+	return types.IsGaslessTxFor(tx, l.gaslessChecker)
 }
 
 const (
@@ -638,6 +671,11 @@ func (l *pricedList) Removed(count int) {
 // Underpriced checks whether a transaction is cheaper than (or as cheap as) the
 // lowest priced (remote) transaction currently being tracked.
 func (l *pricedList) Underpriced(tx *types.Transaction) bool {
+	// Gasless txs are fee-exempt and must never be judged underpriced, otherwise
+	// a full pool would reject legitimate gasless txs despite their zero fee.
+	if l.isGasless(tx) {
+		return false
+	}
 	// Note: with two queues, being underpriced is defined as being worse than the worst item
 	// in all non-empty queues if there is any. If both queues are empty then nothing is underpriced.
 	return (l.underpricedFor(&l.urgent, tx) || len(l.urgent.list) == 0) &&
@@ -672,12 +710,18 @@ func (l *pricedList) underpricedFor(h *priceHeap, tx *types.Transaction) bool {
 // If noPending is set to true, we will only consider the floating list
 func (l *pricedList) Discard(slots int) (types.Transactions, bool) {
 	drop := make(types.Transactions, 0, slots) // Remote underpriced transactions to drop
+	var spared types.Transactions
 	for slots > 0 {
 		if len(l.urgent.list)*floatingRatio > len(l.floating.list)*urgentRatio {
 			// Discard stale transactions if found during cleanup
 			tx := heap.Pop(&l.urgent).(*types.Transaction)
 			if l.all.Get(tx.Hash()) == nil { // Removed or migrated
 				l.stales.Add(-1)
+				continue
+			}
+			// Gasless txs are exempt from eviction, set aside and skip
+			if l.isGasless(tx) {
+				spared = append(spared, tx)
 				continue
 			}
 			// Non stale transaction found, move to floating heap
@@ -693,10 +737,19 @@ func (l *pricedList) Discard(slots int) (types.Transactions, bool) {
 				l.stales.Add(-1)
 				continue
 			}
+			// Gasless txs are exempt from eviction, set aside and skip
+			if l.isGasless(tx) {
+				spared = append(spared, tx)
+				continue
+			}
 			// Non stale transaction found, discard it
 			drop = append(drop, tx)
 			slots -= numSlots(tx)
 		}
+	}
+	// Restore the exempted gasless transactions back into the urgent heap.
+	for _, tx := range spared {
+		heap.Push(&l.urgent, tx)
 	}
 	// If we still can't make enough room for the new transaction
 	if slots > 0 {

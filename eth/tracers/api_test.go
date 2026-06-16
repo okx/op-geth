@@ -17,6 +17,7 @@
 package tracers
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"encoding/json"
@@ -1448,6 +1449,140 @@ func TestTraceBlockWithBasefee(t *testing.T) {
 			t.Errorf("test %d, result mismatch\nhave: %v\nwant: %v\n", i, string(have), want)
 		}
 	}
+}
+
+// gaslessAllowanceStub returns minimal EVM bytecode whose execution yields the
+// ABI-encoded tuple (bool allowed=true, uint64 gasLimit). It mirrors the
+// bcReturnAllowance helper in core/gasless_test.go but accepts a 3-byte gasLimit
+// so the returned allowance can exceed the single-byte PUSH1 ceiling and cover a
+// real (>= 21000 gas) transaction.
+func gaslessAllowanceStub(gasLimit uint32) []byte {
+	return []byte{
+		// memory[0..32] = 1 (allowed = true)
+		byte(vm.PUSH1), 0x01, byte(vm.PUSH1), 0x00, byte(vm.MSTORE),
+		// memory[32..64] = uint256(gasLimit) via PUSH3
+		byte(vm.PUSH3), byte(gasLimit >> 16), byte(gasLimit >> 8), byte(gasLimit),
+		byte(vm.PUSH1), 0x20, byte(vm.MSTORE),
+		// RETURN memory[0..64]
+		byte(vm.PUSH1), 0x40, byte(vm.PUSH1), 0x00, byte(vm.RETURN),
+	}
+}
+
+// buildGaslessBackend creates a merged (non-zero baseFee) test backend whose
+// genesis installs an allowance-returning stub at the Gasless predeploy address
+// (resolved from the chain id) when withStub is true. It produces a single block
+// containing two zero-fee (gasFeeCap == gasTipCap == 0) signed transactions from
+// `sender` to the whitelisted `to`, and returns the backend plus both tx hashes.
+//
+// When withStub is true, both txs are genuine gasless txs and the block is
+// generated successfully (the block processor classifies them via the predeploy).
+// When withStub is false, the same zero-fee txs are NOT gasless, so block
+// generation itself fails the fee-cap check — which is why the negative control
+// is asserted at generation time rather than at trace time.
+func buildGaslessBackend(t *testing.T, withStub bool) (*testBackend, []common.Hash) {
+	t.Helper()
+	config := params.AllDevChainProtocolChanges // chain id 1337, non-zero baseFee
+	chainID := config.ChainID
+
+	key, _ := crypto.GenerateKey()
+	sender := crypto.PubkeyToAddress(key.PublicKey)
+	whitelisted := common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+
+	alloc := types.GenesisAlloc{
+		// Fund the sender so the test is not trivially passing due to a zero
+		// balance; the point is that the fee path is skipped for gasless txs.
+		sender:      {Balance: big.NewInt(params.Ether)},
+		whitelisted: {Balance: big.NewInt(0)},
+	}
+	if withStub {
+		// getGaslessAllowance(whitelisted, data) -> (true, 0x100000).
+		alloc[types.GaslessAddressFor(chainID)] = types.Account{Code: gaslessAllowanceStub(0x100000), Balance: big.NewInt(0)}
+	}
+	genesis := &core.Genesis{Config: config, Alloc: alloc}
+
+	signer := types.LatestSignerForChainID(chainID)
+	hashes := make([]common.Hash, 0, 2)
+	backend := newTestMergedBackend(t, 1, genesis, func(i int, b *core.BlockGen) {
+		if b.BaseFee().Sign() == 0 {
+			t.Fatalf("expected a non-zero baseFee to make the test meaningful")
+		}
+		for nonce := uint64(0); nonce < 2; nonce++ {
+			tx, err := types.SignTx(types.NewTx(&types.DynamicFeeTx{
+				ChainID:   chainID,
+				Nonce:     nonce,
+				To:        &whitelisted,
+				Value:     big.NewInt(0),
+				Gas:       params.TxGas,
+				GasFeeCap: big.NewInt(0),
+				GasTipCap: big.NewInt(0),
+				Data:      nil,
+			}), signer, key)
+			if err != nil {
+				t.Fatalf("failed to sign gasless tx: %v", err)
+			}
+			b.AddTx(tx)
+			hashes = append(hashes, tx.Hash())
+		}
+	})
+	return backend, hashes
+}
+
+// TestTraceTransactionGasless ensures the
+// already-on-chain tx replay paths now set
+// msg.IsGaslessTx = types.IsGaslessTxFor(tx, checker) so real zero-fee gasless
+// txs replay consistently with canonical block execution.
+func TestTraceTransactionGasless(t *testing.T) {
+	t.Parallel()
+
+	backend, hashes := buildGaslessBackend(t, true /* withStub */)
+	defer backend.teardown()
+
+	api := NewAPI(backend)
+	block, err := api.blockByNumber(context.Background(), rpc.LatestBlockNumber)
+	if err != nil {
+		t.Fatalf("failed to fetch block: %v", err)
+	}
+
+	// Trace the SECOND tx. This forces StandardTraceBlockToFile to re-execute the
+	// FIRST (zero-fee gasless) tx via core.ApplyMessage on the non-NoBaseFee EVM.
+	// That only succeeds because the replay sets msg.IsGaslessTx.
+	dumps, err := api.StandardTraceBlockToFile(context.Background(), block.Hash(), &StdTraceConfig{TxHash: hashes[1]})
+	if err != nil {
+		t.Fatalf("expected gasless block to trace successfully, got error: %v", err)
+	}
+	if len(dumps) != 1 {
+		t.Fatalf("expected exactly one trace dump, got %d", len(dumps))
+	}
+	data, err := os.ReadFile(dumps[0])
+	if err != nil {
+		t.Fatalf("could not read trace file: %v", err)
+	}
+	// The traced (second) tx is a plain 21000-gas transfer; its dump must report a
+	// successful execution (gasUsed 0x0 for the inner call, no error/output marker
+	// for a failed tx). Assert the trace footer shows success.
+	if !bytes.Contains(data, []byte(`"gasUsed"`)) {
+		t.Fatalf("trace dump missing execution footer:\n%s", data)
+	}
+	if bytes.Contains(data, []byte(`"error"`)) {
+		t.Fatalf("trace dump reported an execution error:\n%s", data)
+	}
+}
+
+// TestTraceTransactionGaslessNegativeControl is the contrast case: the same
+// zero-fee txs without the predeploy stub are NOT gasless.
+func TestTraceTransactionGaslessNegativeControl(t *testing.T) {
+	t.Parallel()
+
+	// Block generation runs the real block processor; a zero-fee tx that is not
+	// classified gasless fails the fee-cap check, and core BlockGen.AddTx panics
+	// on any tx that cannot be executed. That panic propagates synchronously here.
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("expected block generation to fail (panic) for non-gasless zero-fee txs without the predeploy stub")
+		}
+	}()
+	b, _ := buildGaslessBackend(t, false /* withStub */)
+	b.teardown()
 }
 
 func TestStandardTraceBlockToFile(t *testing.T) {

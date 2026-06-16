@@ -28,7 +28,7 @@ import (
 // Default Gasless predeploy address. Chain-specific overrides live in
 // GaslessAddressFor.
 var (
-	defaultGaslessAddr   = common.HexToAddress("0x70CA900387FCD29C2A71d511F10E5c961dc9363F")
+	defaultGaslessAddr   = common.HexToAddress("0xA9092BC02e2000a3F8996D1991621E9A03Ef2dfE")
 	gaslessAddrChain196  = common.HexToAddress("0x19787404b0c70021b4752028f7e3a92313885B27")
 	gaslessAddrChain1952 = common.HexToAddress("0x19787404b0c70021b4752028f7e3a92313885B27")
 )
@@ -86,19 +86,26 @@ type GaslessAllowance struct {
 
 // DecodeGaslessAllowance parses (bool, uint64) ABI return data. Layout:
 //
-//	[0..32)   bool   — non-zero last byte means true
+//	[0..32)   bool   — strict canonical ABI: true ONLY if bytes [0..31) are
+//	                   all zero AND byte[31] == 1; any other word (including
+//	                   non-canonical truthy values) is fail-closed to false.
 //	[32..64)  uint64 — right-aligned in 32 bytes
+//
+// The strict decoding mirrors reth's canonical ABI bool handling so that both
+// clients agree on the allowance for every possible return word.
 func DecodeGaslessAllowance(ret []byte) (GaslessAllowance, error) {
 	if len(ret) < 64 {
 		return GaslessAllowance{}, errors.New("gasless: allowance return too short")
 	}
 	var out GaslessAllowance
-	for _, b := range ret[:32] {
+	canonical := true
+	for _, b := range ret[:31] {
 		if b != 0 {
-			out.Allowed = true
+			canonical = false
 			break
 		}
 	}
+	out.Allowed = canonical && ret[31] == 1
 	out.GasLimit = binary.BigEndian.Uint64(ret[32+24 : 32+32])
 	return out, nil
 }
@@ -128,6 +135,11 @@ func IsGaslessTxFor(tx *Transaction, checker GaslessChecker) bool {
 	if checker == nil {
 		return false
 	}
+	// Deposit txs are never gasless: they have no fee fields and are handled on
+	// their own path. Other tx types (including EIP-7702 SetCode) may be gasless;
+	// the type-level validity checks they require (e.g. authorization-list
+	// well-formedness) are enforced in the gasless branch of preCheck before fees
+	// are skipped, matching reth.
 	if tx.Type() == DepositTxType {
 		return false
 	}
@@ -147,4 +159,3 @@ func IsGaslessTxFor(tx *Transaction, checker GaslessChecker) bool {
 	}
 	return true
 }
-
