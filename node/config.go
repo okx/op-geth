@@ -207,6 +207,10 @@ type Config struct {
 	// JWTSecret is the path to the hex-encoded jwt secret.
 	JWTSecret string `toml:",omitempty"`
 
+	// KMSJWTSecretName is the KMS key name for the JWT secret.
+	// Only used when KMS is enabled. If empty, defaults to "op-geth.jwtsecret".
+	KMSJWTSecretName string `toml:",omitempty"`
+
 	// EnablePersonal enables the deprecated personal namespace.
 	EnablePersonal bool `toml:"-"`
 

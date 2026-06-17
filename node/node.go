@@ -36,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/internal/kms"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -363,12 +364,32 @@ func ObtainJWTSecret(fileName string) ([]byte, error) {
 // or from the default location. If neither of those are present, it generates
 // a new secret and stores to the default location.
 func (n *Node) obtainJWTSecret(cliParam string) ([]byte, error) {
+	if kms.IsEnabled() {
+		return n.obtainJWTSecretFromKMS()
+	}
 	fileName := cliParam
 	if len(fileName) == 0 {
 		// no path provided, use default
 		fileName = n.ResolvePath(datadirJWTKey)
 	}
 	return ObtainJWTSecret(fileName)
+}
+
+func (n *Node) obtainJWTSecretFromKMS() ([]byte, error) {
+	kmsKeyName := n.config.KMSJWTSecretName
+	if kmsKeyName == "" {
+		kmsKeyName = kms.DefaultJWTSecretKMSKey
+	}
+	hexVal, err := kms.GetSecretValue(kmsKeyName)
+	if err != nil {
+		return nil, fmt.Errorf("kms jwtsecret retrieval failed (key=%q): %w", kmsKeyName, err)
+	}
+	jwtSecret := common.FromHex(strings.TrimSpace(hexVal))
+	if len(jwtSecret) != 32 {
+		return nil, fmt.Errorf("kms jwtsecret invalid length (key=%q): got %d bytes, want 32", kmsKeyName, len(jwtSecret))
+	}
+	log.Info("Loaded JWT secret from KMS", "kmsKey", kmsKeyName, "crc32", fmt.Sprintf("%#x", crc32.ChecksumIEEE(jwtSecret)))
+	return jwtSecret, nil
 }
 
 // startRPC is a helper method to configure all the various RPC endpoints during node

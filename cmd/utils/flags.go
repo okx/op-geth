@@ -58,6 +58,7 @@ import (
 	"github.com/ethereum/go-ethereum/graphql"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/flags"
+	"github.com/ethereum/go-ethereum/internal/kms"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/metrics/exp"
@@ -911,6 +912,18 @@ var (
 		Usage:    "P2P node key as hex (for testing)",
 		Category: flags.NetworkingCategory,
 	}
+	KMSNodeKeyNameFlag = &cli.StringFlag{
+		Name:     "kms.nodekey-name",
+		Usage:    "KMS key name for devp2p node private key",
+		Value:    kms.DefaultNodeKeyHexKMSKey,
+		Category: flags.NetworkingCategory,
+	}
+	KMSJWTSecretNameFlag = &cli.StringFlag{
+		Name:     "kms.jwtsecret-name",
+		Usage:    "KMS key name for auth RPC JWT secret",
+		Value:    kms.DefaultJWTSecretKMSKey,
+		Category: flags.APICategory,
+	}
 	NATFlag = &cli.StringFlag{
 		Name:     "nat",
 		Usage:    "NAT port mapping mechanism (any|none|upnp|pmp|pmp:<IP>|extip:<IP>|stun:<IP:PORT>)",
@@ -1250,6 +1263,22 @@ func setNodeKey(ctx *cli.Context, cfg *p2p.Config) {
 		key  *ecdsa.PrivateKey
 		err  error
 	)
+
+	if kms.IsEnabled() {
+		kmsKeyName := ctx.String(KMSNodeKeyNameFlag.Name)
+		hexVal, kmsErr := kms.GetSecretValue(kmsKeyName)
+		if kmsErr != nil {
+			Fatalf("KMS nodekeyhex retrieval failed (key=%q): %v", kmsKeyName, kmsErr)
+		}
+		hexVal = stripHexPrefix(strings.TrimSpace(hexVal))
+		if key, err = crypto.HexToECDSA(hexVal); err != nil {
+			Fatalf("KMS nodekeyhex value invalid (key=%q): %v", kmsKeyName, err)
+		}
+		cfg.PrivateKey = key
+		log.Info("Loaded devp2p node key from KMS", "kmsKey", kmsKeyName)
+		return
+	}
+
 	switch {
 	case file != "" && hex != "":
 		Fatalf("Options %q and %q are mutually exclusive", NodeKeyFileFlag.Name, NodeKeyHexFlag.Name)
@@ -1264,6 +1293,13 @@ func setNodeKey(ctx *cli.Context, cfg *p2p.Config) {
 		}
 		cfg.PrivateKey = key
 	}
+}
+
+func stripHexPrefix(s string) string {
+	if len(s) >= 2 && (s[:2] == "0x" || s[:2] == "0X") {
+		return s[2:]
+	}
+	return s
 }
 
 // setNodeUserIdent creates the user identifier from CLI flags.
@@ -1586,6 +1622,9 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 
 	if ctx.IsSet(JWTSecretFlag.Name) {
 		cfg.JWTSecret = ctx.String(JWTSecretFlag.Name)
+	}
+	if ctx.IsSet(KMSJWTSecretNameFlag.Name) {
+		cfg.KMSJWTSecretName = ctx.String(KMSJWTSecretNameFlag.Name)
 	}
 	if ctx.IsSet(EnablePersonal.Name) {
 		log.Warn(fmt.Sprintf("Option --%s is deprecated. The 'personal' RPC namespace has been removed.", EnablePersonal.Name))
