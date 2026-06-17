@@ -1101,6 +1101,12 @@ var (
 		Category: flags.RollupCategory,
 		Value:    0.1,
 	}
+	RollupGaslessLifetimeFlag = &cli.DurationFlag{
+		Name:     "rollup.gasless-lifetime",
+		Usage:    "Maximum time a gasless (zero-fee) transaction may stay in the txpool before being dropped (non-positive falls back to the default).",
+		Category: flags.RollupCategory,
+		Value:    ethconfig.Defaults.TxPool.GaslessLifetime,
+	}
 
 	// Metrics flags
 	MetricsEnabledFlag = &cli.BoolFlag{
@@ -1755,6 +1761,9 @@ func setTxPool(ctx *cli.Context, cfg *legacypool.Config) {
 			pct = 1
 		}
 		cfg.GaslessMockGasPricePercentileBps = uint16(pct*10000 + 0.5)
+	}
+	if ctx.IsSet(RollupGaslessLifetimeFlag.Name) {
+		cfg.GaslessLifetime = ctx.Duration(RollupGaslessLifetimeFlag.Name)
 	}
 }
 

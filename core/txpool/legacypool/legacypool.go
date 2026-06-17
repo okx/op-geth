@@ -96,6 +96,9 @@ var (
 	queuedNofundsMeter   = metrics.NewRegisteredMeter("txpool/queued/nofunds", nil)   // Dropped due to out-of-funds
 	queuedEvictionMeter  = metrics.NewRegisteredMeter("txpool/queued/eviction", nil)  // Dropped due to lifetime
 
+	// gaslessEvictionMeter counts gasless txs dropped for exceeding GaslessLifetime.
+	gaslessEvictionMeter = metrics.NewRegisteredMeter("txpool/gasless/eviction", nil)
+
 	// General tx metrics
 	knownTxMeter       = metrics.NewRegisteredMeter("txpool/known", nil)
 	validTxMeter       = metrics.NewRegisteredMeter("txpool/valid", nil)
@@ -175,6 +178,14 @@ type Config struct {
 	// Zero-priced txs are excluded from the sample to avoid the
 	// "mock=0 → more zeros → mock stays 0" feedback loop.
 	GaslessMockGasPricePercentileBps uint16
+
+	// GaslessLifetime caps how long a gasless (zero-fee) transaction may live in
+	// the pool. Because gasless txs carry no fee they sort at the very bottom and
+	// are never naturally churned out by price-based eviction, so any gasless tx
+	// older than this is dropped, regardless of whether it sits in the pending or
+	// queued set. A non-positive value disables the cap. Only relevant when
+	// AllowGasless is set.
+	GaslessLifetime time.Duration
 }
 
 // DefaultConfig contains the default configurations for the transaction pool.
@@ -196,7 +207,8 @@ var DefaultConfig = Config{
 	FilterInterval: 12 * time.Second,
 
 	AllowGasless:                     false,
-	GaslessMockGasPricePercentileBps: 1000, // 0.1 in basis points
+	GaslessMockGasPricePercentileBps: 1000,             // 0.1 in basis points
+	GaslessLifetime:                  10 * time.Minute, // drop gasless txs older than this
 }
 
 // sanitize checks the provided user configurations and changes anything that's
@@ -427,6 +439,10 @@ func (pool *LegacyPool) loop() {
 			for _, hash := range pool.queue.evictList() {
 				pool.removeTx(hash, true, true)
 			}
+			// Drop gasless txs that have outlived their (typically shorter) cap.
+			for _, hash := range pool.gaslessEvictList() {
+				pool.removeTx(hash, true, true)
+			}
 			pool.mu.Unlock()
 
 		// Periodic re-check of ingress filters
@@ -434,6 +450,44 @@ func (pool *LegacyPool) loop() {
 			pool.filterTransactions()
 		}
 	}
+}
+
+// isGaslessShaped reports whether tx has the zero-fee shape of a gasless tx
+// (non-deposit, zero gasPrice/feeCap/tipCap, non-nil recipient). It mirrors the
+// pre-predeploy checks in types.IsGaslessTxFor. Lifetime eviction keys on the
+// shape rather than a fresh predeploy allowance check: any zero-fee tx in the
+// pool was admitted via the gasless path, and if its allowance is later revoked
+// it would still be fee-exempt from price eviction, so it must still be cleaned
+// up instead of lingering forever.
+func isGaslessShaped(tx *types.Transaction) bool {
+	if tx.Type() == types.DepositTxType {
+		return false
+	}
+	if tx.GasFeeCapIntCmp(common.Big0) != 0 || tx.GasTipCapIntCmp(common.Big0) != 0 {
+		return false
+	}
+	return tx.To() != nil
+}
+
+// gaslessEvictList returns the hashes of gasless transactions that have lived
+// in the pool longer than the configured GaslessLifetime. Gasless txs carry no
+// fee, so they sort at the bottom and are never churned out by price-based
+// eviction; without this cap they could occupy pool slots indefinitely. The cap
+// bounds their lifetime whether they sit in the pending or the queued set, using
+// the tx's first-seen time (tx.Time()). The caller must hold pool.mu.
+func (pool *LegacyPool) gaslessEvictList() []common.Hash {
+	if !pool.config.AllowGasless || pool.config.GaslessLifetime <= 0 {
+		return nil
+	}
+	var removed []common.Hash
+	pool.all.Range(func(hash common.Hash, tx *types.Transaction) bool {
+		if isGaslessShaped(tx) && time.Since(tx.Time()) > pool.config.GaslessLifetime {
+			removed = append(removed, hash)
+		}
+		return true
+	})
+	gaslessEvictionMeter.Mark(int64(len(removed)))
+	return removed
 }
 
 // Close terminates the transaction pool.
