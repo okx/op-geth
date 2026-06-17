@@ -81,7 +81,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace gitlab.okg.com/okcoin-commons/ok-kms-go v1.0.9 => ./kms_stub
+
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.7.0 // indirect
