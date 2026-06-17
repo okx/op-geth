@@ -22,6 +22,17 @@ func depositTestConfig() *params.ChainConfig {
 	return c
 }
 
+// canyonDepositTestConfig activates Canyon (and its Shanghai prerequisite) from
+// genesis so MakeReceipt writes receipt.DepositReceiptVersion. The three XLayer
+// networks are all past Canyon, so this is the production-representative config
+// for the deposit receipt-version field.
+func canyonDepositTestConfig() *params.ChainConfig {
+	c := depositTestConfig()
+	c.ShanghaiTime = u64(0)
+	c.CanyonTime = u64(0)
+	return c
+}
+
 func depositTx(from common.Address, to common.Address, mint, value int64, gas uint64) *types.Transaction {
 	return types.NewTx(&types.DepositTx{
 		SourceHash: common.Hash{0x01},
@@ -68,6 +79,16 @@ func TestDeposit_BlacklistedHit(t *testing.T) {
 	if got := sdb.GetNonce(depositor); got != 1 {
 		t.Fatalf("depositor nonce = %d, want 1 (deposit always increments, N+1)", got)
 	}
+	// receipt.DepositNonce encodes the PRE-exec nonce N (0 here), deliberately
+	// NOT the account's post-state nonce N+1 (asserted as 1 just above). Both must
+	// hold simultaneously or the receipts root diverges from xlayer-reth
+	// (PRD FR-3 / I-6 — this field is the reth-alignment trap).
+	if receipt.DepositNonce == nil {
+		t.Fatal("receipt.DepositNonce = nil, want 0 (pre-exec N must be recorded under Regolith)")
+	}
+	if *receipt.DepositNonce != 0 {
+		t.Fatalf("receipt.DepositNonce = %d, want 0 (pre-exec N, NOT account N+1=%d)", *receipt.DepositNonce, sdb.GetNonce(depositor))
+	}
 	if !sdb.GetBalance(listed).IsZero() {
 		t.Fatalf("listed balance = %s, want 0 (value transfer reverted)", sdb.GetBalance(listed))
 	}
@@ -76,6 +97,48 @@ func TestDeposit_BlacklistedHit(t *testing.T) {
 	}
 	if got := gp.Used(); got != tx.Gas() {
 		t.Fatalf("gas pool used = %d, want %d (full gasLimit charged)", got, tx.Gas())
+	}
+}
+
+// TestDeposit_BlacklistedHit_CanyonReceiptVersion covers the deposit receipt
+// fields that enter the receipts root and are the primary xlayer-reth alignment
+// trap (PRD FR-3 / I-6): with Canyon active, an intercepted deposit must carry
+// receipt.DepositReceiptVersion == CanyonDepositReceiptVersion AND
+// receipt.DepositNonce == pre-exec N, alongside status=0 / gasUsed=gasLimit.
+// depositTestConfig() does not activate Canyon, so without this test the
+// DepositReceiptVersion branch is never executed.
+func TestDeposit_BlacklistedHit_CanyonReceiptVersion(t *testing.T) {
+	const chainID = params.XLayerMainnetChainID
+	config := canyonDepositTestConfig()
+	listed := common.HexToAddress("0x00000000000000000000000000000000000000AA")
+	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB")
+
+	sdb := newTestStateDB(t)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	if gate == nil {
+		t.Fatal("expected active gate")
+	}
+	evm := newBuildPathEVM(config, sdb, gate)
+
+	tx := depositTx(depositor, listed, 1000, 100, 100000)
+	receipt, err := ApplyTransactionGatedForBuild(gate, evm, NewGasPool(30_000_000), sdb, buildPathHeader(), tx)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if receipt.Status != types.ReceiptStatusFailed {
+		t.Fatalf("status = %d, want 0 (included-as-reverted)", receipt.Status)
+	}
+	if receipt.GasUsed != tx.Gas() {
+		t.Fatalf("gasUsed = %d, want %d (full gasLimit override)", receipt.GasUsed, tx.Gas())
+	}
+	if receipt.DepositNonce == nil || *receipt.DepositNonce != 0 {
+		t.Fatalf("receipt.DepositNonce = %v, want 0 (pre-exec N)", receipt.DepositNonce)
+	}
+	if receipt.DepositReceiptVersion == nil {
+		t.Fatal("receipt.DepositReceiptVersion = nil, want CanyonDepositReceiptVersion (Canyon active)")
+	}
+	if *receipt.DepositReceiptVersion != types.CanyonDepositReceiptVersion {
+		t.Fatalf("receipt.DepositReceiptVersion = %d, want %d", *receipt.DepositReceiptVersion, types.CanyonDepositReceiptVersion)
 	}
 }
 
@@ -293,6 +356,55 @@ func TestDeposit_EventHit_IncludedAsReverted(t *testing.T) {
 	}
 	if receipt.GasUsed != tx.Gas() {
 		t.Fatalf("gasUsed = %d, want %d (full gasLimit override)", receipt.GasUsed, tx.Gas())
+	}
+}
+
+// selfdestructToAAARuntime is runtime bytecode `PUSH20 0x..AA; SELFDESTRUCT`
+// that sends the contract's whole balance to the listed beneficiary 0xAA. No
+// PUSH0, so it runs on the build-path EVM's pre-Shanghai instruction set. Used to
+// drive a real check③ selfdestruct hit end to end.
+const selfdestructToAAARuntime = "7300000000000000000000000000000000000000aaff"
+
+// TestDeposit_SelfdestructBeneficiary_IncludedAsReverted is the end-to-end check③
+// selfdestruct case (AC FR-2 names selfdestruct beneficiary explicitly): a deposit
+// funds a non-listed contract that selfdestructs, sending its balance to the listed
+// 0xAA. The committed beneficiary balance movement trips check③ (category
+// selfdestruct), and the deposit is included-as-reverted (status=0, beneficiary
+// balance reverted to 0). Complements the pure-function DM-2.12 coverage with a
+// real SELFDESTRUCT opcode through the gated apply path.
+func TestDeposit_SelfdestructBeneficiary_IncludedAsReverted(t *testing.T) {
+	const chainID = params.XLayerMainnetChainID
+	config := depositTestConfig()
+	listed := common.HexToAddress("0x00000000000000000000000000000000000000AA")    // selfdestruct beneficiary
+	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB") // not exempt
+	victim := common.HexToAddress("0x00000000000000000000000000000000000000E2")    // contract, not listed
+
+	sdb := newTestStateDB(t)
+	sdb.SetCode(victim, common.FromHex(selfdestructToAAARuntime), tracing.CodeChangeGenesis)
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	if gate == nil {
+		t.Fatal("expected active gate")
+	}
+	evm := newBuildPathEVM(config, sdb, gate)
+
+	// deposit value=100 to the contract; on execution it selfdestructs, sending
+	// 100 to 0xAA → committed beneficiary balance movement → check③ hit.
+	tx := depositTx(depositor, victim, 1000, 100, 100000)
+	sdb.SetTxContext(tx.Hash(), 0)
+	gp := NewGasPool(30_000_000)
+
+	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if receipt.Status != types.ReceiptStatusFailed {
+		t.Fatalf("status = %d, want 0 (selfdestruct beneficiary listed → included-as-reverted)", receipt.Status)
+	}
+	if receipt.GasUsed != tx.Gas() {
+		t.Fatalf("gasUsed = %d, want %d (full gasLimit override)", receipt.GasUsed, tx.Gas())
+	}
+	if !sdb.GetBalance(listed).IsZero() {
+		t.Fatalf("listed beneficiary balance = %s, want 0 (selfdestruct transfer reverted)", sdb.GetBalance(listed))
 	}
 }
 

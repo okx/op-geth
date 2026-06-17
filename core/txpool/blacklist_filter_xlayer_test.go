@@ -7,6 +7,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
@@ -96,4 +98,53 @@ func TestBlacklistFilter_FilterTx(t *testing.T) {
 			t.Fatal("new-head listed addr should be rejected")
 		}
 	})
+
+	// Exercises the REAL Refresh method (and the ReadBlacklistSnapshot on-chain
+	// view read it drives) rather than a manual snap.Store, deploying a mirror
+	// stub at the hardcoded address. This is the wiring that legacypool.reset
+	// invokes on commit/reorg (FR-1 AC4); without this the Refresh path itself
+	// has no coverage. It also asserts the reorg no-residue property: a stale
+	// pre-seeded entry is gone after a real refresh from the new head.
+	t.Run("real Refresh reads the mirror and drops stale residue", func(t *testing.T) {
+		mirror, ok := params.BlacklistMirror(chainID)
+		if !ok {
+			t.Fatalf("chain %d must be blacklist-enabled", chainID)
+		}
+		fromMirror := common.HexToAddress("0x00000000000000000000000000000000000000C3")
+		stale := common.HexToAddress("0x00000000000000000000000000000000000000C4")
+
+		statedb, _ := state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
+		statedb.SetCode(mirror, mirrorReturningBytecode(fromMirror), tracing.CodeChangeGenesis)
+		header := &types.Header{Number: big.NewInt(1), Time: 1, Difficulty: big.NewInt(0)}
+		config := &params.ChainConfig{ChainID: new(big.Int).SetUint64(chainID)}
+
+		f := filterWith(chainID, stale) // stale old-head snapshot
+		f.Refresh(statedb, header, config)
+
+		if f.FilterTx(context.Background(), signedTx(t, chainID, fromMirror)) {
+			t.Fatal("address read from the refreshed mirror must be rejected")
+		}
+		if !f.FilterTx(context.Background(), signedTx(t, chainID, stale)) {
+			t.Fatal("stale old-head entry must not linger after a real Refresh")
+		}
+	})
+}
+
+// mirrorReturningBytecode is a minimal getBlacklist(start,limit) stub: it ignores
+// the page args and always returns the ABI tuple (total=1, [addr]). Memory layout
+// of the return data: [0x00]=1 (total) [0x20]=0x40 (array offset) [0x40]=1 (len)
+// [0x60]=addr. No PUSH0, so it runs on any instruction set the read-only EVM picks.
+func mirrorReturningBytecode(addr common.Address) []byte {
+	code := []byte{
+		0x60, 0x01, 0x60, 0x00, 0x52, // PUSH1 1;    PUSH1 0x00; MSTORE  → total=1
+		0x60, 0x40, 0x60, 0x20, 0x52, // PUSH1 0x40; PUSH1 0x20; MSTORE  → array offset=0x40
+		0x60, 0x01, 0x60, 0x40, 0x52, // PUSH1 1;    PUSH1 0x40; MSTORE  → array len=1
+		0x73, // PUSH20 (address follows)
+	}
+	code = append(code, addr.Bytes()...) // 20-byte address literal
+	code = append(code,
+		0x60, 0x60, 0x52, // PUSH1 0x60; MSTORE → addr at mem[0x60]
+		0x60, 0x80, 0x60, 0x00, 0xf3, // PUSH1 0x80; PUSH1 0x00; RETURN (return mem[0:0x80])
+	)
+	return code
 }

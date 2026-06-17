@@ -96,6 +96,15 @@ func erc1155Single(operator, from, to common.Address) *types.Log {
 	}}
 }
 
+func erc1155Batch(operator, from, to common.Address) *types.Log {
+	return &types.Log{Topics: []common.Hash{
+		topicERC1155Batch,
+		common.BytesToHash(operator.Bytes()),
+		common.BytesToHash(from.Bytes()),
+		common.BytesToHash(to.Bytes()),
+	}}
+}
+
 func TestEvaluate_TransferEvents(t *testing.T) {
 	cases := []struct {
 		name string
@@ -108,6 +117,9 @@ func TestEvaluate_TransferEvents(t *testing.T) {
 		{"ERC20 to-hit", []*types.Log{erc20Transfer(addrBBB, addrAAA)}, snapOf(addrAAA), true, HookLog},
 		{"ERC20 miss (DM-2.5)", []*types.Log{erc20Transfer(addrBBB, addrCCC)}, snapOf(addrAAA), false, ""},
 		{"ERC1155 single hit (DM-2.3)", []*types.Log{erc1155Single(addrCCC, addrAAA, addrBBB)}, snapOf(addrAAA), true, HookLog},
+		{"ERC1155 batch from-hit", []*types.Log{erc1155Batch(addrCCC, addrAAA, addrBBB)}, snapOf(addrAAA), true, HookLog},
+		{"ERC1155 batch to-hit", []*types.Log{erc1155Batch(addrCCC, addrBBB, addrAAA)}, snapOf(addrAAA), true, HookLog},
+		{"ERC1155 batch miss", []*types.Log{erc1155Batch(addrCCC, addrBBB, addrCCC)}, snapOf(addrAAA), false, ""},
 		{"non-Transfer topic (DM-2.7)", []*types.Log{{Topics: []common.Hash{common.HexToHash("0xdeadbeef"), common.BytesToHash(addrAAA.Bytes())}}}, snapOf(addrAAA), false, ""},
 	}
 	for _, tc := range cases {
@@ -140,6 +152,19 @@ func TestEvaluate_BalanceChecks(t *testing.T) {
 		hit, cat := tr.Evaluate(snapOf(addrAAA), nil, balances(map[common.Address]int64{addrAAA: 100}))
 		if !hit || cat != HookEthBalance {
 			t.Fatalf("got hit=%v cat=%q, want true/eth_balance", hit, cat)
+		}
+	})
+
+	t.Run("value transfer FROM 0xAAA (outflow, net<0) hits eth_balance", func(t *testing.T) {
+		// AC FR-2 requires both inflow and outflow. Listed address is the sender:
+		// committed balance drops 100→0 (net -100, no fee reason) → hit.
+		tr := NewBlacklistTracer()
+		h := tr.Hooks()
+		h.OnTxStart(nil, nil, common.Address{})
+		bc(h, addrAAA, 100, 0, tracing.BalanceChangeTransfer)
+		hit, cat := tr.Evaluate(snapOf(addrAAA), nil, balances(map[common.Address]int64{addrAAA: 0}))
+		if !hit || cat != HookEthBalance {
+			t.Fatalf("got hit=%v cat=%q, want true/eth_balance (outflow net<0)", hit, cat)
 		}
 	})
 
@@ -242,6 +267,41 @@ func TestEvaluateDeposit_StillHitsLogAndBalance(t *testing.T) {
 		hit, cat := tr.EvaluateDeposit(snapOf(addrAAA), nil, balances(map[common.Address]int64{addrAAA: 100}))
 		if !hit || cat != HookEthBalance {
 			t.Fatalf("deposit balance hit: got hit=%v cat=%q, want true/eth_balance", hit, cat)
+		}
+	})
+}
+
+// --- check priority: call > log > balance (FR-2 / 跨端契约) ---
+
+// TestEvaluate_CheckPriority locks the fixed category priority when a single tx
+// trips more than one check simultaneously: the returned metric category must be
+// the highest-priority one (call > log > balance). Without this, a reordering of
+// the three checks would mislabel exec_revert metrics undetected.
+func TestEvaluate_CheckPriority(t *testing.T) {
+	t.Run("call beats log", func(t *testing.T) {
+		// committed CALL touch of 0xAAA AND a committed Transfer log hitting 0xAAA.
+		tr := NewBlacklistTracer()
+		h := tr.Hooks()
+		h.OnTxStart(nil, nil, common.Address{})
+		h.OnEnter(0, 0, addrBBB, addrAAA, nil, 0, nil) // committed touch of 0xAAA
+		h.OnExit(0, nil, 0, nil, false)
+		logs := []*types.Log{erc20Transfer(addrAAA, addrBBB)} // also a log hit
+		hit, cat := tr.Evaluate(snapOf(addrAAA), logs, zeroBalance)
+		if !hit || cat != HookCall {
+			t.Fatalf("got hit=%v cat=%q, want true/call (call > log)", hit, cat)
+		}
+	})
+
+	t.Run("log beats balance", func(t *testing.T) {
+		// no committed CALL touch; a Transfer log hit AND a committed ETH balance hit.
+		tr := NewBlacklistTracer()
+		h := tr.Hooks()
+		h.OnTxStart(nil, nil, common.Address{})
+		bc(h, addrAAA, 0, 100, tracing.BalanceChangeTransfer) // balance hit candidate
+		logs := []*types.Log{erc20Transfer(addrBBB, addrAAA)} // log hit
+		hit, cat := tr.Evaluate(snapOf(addrAAA), logs, balances(map[common.Address]int64{addrAAA: 100}))
+		if !hit || cat != HookLog {
+			t.Fatalf("got hit=%v cat=%q, want true/log (log > balance)", hit, cat)
 		}
 	})
 }
