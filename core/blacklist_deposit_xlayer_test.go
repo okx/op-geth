@@ -44,6 +44,16 @@ func depositTx(from common.Address, to common.Address, mint, value int64, gas ui
 	})
 }
 
+// buildGate builds a build-mode (dropNormalHit=true) gate for the listed set.
+func buildGate(chainID uint64, addrs ...common.Address) *BlacklistGate {
+	return NewBlacklistGateFromSnapshot(chainID, NewSnapshot(addrs), true)
+}
+
+// importGate builds an import-mode (dropNormalHit=false) gate for the listed set.
+func importGate(chainID uint64, addrs ...common.Address) *BlacklistGate {
+	return NewBlacklistGateFromSnapshot(chainID, NewSnapshot(addrs), false)
+}
+
 // TestDeposit_BlacklistedHit is the B1 regression anchor. A blacklisted deposit
 // (value transfer to a listed address) must reproduce the canonical OP-Stack
 // failed-deposit post-state: status=0, gasUsed=tx.Gas(), depositor nonce==N+1,
@@ -56,7 +66,7 @@ func TestDeposit_BlacklistedHit(t *testing.T) {
 	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB") // not exempt
 
 	sdb := newTestStateDB(t)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	gate := buildGate(chainID, listed)
 	if gate == nil {
 		t.Fatal("expected active gate")
 	}
@@ -66,7 +76,7 @@ func TestDeposit_BlacklistedHit(t *testing.T) {
 	tx := depositTx(depositor, listed, mint, 100, gas)
 	gp := NewGasPool(30_000_000)
 
-	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
+	receipt, err := ApplyTransaction(gate, evm, gp, sdb, buildPathHeader(), tx)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -114,14 +124,14 @@ func TestDeposit_BlacklistedHit_CanyonReceiptVersion(t *testing.T) {
 	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB")
 
 	sdb := newTestStateDB(t)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	gate := buildGate(chainID, listed)
 	if gate == nil {
 		t.Fatal("expected active gate")
 	}
 	evm := newBuildPathEVM(config, sdb, gate)
 
 	tx := depositTx(depositor, listed, 1000, 100, 100000)
-	receipt, err := ApplyTransactionGatedForBuild(gate, evm, NewGasPool(30_000_000), sdb, buildPathHeader(), tx)
+	receipt, err := ApplyTransaction(gate, evm, NewGasPool(30_000_000), sdb, buildPathHeader(), tx)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -154,14 +164,14 @@ func TestDeposit_BlacklistedHit_CumulativeGasUsed(t *testing.T) {
 	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB")
 
 	sdb := newTestStateDB(t)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	gate := buildGate(chainID, listed)
 	evm := newBuildPathEVM(config, sdb, gate)
 
 	const gas = 100000
 	tx := depositTx(depositor, listed, 1000, 100, gas)
 	gp := NewGasPool(30_000_000)
 
-	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
+	receipt, err := ApplyTransaction(gate, evm, gp, sdb, buildPathHeader(), tx)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -185,13 +195,13 @@ func TestDeposit_BlacklistedHit_CumulativeAcrossTxs(t *testing.T) {
 	recipient := common.HexToAddress("0x00000000000000000000000000000000000000CC") // not listed
 
 	sdb := newTestStateDB(t)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	gate := buildGate(chainID, listed)
 	evm := newBuildPathEVM(config, sdb, gate)
 	gp := NewGasPool(30_000_000) // shared across both txs
 
 	const depGas = 100000
 	dep := depositTx(depositor, listed, 1000, 100, depGas)
-	r1, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), dep)
+	r1, err := ApplyTransaction(gate, evm, gp, sdb, buildPathHeader(), dep)
 	if err != nil {
 		t.Fatalf("deposit apply err: %v", err)
 	}
@@ -201,7 +211,7 @@ func TestDeposit_BlacklistedHit_CumulativeAcrossTxs(t *testing.T) {
 
 	normalTx, from := signValueTx(t, recipient, 100)
 	sdb.AddBalance(from, uint256.NewInt(1e18), 0 /* BalanceChangeUnspecified */)
-	r2, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), normalTx)
+	r2, err := ApplyTransaction(gate, evm, gp, sdb, buildPathHeader(), normalTx)
 	if err != nil {
 		t.Fatalf("normal apply err: %v", err)
 	}
@@ -224,12 +234,12 @@ func TestDeposit_NaturalSuccess_CumulativeUnchanged(t *testing.T) {
 	recipient := common.HexToAddress("0x00000000000000000000000000000000000000CC") // not listed
 
 	sdb := newTestStateDB(t)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot(nil)) // empty list → nil gate (no hit possible)
+	gate := buildGate(chainID) // empty list → nil gate (no hit possible)
 	evm := newBuildPathEVM(config, sdb, gate)
 	gp := NewGasPool(30_000_000)
 
 	tx := depositTx(depositor, recipient, 1000, 100, 100000)
-	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
+	receipt, err := ApplyTransaction(gate, evm, gp, sdb, buildPathHeader(), tx)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -253,14 +263,14 @@ func TestDeposit_BlacklistedHit_ExtraZero(t *testing.T) {
 	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB")
 
 	sdb := newTestStateDB(t)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	gate := buildGate(chainID, listed)
 	evm := newBuildPathEVM(config, sdb, gate)
 
 	const gas = params.TxGas // 21000 — intrinsic of a value transfer; deposit uses exactly this, so extra==0
 	tx := depositTx(depositor, listed, 1000, 100, gas)
 	gp := NewGasPool(30_000_000)
 
-	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
+	receipt, err := ApplyTransaction(gate, evm, gp, sdb, buildPathHeader(), tx)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -272,39 +282,6 @@ func TestDeposit_BlacklistedHit_ExtraZero(t *testing.T) {
 	}
 	if gp.Used() != tx.Gas() {
 		t.Fatalf("gp.Used() = %d, want %d", gp.Used(), tx.Gas())
-	}
-}
-
-// TestDeposit_PureCallTouch_NotIntercepted locks decision B's coverage edge
-// (XLOP-1100): a deposit that only CALL-touches a listed address (value=0,
-// mint=0, no Transfer event, no ETH movement) is NO LONGER intercepted now that
-// check① is dropped for deposits — it is included normally (status=1). Under the
-// old all-three-checks path this same deposit was included-as-reverted (status=0),
-// so this test fails if the deposit gate still runs check①.
-func TestDeposit_PureCallTouch_NotIntercepted(t *testing.T) {
-	const chainID = params.XLayerMainnetChainID
-	config := depositTestConfig()
-	listed := common.HexToAddress("0x00000000000000000000000000000000000000AA")
-	depositor := common.HexToAddress("0x00000000000000000000000000000000000000BB")
-
-	sdb := newTestStateDB(t)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
-	if gate == nil {
-		t.Fatal("expected active gate")
-	}
-	evm := newBuildPathEVM(config, sdb, gate)
-
-	// to=listed, value=0, mint=0 → only a top-level CALL touch of the listed
-	// address; no Transfer event, no ETH balance change, so check②/③ do not fire.
-	tx := depositTx(depositor, listed, 0, 0, 100000)
-	gp := NewGasPool(30_000_000)
-
-	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if receipt.Status != types.ReceiptStatusSuccessful {
-		t.Fatalf("status = %d, want 1 (pure CALL-touch deposit no longer intercepted)", receipt.Status)
 	}
 }
 
@@ -322,10 +299,10 @@ const emitTransferToAAARuntime = "60016000527f0000000000000000000000000000000000
 
 // TestDeposit_EventHit_IncludedAsReverted is the end-to-end deposit check②
 // (Transfer event) case: a deposit calls a non-listed contract that emits a real
-// committed Transfer(_, 0xAA) event. With check① skipped for deposits, the hit
-// comes solely from check② (no value moved → no check③), and the deposit must be
-// included-as-reverted (status=0, gasUsed=gasLimit). Pairs the event-path
-// judgment with the included-as-reverted processing end to end.
+// committed Transfer(_, 0xAA) event. The hit comes from check② (no value moved →
+// no check③), and the deposit must be included-as-reverted (status=0,
+// gasUsed=gasLimit). Pairs the event-path judgment with the included-as-reverted
+// processing end to end.
 func TestDeposit_EventHit_IncludedAsReverted(t *testing.T) {
 	const chainID = params.XLayerMainnetChainID
 	config := depositTestConfig()
@@ -335,19 +312,19 @@ func TestDeposit_EventHit_IncludedAsReverted(t *testing.T) {
 
 	sdb := newTestStateDB(t)
 	sdb.SetCode(emitter, common.FromHex(emitTransferToAAARuntime), tracing.CodeChangeGenesis)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	gate := buildGate(chainID, listed)
 	if gate == nil {
 		t.Fatal("expected active gate")
 	}
 	evm := newBuildPathEVM(config, sdb, gate)
 
 	// deposit to the emitter, value=0: the only committed effect is the emitted
-	// Transfer(_, 0xAA) → check② hit (check① skipped, check③ no balance move).
+	// Transfer(_, 0xAA) → check② hit (check③ no balance move).
 	tx := depositTx(depositor, emitter, 0, 0, 100000)
 	sdb.SetTxContext(tx.Hash(), 0) // logs are indexed by tx hash; gate reads GetLogs(tx.Hash())
 	gp := NewGasPool(30_000_000)
 
-	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
+	receipt, err := ApplyTransaction(gate, evm, gp, sdb, buildPathHeader(), tx)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -381,7 +358,7 @@ func TestDeposit_SelfdestructBeneficiary_IncludedAsReverted(t *testing.T) {
 
 	sdb := newTestStateDB(t)
 	sdb.SetCode(victim, common.FromHex(selfdestructToAAARuntime), tracing.CodeChangeGenesis)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	gate := buildGate(chainID, listed)
 	if gate == nil {
 		t.Fatal("expected active gate")
 	}
@@ -393,7 +370,7 @@ func TestDeposit_SelfdestructBeneficiary_IncludedAsReverted(t *testing.T) {
 	sdb.SetTxContext(tx.Hash(), 0)
 	gp := NewGasPool(30_000_000)
 
-	receipt, err := ApplyTransactionGatedForBuild(gate, evm, gp, sdb, buildPathHeader(), tx)
+	receipt, err := ApplyTransaction(gate, evm, gp, sdb, buildPathHeader(), tx)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -409,8 +386,8 @@ func TestDeposit_SelfdestructBeneficiary_IncludedAsReverted(t *testing.T) {
 }
 
 // TestImportPath_DepositHit_CumulativeAcrossTxs covers the IMPORT path
-// (dropNormalHit=false, the StateProcessor.Process entry) cumulative behaviour:
-// an intercepted deposit followed by a normal tx on a shared gas pool advances
+// (import-mode gate, the StateProcessor.Process entry) cumulative behaviour: an
+// intercepted deposit followed by a normal tx on a shared gas pool advances
 // CumulativeGasUsed by the deposit's full gasLimit. Mirrors the build-path
 // coverage on the other apply entry.
 func TestImportPath_DepositHit_CumulativeAcrossTxs(t *testing.T) {
@@ -421,7 +398,7 @@ func TestImportPath_DepositHit_CumulativeAcrossTxs(t *testing.T) {
 	recipient := common.HexToAddress("0x00000000000000000000000000000000000000CC")
 
 	sdb := newTestStateDB(t)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	gate := importGate(chainID, listed)
 	evm := newBuildPathEVM(config, sdb, gate)
 	gp := NewGasPool(30_000_000)
 	signer := types.MakeSigner(config, big.NewInt(1), 1)
@@ -431,12 +408,13 @@ func TestImportPath_DepositHit_CumulativeAcrossTxs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("deposit msg: %v", err)
 	}
-	r1, hit, err := applyTransactionWithBlacklistGate(gate, dmsg, gp, sdb, big.NewInt(1), common.Hash{}, 1, dep, evm, false /* import path */)
+	r1, err := ApplyTransactionWithEVM(gate, dmsg, gp, sdb, big.NewInt(1), common.Hash{}, 1, dep, evm)
 	if err != nil {
 		t.Fatalf("import-path deposit err: %v", err)
 	}
-	if !hit || r1.Status != types.ReceiptStatusFailed {
-		t.Fatalf("deposit not intercepted on import path (hit=%v status=%d)", hit, r1.Status)
+	// Deposits are intercepted on every path (status=0), even import.
+	if r1.Status != types.ReceiptStatusFailed {
+		t.Fatalf("deposit not intercepted on import path (status=%d)", r1.Status)
 	}
 	if r1.CumulativeGasUsed != dep.Gas() {
 		t.Fatalf("deposit CumulativeGasUsed = %d, want %d", r1.CumulativeGasUsed, dep.Gas())
@@ -448,7 +426,7 @@ func TestImportPath_DepositHit_CumulativeAcrossTxs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normal msg: %v", err)
 	}
-	r2, _, err := applyTransactionWithBlacklistGate(gate, nmsg, gp, sdb, big.NewInt(1), common.Hash{}, 1, normalTx, evm, false)
+	r2, err := ApplyTransactionWithEVM(gate, nmsg, gp, sdb, big.NewInt(1), common.Hash{}, 1, normalTx, evm)
 	if err != nil {
 		t.Fatalf("import-path normal err: %v", err)
 	}
@@ -480,11 +458,11 @@ func TestDeposit_ExemptSenderNotIntercepted(t *testing.T) {
 	for _, es := range exemptSenders {
 		t.Run(es.name, func(t *testing.T) {
 			sdb := newTestStateDB(t)
-			gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+			gate := buildGate(chainID, listed)
 			evm := newBuildPathEVM(config, sdb, gate)
 
 			tx := depositTx(es.from, listed, 1000, 100, 100000)
-			receipt, err := ApplyTransactionGatedForBuild(gate, evm, NewGasPool(30_000_000), sdb, buildPathHeader(), tx)
+			receipt, err := ApplyTransaction(gate, evm, NewGasPool(30_000_000), sdb, buildPathHeader(), tx)
 			if err != nil {
 				t.Fatalf("unexpected err: %v", err)
 			}
@@ -507,11 +485,11 @@ func TestDeposit_ExemptSenderNotIntercepted(t *testing.T) {
 	}
 }
 
-// TestApplyTransactionDispatch_L2HitNotIntercepted drives the actual import
-// entry point (applyTransactionDispatch, used by StateProcessor.Process): an L2
-// tx touching a listed address is executed normally (status=1, transfer kept) —
-// the follower does not intercept L2 txs.
-func TestApplyTransactionDispatch_L2HitNotIntercepted(t *testing.T) {
+// TestImportPath_L2HitNotIntercepted drives the import entry point
+// (ApplyTransactionWithEVM with an import-mode gate, used by
+// StateProcessor.Process): an L2 tx touching a listed address is executed
+// normally (status=1, transfer kept) — the follower does not intercept L2 txs.
+func TestImportPath_L2HitNotIntercepted(t *testing.T) {
 	const chainID = params.XLayerMainnetChainID
 	config := buildPathTestConfig()
 	listed := common.HexToAddress("0x00000000000000000000000000000000000000AA")
@@ -519,7 +497,7 @@ func TestApplyTransactionDispatch_L2HitNotIntercepted(t *testing.T) {
 	sdb := newTestStateDB(t)
 	tx, from := signValueTx(t, listed, 100)
 	sdb.AddBalance(from, uint256.NewInt(1e18), 0)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	gate := importGate(chainID, listed)
 	evm := newBuildPathEVM(config, sdb, gate)
 	signer := types.MakeSigner(config, big.NewInt(1), 1)
 	msg, err := TransactionToMessage(tx, signer, nil)
@@ -527,24 +505,23 @@ func TestApplyTransactionDispatch_L2HitNotIntercepted(t *testing.T) {
 		t.Fatalf("TransactionToMessage: %v", err)
 	}
 
-	receipt, err := applyTransactionDispatch(gate, msg, NewGasPool(30_000_000), sdb, big.NewInt(1), common.Hash{}, 1, tx, evm)
+	receipt, err := ApplyTransactionWithEVM(gate, msg, NewGasPool(30_000_000), sdb, big.NewInt(1), common.Hash{}, 1, tx, evm)
 	if err != nil {
-		t.Fatalf("dispatch err: %v", err)
+		t.Fatalf("import err: %v", err)
 	}
 	if receipt.Status != types.ReceiptStatusSuccessful {
-		t.Fatalf("status = %d, want 1 (import dispatch must not intercept L2 tx)", receipt.Status)
+		t.Fatalf("status = %d, want 1 (import must not intercept L2 tx)", receipt.Status)
 	}
 	if got := sdb.GetBalance(listed).Uint64(); got != 100 {
 		t.Fatalf("listed balance = %d, want 100 (transfer kept)", got)
 	}
 }
 
-// TestImportPath_L2NormalHit_NotIntercepted: on the import path
-// (dropNormalHit=false), an L2 (non-deposit) tx that touches a listed address is
-// NOT intercepted by the follower. L2 interception is the sequencer's job (it
-// drops such txs at build time); a follower executes the block as-is and follows
-// the sequencer. So the tx executes normally: status=1, value transfer kept,
-// sender nonce bumped — and the gate reports hit=false (no interception action).
+// TestImportPath_L2NormalHit_NotIntercepted: on the import path (import-mode
+// gate), an L2 (non-deposit) tx that touches a listed address is NOT intercepted
+// by the follower. L2 interception is the sequencer's job (it drops such txs at
+// build time); a follower executes the block as-is and follows the sequencer. So
+// the tx executes normally: status=1, value transfer kept, sender nonce bumped.
 func TestImportPath_L2NormalHit_NotIntercepted(t *testing.T) {
 	const chainID = params.XLayerMainnetChainID
 	config := buildPathTestConfig()
@@ -554,7 +531,7 @@ func TestImportPath_L2NormalHit_NotIntercepted(t *testing.T) {
 	tx, from := signValueTx(t, listed, 100)
 	const startBal = uint64(1e18)
 	sdb.AddBalance(from, uint256.NewInt(startBal), 0 /* tracing.BalanceChangeUnspecified */)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	gate := importGate(chainID, listed)
 	evm := newBuildPathEVM(config, sdb, gate)
 	signer := types.MakeSigner(config, big.NewInt(1), 1)
 	msg, err := TransactionToMessage(tx, signer, nil)
@@ -562,13 +539,9 @@ func TestImportPath_L2NormalHit_NotIntercepted(t *testing.T) {
 		t.Fatalf("TransactionToMessage: %v", err)
 	}
 
-	receipt, hit, err := applyTransactionWithBlacklistGate(
-		gate, msg, NewGasPool(30_000_000), sdb, big.NewInt(1), common.Hash{}, 1, tx, evm, false /* dropNormalHit */)
+	receipt, err := ApplyTransactionWithEVM(gate, msg, NewGasPool(30_000_000), sdb, big.NewInt(1), common.Hash{}, 1, tx, evm)
 	if err != nil {
 		t.Fatalf("import path err: %v", err)
-	}
-	if hit {
-		t.Fatal("L2 normal tx must NOT be intercepted on the import path (follower follows seq)")
 	}
 	if receipt.Status != types.ReceiptStatusSuccessful {
 		t.Fatalf("status = %d, want 1 (L2 tx executed normally, not intercepted)", receipt.Status)

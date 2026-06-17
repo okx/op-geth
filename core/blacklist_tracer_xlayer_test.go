@@ -27,56 +27,6 @@ func balances(m map[common.Address]int64) func(common.Address) *uint256.Int {
 
 func zeroBalance(common.Address) *uint256.Int { return uint256.NewInt(0) }
 
-// --- check① committed CALL touch (frame tree) ---
-
-func TestEvaluate_CommittedCallTouch(t *testing.T) {
-	// DM-2.8: EOA → Proxy → 0xAAA committed inner CALL → hit, category call.
-	tr := NewBlacklistTracer()
-	h := tr.Hooks()
-	h.OnTxStart(nil, nil, common.Address{})
-	h.OnEnter(0, 0, addrBBB, addrCCC, nil, 0, nil) // root: EOA→Proxy
-	h.OnEnter(1, 0, addrCCC, addrAAA, nil, 0, nil) // inner: Proxy→0xAAA
-	h.OnExit(1, nil, 0, nil, false)                // inner commits
-	h.OnExit(0, nil, 0, nil, false)                // root commits
-
-	hit, cat := tr.Evaluate(snapOf(addrAAA), nil, zeroBalance)
-	if !hit || cat != HookCall {
-		t.Fatalf("got hit=%v cat=%q, want true/call", hit, cat)
-	}
-}
-
-func TestEvaluate_RevertedSubcallTouch(t *testing.T) {
-	// DM-2.9: inner subcall touches 0xAAA but reverts; outer succeeds → NOT hit.
-	tr := NewBlacklistTracer()
-	h := tr.Hooks()
-	h.OnTxStart(nil, nil, common.Address{})
-	h.OnEnter(0, 0, addrBBB, addrCCC, nil, 0, nil)
-	h.OnEnter(1, 0, addrCCC, addrAAA, nil, 0, nil)
-	h.OnExit(1, nil, 0, nil, true) // inner reverts → touch voided
-	h.OnExit(0, nil, 0, nil, false)
-
-	if hit, _ := tr.Evaluate(snapOf(addrAAA), nil, zeroBalance); hit {
-		t.Fatalf("reverted subcall touch must not hit")
-	}
-}
-
-func TestEvaluate_AncestorRevertPropagation(t *testing.T) {
-	// A child commits but a LATER-reverting ancestor voids the touch.
-	tr := NewBlacklistTracer()
-	h := tr.Hooks()
-	h.OnTxStart(nil, nil, common.Address{})
-	h.OnEnter(0, 0, addrBBB, addrCCC, nil, 0, nil) // root
-	h.OnEnter(1, 0, addrCCC, addrCCC, nil, 0, nil) // mid
-	h.OnEnter(2, 0, addrCCC, addrAAA, nil, 0, nil) // deep: touches 0xAAA
-	h.OnExit(2, nil, 0, nil, false)                // deep commits
-	h.OnExit(1, nil, 0, nil, true)                 // mid (ancestor) reverts
-	h.OnExit(0, nil, 0, nil, false)
-
-	if hit, _ := tr.Evaluate(snapOf(addrAAA), nil, zeroBalance); hit {
-		t.Fatalf("touch under a reverted ancestor must be voided")
-	}
-}
-
 // --- check② committed Transfer-class events ---
 
 func erc20Transfer(from, to common.Address) *types.Log {
@@ -216,10 +166,7 @@ func TestEvaluate_BalanceChecks(t *testing.T) {
 
 func TestEvaluate_EmptySnapshotNoOp(t *testing.T) {
 	tr := NewBlacklistTracer()
-	h := tr.Hooks()
-	h.OnTxStart(nil, nil, common.Address{})
-	h.OnEnter(0, 0, addrAAA, addrAAA, nil, 0, nil)
-	h.OnExit(0, nil, 0, nil, false)
+	tr.Hooks().OnTxStart(nil, nil, common.Address{})
 	if hit, _ := tr.Evaluate(NewSnapshot(nil), []*types.Log{erc20Transfer(addrAAA, addrBBB)}, zeroBalance); hit {
 		t.Fatalf("empty snapshot must short-circuit to no-op")
 	}
@@ -228,72 +175,14 @@ func TestEvaluate_EmptySnapshotNoOp(t *testing.T) {
 	}
 }
 
-// --- deposit variant: skips check① (decision B, XLOP-1100) ---
+// --- check priority: log > balance (FR-2 / 跨端契约) ---
 
-func TestEvaluateDeposit_SkipsCallTouch(t *testing.T) {
-	// A committed CALL touch of 0xAAA with no event and no ETH movement: the
-	// deposit path (EvaluateDeposit) must NOT hit (check① skipped); the same trace
-	// via Evaluate (L2) still hits via check①, proving only deposits skip it.
-	tr := NewBlacklistTracer()
-	h := tr.Hooks()
-	h.OnTxStart(nil, nil, common.Address{})
-	h.OnEnter(0, 0, addrBBB, addrCCC, nil, 0, nil) // root
-	h.OnEnter(1, 0, addrCCC, addrAAA, nil, 0, nil) // inner committed touch of 0xAAA
-	h.OnExit(1, nil, 0, nil, false)
-	h.OnExit(0, nil, 0, nil, false)
-
-	if hit, _ := tr.EvaluateDeposit(snapOf(addrAAA), nil, zeroBalance); hit {
-		t.Fatal("deposit must skip check① (pure CALL touch must not hit)")
-	}
-	if hit, cat := tr.Evaluate(snapOf(addrAAA), nil, zeroBalance); !hit || cat != HookCall {
-		t.Fatalf("L2 Evaluate must still hit via check①, got hit=%v cat=%q", hit, cat)
-	}
-}
-
-func TestEvaluateDeposit_StillHitsLogAndBalance(t *testing.T) {
-	t.Run("event hit", func(t *testing.T) {
-		tr := NewBlacklistTracer()
-		tr.Hooks().OnTxStart(nil, nil, common.Address{})
-		hit, cat := tr.EvaluateDeposit(snapOf(addrAAA), []*types.Log{erc20Transfer(addrBBB, addrAAA)}, zeroBalance)
-		if !hit || cat != HookLog {
-			t.Fatalf("deposit event hit: got hit=%v cat=%q, want true/log", hit, cat)
-		}
-	})
-	t.Run("balance hit", func(t *testing.T) {
-		tr := NewBlacklistTracer()
-		h := tr.Hooks()
-		h.OnTxStart(nil, nil, common.Address{})
-		bc(h, addrAAA, 0, 100, tracing.BalanceChangeTransfer)
-		hit, cat := tr.EvaluateDeposit(snapOf(addrAAA), nil, balances(map[common.Address]int64{addrAAA: 100}))
-		if !hit || cat != HookEthBalance {
-			t.Fatalf("deposit balance hit: got hit=%v cat=%q, want true/eth_balance", hit, cat)
-		}
-	})
-}
-
-// --- check priority: call > log > balance (FR-2 / 跨端契约) ---
-
-// TestEvaluate_CheckPriority locks the fixed category priority when a single tx
-// trips more than one check simultaneously: the returned metric category must be
-// the highest-priority one (call > log > balance). Without this, a reordering of
-// the three checks would mislabel exec_revert metrics undetected.
+// TestEvaluate_CheckPriority locks the category priority when a single tx trips
+// both checks: the returned metric category must be the higher-priority one
+// (log > balance). (check① was removed — see tracer file header.)
 func TestEvaluate_CheckPriority(t *testing.T) {
-	t.Run("call beats log", func(t *testing.T) {
-		// committed CALL touch of 0xAAA AND a committed Transfer log hitting 0xAAA.
-		tr := NewBlacklistTracer()
-		h := tr.Hooks()
-		h.OnTxStart(nil, nil, common.Address{})
-		h.OnEnter(0, 0, addrBBB, addrAAA, nil, 0, nil) // committed touch of 0xAAA
-		h.OnExit(0, nil, 0, nil, false)
-		logs := []*types.Log{erc20Transfer(addrAAA, addrBBB)} // also a log hit
-		hit, cat := tr.Evaluate(snapOf(addrAAA), logs, zeroBalance)
-		if !hit || cat != HookCall {
-			t.Fatalf("got hit=%v cat=%q, want true/call (call > log)", hit, cat)
-		}
-	})
-
 	t.Run("log beats balance", func(t *testing.T) {
-		// no committed CALL touch; a Transfer log hit AND a committed ETH balance hit.
+		// a Transfer log hit AND a committed ETH balance hit → category must be log.
 		tr := NewBlacklistTracer()
 		h := tr.Hooks()
 		h.OnTxStart(nil, nil, common.Address{})

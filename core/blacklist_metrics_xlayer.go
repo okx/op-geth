@@ -14,10 +14,6 @@ var (
 	// Prometheus: xlayer_blacklist_cache_size.
 	blacklistCacheSize = metrics.NewRegisteredGauge("xlayer/blacklist/cache_size", nil)
 
-	// blacklistPoolRejected counts ingress-filter rejections.
-	// Prometheus: xlayer_blacklist_pool_rejected_total.
-	blacklistPoolRejected = metrics.NewRegisteredCounter("xlayer/blacklist/pool_rejected_total", nil)
-
 	// blacklistSnapshotReadDuration observes block-head snapshot read latency in
 	// nanoseconds (go-ethereum's native duration unit; the metrics Histogram is
 	// int64 and the Prometheus exporter applies no unit scaling, so the name must
@@ -27,7 +23,6 @@ var (
 	// blacklistExecRevert counts execution-gate reverts, labeled by the matched
 	// hook category. Prometheus: xlayer_blacklist_exec_revert_total{hook=...}.
 	blacklistExecRevert = map[string]*metrics.Counter{
-		HookCall:         metrics.NewRegisteredCounter("xlayer/blacklist/exec_revert/call", nil),
 		HookLog:          metrics.NewRegisteredCounter("xlayer/blacklist/exec_revert/log", nil),
 		HookSelfdestruct: metrics.NewRegisteredCounter("xlayer/blacklist/exec_revert/selfdestruct", nil),
 		HookEthBalance:   metrics.NewRegisteredCounter("xlayer/blacklist/exec_revert/eth_balance", nil),
@@ -36,9 +31,6 @@ var (
 
 // MetricBlacklistCacheSize records the current snapshot size after a refresh.
 func MetricBlacklistCacheSize(size int) { blacklistCacheSize.Update(int64(size)) }
-
-// MetricBlacklistPoolRejected increments the ingress-filter rejection counter.
-func MetricBlacklistPoolRejected() { blacklistPoolRejected.Inc(1) }
 
 // MetricBlacklistSnapshotRead observes a block-head snapshot read latency (ns).
 func MetricBlacklistSnapshotRead(nanos int64) { blacklistSnapshotReadDuration.Update(nanos) }

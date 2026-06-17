@@ -58,7 +58,7 @@ func TestCommitTransaction_BlacklistHitMarksRejected(t *testing.T) {
 		Nonce: 0, To: &listed, Gas: 21000, GasPrice: big.NewInt(1), Value: big.NewInt(100),
 	})
 
-	gate := core.NewBlacklistGateFromSnapshot(chainID, core.NewSnapshot([]common.Address{listed}))
+	gate := core.NewBlacklistGateFromSnapshot(chainID, core.NewSnapshot([]common.Address{listed}), true)
 	if gate == nil {
 		t.Fatal("expected active gate")
 	}
@@ -157,7 +157,7 @@ func TestCommitTransaction_BlacklistEventHitEndToEnd(t *testing.T) {
 	header := &types.Header{Number: big.NewInt(1), Time: 1, Difficulty: big.NewInt(0), BaseFee: big.NewInt(0)}
 
 	// Real gate: reads the list from the deployed mirror at block-head.
-	gate := core.NewBlacklistGate(sdb, header, config, chainID)
+	gate := core.NewBlacklistGate(sdb, header, config, chainID, true)
 	if gate == nil {
 		t.Fatal("gate nil — mirror read returned empty (expected list {0xAA,0xBB})")
 	}

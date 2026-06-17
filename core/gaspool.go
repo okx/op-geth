@@ -68,23 +68,6 @@ func (gp *GasPool) ReturnGas(returned uint64, gasUsed uint64) error {
 	return nil
 }
 
-// ChargeUsed charges `amount` of gas as consumed: it deducts from the
-// remaining pool AND adds to the cumulative usage in one step. It is used by
-// the X Layer blacklist gate to account the *full gasLimit* of an
-// intercepted (included-as-reverted) deposit, mirroring the canonical
-// failed-deposit accounting (state_transition.go: ReturnGas(0, GasLimit) after
-// SubGas(GasLimit) at buy time). Unlike SubGas, which only moves `remaining`
-// and leaves `cumulativeUsed` stale, ChargeUsed keeps both in sync so the
-// receipt's CumulativeGasUsed matches the block-level Used().
-func (gp *GasPool) ChargeUsed(amount uint64) error {
-	if gp.remaining < amount {
-		return ErrGasLimitReached
-	}
-	gp.remaining -= amount
-	gp.cumulativeUsed += amount
-	return nil
-}
-
 // Gas returns the amount of gas remaining in the pool.
 func (gp *GasPool) Gas() uint64 {
 	return gp.remaining

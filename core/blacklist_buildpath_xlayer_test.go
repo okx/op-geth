@@ -82,14 +82,14 @@ func TestBuildPath_NormalHitDropped(t *testing.T) {
 	sdb := newTestStateDB(t)
 	tx, from := signValueTx(t, listed, 100)
 	sdb.AddBalance(from, uint256.NewInt(1e18), tracing.BalanceChangeUnspecified)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}), true)
 	if gate == nil {
 		t.Fatal("expected active gate")
 	}
 	evm := newBuildPathEVM(config, sdb, gate)
 
 	snap := sdb.Snapshot() // mimic miner.applyTransaction outer snapshot
-	_, err := ApplyTransactionGatedForBuild(gate, evm, NewGasPool(30_000_000), sdb, buildPathHeader(), tx)
+	_, err := ApplyTransaction(gate, evm, NewGasPool(30_000_000), sdb, buildPathHeader(), tx)
 	if !errors.Is(err, ErrBlacklistDrop) {
 		t.Fatalf("err = %v, want ErrBlacklistDrop", err)
 	}
@@ -113,10 +113,10 @@ func TestBuildPath_NonHitKept(t *testing.T) {
 	sdb := newTestStateDB(t)
 	tx, from := signValueTx(t, recipient, 100)
 	sdb.AddBalance(from, uint256.NewInt(1e18), tracing.BalanceChangeUnspecified)
-	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}))
+	gate := NewBlacklistGateFromSnapshot(chainID, NewSnapshot([]common.Address{listed}), true)
 	evm := newBuildPathEVM(config, sdb, gate)
 
-	receipt, err := ApplyTransactionGatedForBuild(gate, evm, NewGasPool(30_000_000), sdb, buildPathHeader(), tx)
+	receipt, err := ApplyTransaction(gate, evm, NewGasPool(30_000_000), sdb, buildPathHeader(), tx)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestBuildPath_NilGateFallback(t *testing.T) {
 	sdb.AddBalance(from, uint256.NewInt(1e18), tracing.BalanceChangeUnspecified)
 
 	evm := newBuildPathEVM(config, sdb, nil)
-	receipt, err := ApplyTransactionGatedForBuild(nil, evm, NewGasPool(30_000_000), sdb, buildPathHeader(), tx)
+	receipt, err := ApplyTransaction(nil, evm, NewGasPool(30_000_000), sdb, buildPathHeader(), tx)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

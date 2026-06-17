@@ -4,6 +4,15 @@
 // core/tracing.Hooks consumer: it cannot abort execution, it only records
 // committed effects, and the gate decides revert AFTER ApplyMessage returns.
 // It must be multiplexed onto evm.Config.Tracer, never replace an existing one.
+//
+// Detection is two committed-effect checks (priority log > balance):
+//   - check②: committed Transfer-class event (scanned from committed logs).
+//   - check③: committed native-ETH balance movement (fees stripped).
+//
+// (check① "committed CALL touch" was dropped — cross-client alignment, decision
+// B, XLOP-1100: a real asset-moving attack always trips ②/③, and L2-normal
+// interception is sequencer-only / off the consensus path, so op-geth and
+// xlayer-reth judge every tx on ②/③ alone.)
 
 package core
 
@@ -19,7 +28,6 @@ import (
 
 // Hit-category labels for the exec_revert_total metric (TD §4.5 / DM-7.4..7.7).
 const (
-	HookCall         = "call"         // check① committed CALL touch
 	HookLog          = "log"          // check② committed Transfer-class event
 	HookSelfdestruct = "selfdestruct" // check③ via selfdestruct balance reason
 	HookEthBalance   = "eth_balance"  // check③ via native ETH balance diff
@@ -37,33 +45,20 @@ var (
 	}
 )
 
-// frame is one node in the per-tx call-frame tree (check①).
-type frame struct {
-	parent   int              // index of parent frame, -1 for root
-	reverted bool             // this frame (or its sub-call) reverted
-	touched  []common.Address // addresses touched as caller/callee of this frame
-}
-
 // BlacklistTracer accumulates committed-effect evidence for a single tx and
-// decides, after execution, whether a blacklisted address was touched in a
-// committed (non-reverted) execution sub-tree, a committed Transfer-class event,
-// or a committed native-ETH balance movement (fees stripped).
+// decides, after execution, whether a blacklisted address was hit by a committed
+// Transfer-class event (check②) or a committed native-ETH balance movement with
+// fees stripped (check③).
 //
-// Detection algorithms (TD §4.4.2):
-//   - check①: a frame tree with ancestor-revert propagation. A touch is
-//     committed iff its frame and ALL ancestors did not revert.
-//   - check③: final committed balance diff. balStart[a] is captured from the
-//     first OnBalanceChange.prev of a; balEnd is read from committed state after
-//     ApplyMessage; feeDelta[a] strips reasons {5,6,7}. A hit is
-//     (balEnd-balStart)-feeDelta != 0. Transient transfers inside reverted
-//     frames are already cancelled by the EVM's own journaling, so they never
-//     enter the committed diff (DM-2.18). The candidate set is exactly the
-//     addresses observed in OnBalanceChange — provably complete, including
-//     selfdestruct beneficiaries (A-15 Minor-1).
+// check③ detail (TD §4.4.2): balStart[a] is captured from the first
+// OnBalanceChange.prev of a; balEnd is read from committed state after
+// ApplyMessage; feeDelta[a] strips reasons {5,6,7}. A hit is
+// (balEnd-balStart)-feeDelta != 0. Transient transfers inside reverted frames
+// are already cancelled by the EVM's own journaling, so they never enter the
+// committed diff (DM-2.18). The candidate set is exactly the addresses observed
+// in OnBalanceChange — provably complete, including selfdestruct beneficiaries
+// (A-15 Minor-1).
 type BlacklistTracer struct {
-	frames []frame
-	stack  []int // indices of currently-open frames
-
 	balStart        map[common.Address]*big.Int
 	feeDelta        map[common.Address]*big.Int
 	sawSelfdestruct map[common.Address]bool
@@ -77,46 +72,22 @@ func NewBlacklistTracer() *BlacklistTracer {
 }
 
 func (t *BlacklistTracer) reset() {
-	t.frames = t.frames[:0]
-	t.stack = t.stack[:0]
 	t.balStart = make(map[common.Address]*big.Int)
 	t.feeDelta = make(map[common.Address]*big.Int)
 	t.sawSelfdestruct = make(map[common.Address]bool)
 }
 
-// Hooks returns the tracing.Hooks to multiplex onto evm.Config.Tracer.
+// Hooks returns the tracing.Hooks to multiplex onto evm.Config.Tracer. Only the
+// hooks check③ needs are consumed: OnTxStart (per-tx reset) and OnBalanceChange.
 func (t *BlacklistTracer) Hooks() *tracing.Hooks {
 	return &tracing.Hooks{
 		OnTxStart:       t.onTxStart,
-		OnEnter:         t.onEnter,
-		OnExit:          t.onExit,
 		OnBalanceChange: t.onBalanceChange,
 	}
 }
 
 func (t *BlacklistTracer) onTxStart(*tracing.VMContext, *types.Transaction, common.Address) {
 	t.reset()
-}
-
-func (t *BlacklistTracer) onEnter(depth int, typ byte, from common.Address, to common.Address, input []byte, gas uint64, value *big.Int) {
-	parent := -1
-	if len(t.stack) > 0 {
-		parent = t.stack[len(t.stack)-1]
-	}
-	idx := len(t.frames)
-	t.frames = append(t.frames, frame{parent: parent, touched: []common.Address{from, to}})
-	t.stack = append(t.stack, idx)
-}
-
-func (t *BlacklistTracer) onExit(depth int, output []byte, gasUsed uint64, err error, reverted bool) {
-	if len(t.stack) == 0 {
-		return
-	}
-	idx := t.stack[len(t.stack)-1]
-	t.stack = t.stack[:len(t.stack)-1]
-	if reverted {
-		t.frames[idx].reverted = true
-	}
 }
 
 func (t *BlacklistTracer) onBalanceChange(addr common.Address, prev, newBal *big.Int, reason tracing.BalanceChangeReason) {
@@ -135,33 +106,6 @@ func (t *BlacklistTracer) onBalanceChange(addr common.Address, prev, newBal *big
 	case tracing.BalanceIncreaseSelfdestruct, tracing.BalanceDecreaseSelfdestruct, tracing.BalanceDecreaseSelfdestructBurn:
 		t.sawSelfdestruct[addr] = true
 	}
-}
-
-// committedTouch reports whether addr is touched by any committed frame, i.e. a
-// frame whose entire ancestor chain (including itself) did not revert (check①).
-func (t *BlacklistTracer) committedTouch(snap *Snapshot) (bool, common.Address) {
-	for i := range t.frames {
-		if t.frameReverted(i) {
-			continue
-		}
-		for _, a := range t.frames[i].touched {
-			if snap.Contains(a) {
-				return true, a
-			}
-		}
-	}
-	return false, common.Address{}
-}
-
-// frameReverted reports whether frame i or any of its ancestors reverted.
-func (t *BlacklistTracer) frameReverted(i int) bool {
-	for i != -1 {
-		if t.frames[i].reverted {
-			return true
-		}
-		i = t.frames[i].parent
-	}
-	return false
 }
 
 // scanTransferLogs reports whether any committed Transfer-class log has a
@@ -218,37 +162,14 @@ func (t *BlacklistTracer) balanceHit(snap *Snapshot, balanceOf func(common.Addre
 	return false, ""
 }
 
-// Evaluate runs all three committed-effect checks against the block-head
-// snapshot. It returns whether the tx hit the blacklist and the metric category
-// of the first matched check (priority: call > log > balance). balanceOf must
-// read the committed (post-ApplyMessage, pre-revert) state. Used for normal L2
-// txs (sequencer build path has an inspector, so check① is available).
+// Evaluate runs the two committed-effect checks against the block-head snapshot.
+// It returns whether the tx hit the blacklist and the metric category of the
+// first matched check (priority: log > balance). balanceOf must read the
+// committed (post-ApplyMessage, pre-revert) state. Used identically for deposit
+// and normal L2 txs (check① is no longer run on either; see file header).
 func (t *BlacklistTracer) Evaluate(snap *Snapshot, logs []*types.Log, balanceOf func(common.Address) *uint256.Int) (bool, string) {
-	return t.evaluate(snap, logs, balanceOf, false)
-}
-
-// EvaluateDeposit is the deposit-tx variant that skips check① (committed CALL
-// touch), running only check② (Transfer event) + check③ (ETH balance). This is
-// a consensus-critical cross-client alignment (decision B, XLOP-1100): xlayer-reth
-// cannot mount an inspector on its follower verification path (upstream
-// OpBlockExecutor's EVM type is pinned), so it cannot build the frame tree check①
-// needs. Since deposits are included-as-reverted and must produce byte-identical
-// receipts on both clients, op-geth drops check① on deposits too. The only lost
-// coverage is a deposit that merely CALL-touches a listed address with no Transfer
-// event and no ETH movement (matrix A-7/B-13 pure-touch) — an attacker deposit
-// always moves assets, so it always trips ②/③; no real-world gap.
-func (t *BlacklistTracer) EvaluateDeposit(snap *Snapshot, logs []*types.Log, balanceOf func(common.Address) *uint256.Int) (bool, string) {
-	return t.evaluate(snap, logs, balanceOf, true)
-}
-
-func (t *BlacklistTracer) evaluate(snap *Snapshot, logs []*types.Log, balanceOf func(common.Address) *uint256.Int, skipCallTouch bool) (bool, string) {
 	if snap == nil || snap.Size() == 0 {
 		return false, ""
-	}
-	if !skipCallTouch {
-		if hit, _ := t.committedTouch(snap); hit {
-			return true, HookCall
-		}
 	}
 	if scanTransferLogs(snap, logs) {
 		return true, HookLog
