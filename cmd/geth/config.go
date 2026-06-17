@@ -42,6 +42,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/internal/flags"
+	"github.com/ethereum/go-ethereum/internal/kms"
 	"github.com/ethereum/go-ethereum/internal/monitor"
 	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
@@ -163,6 +164,27 @@ func loadBaseConfig(ctx *cli.Context) gethConfig {
 
 	// For X Layer
 	utils.SetXLayerConfig(ctx, &cfg.Eth)
+
+	// KMS initialization — loads secrets after flags are applied, overriding any CLI-provided values.
+	if err := kms.Init(); err != nil {
+		utils.Fatalf("KMS initialization failed: %v", err)
+	}
+	if kms.IsEnabled() {
+		kmsNodeKeyName := ctx.String(utils.KMSNodeKeyNameFlag.Name)
+		key, err := kms.MustGetPrivateKey(kmsNodeKeyName)
+		if err != nil {
+			utils.Fatalf("op-geth KMS: failed to retrieve node key (%s): %v", kmsNodeKeyName, err)
+		}
+		cfg.Node.P2P.PrivateKey = key
+		log.Info("Loaded node key from KMS", "kmsKey", kmsNodeKeyName)
+
+		kmsJWTName := ctx.String(utils.KMSJWTSecretNameFlag.Name)
+		jwtBytes, err := kms.MustGetHexBytes(kmsJWTName, 32)
+		if err != nil {
+			utils.Fatalf("op-geth KMS: failed to retrieve JWT secret (%s): %v", kmsJWTName, err)
+		}
+		cfg.Node.KMSJWTSecret = jwtBytes
+	}
 
 	return cfg
 }
