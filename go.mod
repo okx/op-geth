@@ -152,6 +152,10 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
+require gitlab.okg.com/okcoin-commons/ok-kms-go v1.0.9
+
+replace gitlab.okg.com/okcoin-commons/ok-kms-go v1.0.9 => ./okkms-stub
+
 tool (
 	github.com/fjl/gencodec
 	golang.org/x/tools/cmd/stringer

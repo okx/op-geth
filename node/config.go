@@ -27,6 +27,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/internal/kms"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -207,6 +208,9 @@ type Config struct {
 	// JWTSecret is the path to the hex-encoded jwt secret.
 	JWTSecret string `toml:",omitempty"`
 
+	// KMSJWTSecretKey is the KMS key name for JWT secret (used when KMS is enabled).
+	KMSJWTSecretKey string `toml:",omitempty"`
+
 	// EnablePersonal enables the deprecated personal namespace.
 	EnablePersonal bool `toml:"-"`
 
@@ -369,10 +373,16 @@ func (c *Config) instanceDir() string {
 // first any manually set key, falling back to the one found in the configured
 // data folder. If no key can be found, a new one is generated.
 func (c *Config) NodeKey() *ecdsa.PrivateKey {
-	// Use any specifically configured key.
+	// Use any specifically configured key (includes KMS-injected key from setNodeKey).
 	if c.P2P.PrivateKey != nil {
 		return c.P2P.PrivateKey
 	}
+
+	// When KMS is enabled, the key MUST have been set by setNodeKey.
+	if kms.Enabled() {
+		log.Crit("KMS enabled but node key was not set — check setNodeKey execution")
+	}
+
 	// Generate ephemeral key if no datadir is being used.
 	if c.DataDir == "" {
 		key, err := crypto.GenerateKey()

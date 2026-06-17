@@ -58,6 +58,7 @@ import (
 	"github.com/ethereum/go-ethereum/graphql"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/flags"
+	"github.com/ethereum/go-ethereum/internal/kms"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/metrics/exp"
@@ -1244,6 +1245,21 @@ func MakeDataDir(ctx *cli.Context) string {
 // from a file or as a specified hex value. If neither flags were provided, this
 // method returns nil and an ephemeral key is to be generated.
 func setNodeKey(ctx *cli.Context, cfg *p2p.Config) {
+	if kms.Enabled() {
+		keyName := ctx.String(KMSNodeKeyHexKeyFlag.Name)
+		hexVal, err := kms.GetSecret(keyName)
+		if err != nil {
+			Fatalf("KMS: failed to obtain nodekeyhex (key=%q): %v", keyName, err)
+		}
+		hexVal = strings.TrimPrefix(hexVal, "0x")
+		key, err := crypto.HexToECDSA(hexVal)
+		if err != nil {
+			Fatalf("KMS: nodekeyhex value invalid (key=%q): %v", keyName, err)
+		}
+		cfg.PrivateKey = key
+		return
+	}
+
 	var (
 		hex  = ctx.String(NodeKeyHexFlag.Name)
 		file = ctx.String(NodeKeyFileFlag.Name)
@@ -1586,6 +1602,9 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 
 	if ctx.IsSet(JWTSecretFlag.Name) {
 		cfg.JWTSecret = ctx.String(JWTSecretFlag.Name)
+	}
+	if ctx.IsSet(KMSJWTSecretKeyFlag.Name) {
+		cfg.KMSJWTSecretKey = ctx.String(KMSJWTSecretKeyFlag.Name)
 	}
 	if ctx.IsSet(EnablePersonal.Name) {
 		log.Warn(fmt.Sprintf("Option --%s is deprecated. The 'personal' RPC namespace has been removed.", EnablePersonal.Name))
