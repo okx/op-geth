@@ -174,6 +174,7 @@ var (
 		utils.RollupSuperchainUpgradesFlag,
 		utils.RollupAllowGaslessFlag,
 		utils.RollupGaslessMockGasPricePercentileFlag,
+		utils.RollupGaslessLifetimeFlag,
 		configFileFlag,
 		utils.LogDebugFlag,
 		utils.LogBacktraceAtFlag,
