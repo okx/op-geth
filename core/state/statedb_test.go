@@ -1400,15 +1400,15 @@ func TestCheckTransactionConditional(t *testing.T) {
 				{
 					Account: common.Address{19: 1},
 					Slots: map[common.Hash]common.Hash{
-						common.Hash{}: common.Hash{31: 1},
+						{}: {31: 1},
 					},
 				},
 			},
 			cond: types.TransactionConditional{
 				KnownAccounts: map[common.Address]types.KnownAccount{
-					common.Address{19: 1}: types.KnownAccount{
+					{19: 1}: {
 						StorageSlots: map[common.Hash]common.Hash{
-							common.Hash{}: common.Hash{31: 1},
+							{}: {31: 1},
 						},
 					},
 				},
@@ -1427,15 +1427,15 @@ func TestCheckTransactionConditional(t *testing.T) {
 				{
 					Account: common.Address{19: 1},
 					Slots: map[common.Hash]common.Hash{
-						common.Hash{}: common.Hash{31: 1},
+						{}: {31: 1},
 					},
 				},
 			},
 			cond: types.TransactionConditional{
 				KnownAccounts: map[common.Address]types.KnownAccount{
-					common.Address{19: 1}: types.KnownAccount{
+					{19: 1}: {
 						StorageSlots: map[common.Hash]common.Hash{
-							common.Hash{}: common.Hash{31: 2},
+							{}: {31: 2},
 						},
 					},
 				},
@@ -1451,7 +1451,7 @@ func TestCheckTransactionConditional(t *testing.T) {
 			preActions: []preAction{},
 			cond: types.TransactionConditional{
 				KnownAccounts: map[common.Address]types.KnownAccount{
-					common.Address{19: 1}: types.KnownAccount{
+					{19: 1}: {
 						StorageRoot: &types.EmptyRootHash,
 					},
 				},
@@ -1470,13 +1470,13 @@ func TestCheckTransactionConditional(t *testing.T) {
 				{
 					Account: common.Address{19: 1},
 					Slots: map[common.Hash]common.Hash{
-						common.Hash{}: common.Hash{31: 1},
+						{}: {31: 1},
 					},
 				},
 			},
 			cond: types.TransactionConditional{
 				KnownAccounts: map[common.Address]types.KnownAccount{
-					common.Address{19: 1}: types.KnownAccount{
+					{19: 1}: {
 						StorageRoot: &types.EmptyRootHash,
 					},
 				},
@@ -1499,26 +1499,26 @@ func TestCheckTransactionConditional(t *testing.T) {
 				{
 					Account: common.Address{19: 1},
 					Slots: map[common.Hash]common.Hash{
-						common.Hash{}: common.Hash{31: 1},
+						{}: {31: 1},
 					},
 				},
 				{
 					Account: common.Address{19: 2},
 					Slots: map[common.Hash]common.Hash{
-						common.Hash{}: common.Hash{31: 2},
+						{}: {31: 2},
 					},
 				},
 			},
 			cond: types.TransactionConditional{
 				KnownAccounts: map[common.Address]types.KnownAccount{
-					common.Address{19: 1}: types.KnownAccount{
+					{19: 1}: {
 						StorageSlots: map[common.Hash]common.Hash{
-							common.Hash{}: common.Hash{31: 1},
+							{}: {31: 1},
 						},
 					},
-					common.Address{19: 2}: types.KnownAccount{
+					{19: 2}: {
 						StorageSlots: map[common.Hash]common.Hash{
-							common.Hash{}: common.Hash{31: 2},
+							{}: {31: 2},
 						},
 					},
 				},
@@ -1541,26 +1541,26 @@ func TestCheckTransactionConditional(t *testing.T) {
 				{
 					Account: common.Address{19: 1},
 					Slots: map[common.Hash]common.Hash{
-						common.Hash{}: common.Hash{31: 1},
+						{}: {31: 1},
 					},
 				},
 				{
 					Account: common.Address{19: 2},
 					Slots: map[common.Hash]common.Hash{
-						common.Hash{}: common.Hash{31: 3},
+						{}: {31: 3},
 					},
 				},
 			},
 			cond: types.TransactionConditional{
 				KnownAccounts: map[common.Address]types.KnownAccount{
-					common.Address{19: 1}: types.KnownAccount{
+					{19: 1}: {
 						StorageSlots: map[common.Hash]common.Hash{
-							common.Hash{}: common.Hash{31: 1},
+							{}: {31: 1},
 						},
 					},
-					common.Address{19: 2}: types.KnownAccount{
+					{19: 2}: {
 						StorageSlots: map[common.Hash]common.Hash{
-							common.Hash{}: common.Hash{31: 2},
+							{}: {31: 2},
 						},
 					},
 				},

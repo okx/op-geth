@@ -522,7 +522,7 @@ func TestHashBody(t *testing.T) {
 
 	expectedHashes := BlockBodyHashes{
 		TransactionRoots: []common.Hash{block1.TxHash(), block2.TxHash()},
-		WithdrawalRoots:  []common.Hash{common.Hash{}, *block2.Header().WithdrawalsHash},
+		WithdrawalRoots:  []common.Hash{{}, *block2.Header().WithdrawalsHash},
 		UncleHashes:      []common.Hash{block1.UncleHash(), block2.UncleHash()},
 	}
 

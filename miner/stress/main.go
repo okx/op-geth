@@ -161,7 +161,7 @@ func makeGenesis(faucets []*ecdsa.PrivateKey) *core.Genesis {
 	genesis.Alloc[refundContract] = types.Account{
 		Code: common.FromHex("0x3615600b576001600055005b600060005500"),
 		Storage: map[common.Hash]common.Hash{
-			common.Hash{}: common.BigToHash(big.NewInt(1)),
+			{}: common.BigToHash(big.NewInt(1)),
 		},
 	}
 	return genesis
