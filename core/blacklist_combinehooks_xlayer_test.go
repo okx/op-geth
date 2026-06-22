@@ -9,8 +9,9 @@ import (
 )
 
 // CombineBlacklistHooks chains only the hooks the blacklist tracer consumes —
-// OnTxStart and OnBalanceChange (check③); all other base hooks pass through
-// unchanged (check① was removed, so OnEnter/OnExit are no longer chained).
+// OnTxStart and OnBalanceChange (the balance check); all other base hooks pass
+// through unchanged (the CALL-touch check was removed, so OnEnter/OnExit are no
+// longer chained).
 
 // TestCombineBlacklistHooks_BothCalled: when both base and add provide a chained
 // hook (OnBalanceChange), the merged hook invokes both, base first then add.
@@ -79,7 +80,7 @@ func TestCombineBlacklistHooks_AddNil(t *testing.T) {
 
 // TestCombineBlacklistHooks_PassThrough: a base hook the blacklist tracer does
 // NOT consume (e.g. OnEnter) must survive on the merged hooks unchanged, so a
-// debug/monitor tracer keeps working (TD R-8).
+// debug/monitor tracer keeps working.
 func TestCombineBlacklistHooks_PassThrough(t *testing.T) {
 	called := false
 	base := &tracing.Hooks{

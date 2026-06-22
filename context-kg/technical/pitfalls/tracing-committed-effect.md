@@ -4,7 +4,7 @@ description: "Pitfall: detecting consensus-critical committed value effects via 
 ---
 # Tracing Committed-Effect Detection Pitfalls
 
-[Pitfall] **`core/tracing.Hooks` cannot attribute balance changes to frames, and summing its events over-intercepts reverted/transient transfers**: `OnBalanceChange` carries no call-depth/frame parameter (`core/tracing/hooks.go:225`), and the reverse-value reason (reason=15) is only emitted under `WrapWithJournal` (`core/tracing/hooks.go:331-333`). A detector that sums `OnBalanceChange` deltas therefore counts value transfers that happened inside a sub-frame which later reverted — yielding a "hit" for a transfer that the EVM journaling already cancelled (final committed effect = 0). For a consensus-critical decision (e.g. native-ETH blacklist interception) this over-interception diverges from clients that key off committed state (xlayer-reth), causing a cross-client fork.
+[Pitfall] **`core/tracing.Hooks` cannot attribute balance changes to frames, and summing its events over-intercepts reverted/transient transfers**: `OnBalanceChange` carries no call-depth/frame parameter (`core/tracing/hooks.go:225`), and the reverse-value reason (reason=15) is only emitted under `WrapWithJournal` (`core/tracing/hooks.go:331-333`). A detector that sums `OnBalanceChange` deltas therefore counts value transfers that happened inside a sub-frame which later reverted — yielding a "hit" for a transfer that the EVM journaling already cancelled (final committed effect = 0). For a consensus-critical decision (e.g. native-ETH blacklist interception) this over-interception diverges from clients that key off committed state, causing a cross-client fork.
 
 **Trigger**: Building a consensus-affecting decision (interception, gating, accounting) on top of `tracing.Hooks` by summing per-event balance deltas, expecting them to reflect the transaction's committed effect.
 
@@ -22,6 +22,6 @@ intercept := !hit.IsZero()                      // committed value moved ⇔ non
 [Rule] For consensus-critical committed-effect detection, decide on a final committed balance diff (`GetBalance` start/end, fee reasons {5,6,7} stripped). Never sum `tracing.Hooks` balance events to infer committed transfers, and never depend on reason=15 (it requires `WrapWithJournal`).
 
 **Module**: core (`core/blacklist_tracer_xlayer.go`), core/tracing.
-**Source**: review-finding F-01 — A-15 Adversarial Review (Context-KG Impact Analysis); A-03 TD §4.4.2; A-08 Code Review R2. Anchors: `core/tracing/hooks.go:225,331-333`, `core/vm/interface.go:36` (`GetBalance`).
+**Source**: anchors `core/tracing/hooks.go:225,331-333`, `core/vm/interface.go:36` (`GetBalance`); regression in `core/blacklist_tracer_xlayer_test.go`.
 **Date**: 2026-06-11
 **Hit count**: 1

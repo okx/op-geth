@@ -1,9 +1,9 @@
-// XLayer emergency-freeze blacklist — observability metrics (XLOP-1099, FR-7).
+// XLayer emergency-freeze blacklist — observability metrics.
 //
-// Fork-local XLayer extension (KG naming rule). Reuses the standard
-// go-ethereum metrics registry (same pattern as legacypool's metrics). Metric
-// names are slash-separated; the Prometheus exporter renders them as
-// xlayer_blacklist_* to match xlayer-reth.
+// Fork-local XLayer extension (kept in a dedicated _xlayer.go file). Reuses the
+// standard go-ethereum metrics registry (same pattern as legacypool's metrics).
+// Metric names are slash-separated; the Prometheus exporter renders them as
+// xlayer_blacklist_*, kept consistent across clients.
 
 package core
 
@@ -36,8 +36,8 @@ func MetricBlacklistCacheSize(size int) { blacklistCacheSize.Update(int64(size))
 func MetricBlacklistSnapshotRead(nanos int64) { blacklistSnapshotReadDuration.Update(nanos) }
 
 // MetricBlacklistExecRevert increments the execution-gate revert counter for the
-// given hook category (call|log|selfdestruct|eth_balance). Unknown categories
-// are ignored.
+// given hook category (log|selfdestruct|eth_balance). Unknown categories are
+// ignored.
 func MetricBlacklistExecRevert(category string) {
 	if c, ok := blacklistExecRevert[category]; ok {
 		c.Inc(1)

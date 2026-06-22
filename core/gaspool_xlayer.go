@@ -1,8 +1,9 @@
-// XLayer emergency-freeze blacklist — GasPool extension (XLOP-1099).
+// XLayer emergency-freeze blacklist — GasPool extension.
 //
-// Fork-local XLayer extension (KG naming rule): a GasPool method kept out of the
-// upstream gaspool.go so that file carries no fork changes. ChargeUsed is a
-// method on the upstream core.GasPool defined here (same package, cross-file).
+// Fork-local XLayer extension (kept in a dedicated _xlayer.go file): a GasPool
+// method kept out of the upstream gaspool.go so that file carries no fork
+// changes. ChargeUsed is a method on the upstream core.GasPool defined here
+// (same package, cross-file).
 
 package core
 

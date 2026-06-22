@@ -1,18 +1,20 @@
-// XLayer emergency-freeze blacklist — execution-gate tracer (XLOP-1099, FR-2).
+// XLayer emergency-freeze blacklist — execution-gate tracer.
+// Fork-local XLayer extension (kept in a dedicated _xlayer.go file).
 //
-// Fork-local XLayer extension (KG naming rule). The tracer is an observational
-// core/tracing.Hooks consumer: it cannot abort execution, it only records
-// committed effects, and the gate decides revert AFTER ApplyMessage returns.
-// It must be multiplexed onto evm.Config.Tracer, never replace an existing one.
+// The tracer is an observational core/tracing.Hooks consumer: it cannot abort
+// execution, it only records committed effects, and the gate decides revert
+// after ApplyMessage returns. It must be multiplexed onto evm.Config.Tracer,
+// never replace an existing one.
 //
-// Detection is two committed-effect checks (priority log > balance):
-//   - check②: committed Transfer-class event (scanned from committed logs).
-//   - check③: committed native-ETH balance movement (fees stripped).
+// Detection is two committed-effect checks (priority: Transfer-event > balance):
+//   - Transfer-event check: a committed Transfer-class event (scanned from the
+//     committed logs) with a blacklisted from/to.
+//   - balance check: a committed native-ETH balance movement (fees stripped).
 //
-// (check① "committed CALL touch" was dropped — cross-client alignment, decision
-// B, XLOP-1100: a real asset-moving attack always trips ②/③, and L2-normal
-// interception is sequencer-only / off the consensus path, so op-geth and
-// xlayer-reth judge every tx on ②/③ alone.)
+// An earlier committed-CALL-touch check was removed for cross-client alignment:
+// a real asset-moving attack always trips the Transfer-event or balance check,
+// and normal-L2 interception is sequencer-only (off the consensus path), so all
+// clients judge every tx on these two checks alone.
 
 package core
 
@@ -26,14 +28,14 @@ import (
 	"github.com/holiman/uint256"
 )
 
-// Hit-category labels for the exec_revert_total metric (TD §4.5 / DM-7.4..7.7).
+// Hit-category labels for the exec_revert_total metric.
 const (
-	HookLog          = "log"          // check② committed Transfer-class event
-	HookSelfdestruct = "selfdestruct" // check③ via selfdestruct balance reason
-	HookEthBalance   = "eth_balance"  // check③ via native ETH balance diff
+	HookLog          = "log"          // committed Transfer-class event
+	HookSelfdestruct = "selfdestruct" // balance check via a selfdestruct reason
+	HookEthBalance   = "eth_balance"  // balance check via native ETH balance diff
 )
 
-// Transfer-class event topic0 signatures (FR-2 check②, A-04 §4.4).
+// Transfer-class event topic0 signatures.
 var (
 	topicERC20Transfer    = crypto.Keccak256Hash([]byte("Transfer(address,address,uint256)"))
 	topicERC1155Single    = crypto.Keccak256Hash([]byte("TransferSingle(address,address,address,uint256,uint256)"))
@@ -47,17 +49,16 @@ var (
 
 // BlacklistTracer accumulates committed-effect evidence for a single tx and
 // decides, after execution, whether a blacklisted address was hit by a committed
-// Transfer-class event (check②) or a committed native-ETH balance movement with
-// fees stripped (check③).
+// Transfer-class event or a committed native-ETH balance movement with fees
+// stripped.
 //
-// check③ detail (TD §4.4.2): balStart[a] is captured from the first
+// Balance-check detail: balStart[a] is captured from the first
 // OnBalanceChange.prev of a; balEnd is read from committed state after
 // ApplyMessage; feeDelta[a] strips reasons {5,6,7}. A hit is
 // (balEnd-balStart)-feeDelta != 0. Transient transfers inside reverted frames
 // are already cancelled by the EVM's own journaling, so they never enter the
-// committed diff (DM-2.18). The candidate set is exactly the addresses observed
-// in OnBalanceChange — provably complete, including selfdestruct beneficiaries
-// (A-15 Minor-1).
+// committed diff. The candidate set is exactly the addresses observed in
+// OnBalanceChange — provably complete, including selfdestruct beneficiaries.
 type BlacklistTracer struct {
 	balStart        map[common.Address]*big.Int
 	feeDelta        map[common.Address]*big.Int
@@ -78,7 +79,8 @@ func (t *BlacklistTracer) reset() {
 }
 
 // Hooks returns the tracing.Hooks to multiplex onto evm.Config.Tracer. Only the
-// hooks check③ needs are consumed: OnTxStart (per-tx reset) and OnBalanceChange.
+// hooks the balance check needs are consumed: OnTxStart (per-tx reset) and
+// OnBalanceChange.
 func (t *BlacklistTracer) Hooks() *tracing.Hooks {
 	return &tracing.Hooks{
 		OnTxStart:       t.onTxStart,
@@ -109,8 +111,8 @@ func (t *BlacklistTracer) onBalanceChange(addr common.Address, prev, newBal *big
 }
 
 // scanTransferLogs reports whether any committed Transfer-class log has a
-// blacklisted from/to (check②). receipt.Logs already excludes reverted-frame
-// logs, so no frame analysis is needed here (DM-2.10).
+// blacklisted from/to. receipt.Logs already excludes reverted-frame logs, so no
+// frame analysis is needed here.
 func scanTransferLogs(snap *Snapshot, logs []*types.Log) bool {
 	for _, lg := range logs {
 		if len(lg.Topics) == 0 {
@@ -140,8 +142,8 @@ func scanTransferLogs(snap *Snapshot, logs []*types.Log) bool {
 
 // balanceHit reports whether any candidate address (observed via
 // OnBalanceChange) that is on the blacklist had a committed native-ETH balance
-// movement once fees (reasons {5,6,7}) are stripped (check③). It returns the
-// metric category (selfdestruct vs eth_balance) for the matched address.
+// movement once fees (reasons {5,6,7}) are stripped. It returns the metric
+// category (selfdestruct vs eth_balance) for the matched address.
 func (t *BlacklistTracer) balanceHit(snap *Snapshot, balanceOf func(common.Address) *uint256.Int) (bool, string) {
 	for addr, start := range t.balStart {
 		if !snap.Contains(addr) {
@@ -166,7 +168,7 @@ func (t *BlacklistTracer) balanceHit(snap *Snapshot, balanceOf func(common.Addre
 // It returns whether the tx hit the blacklist and the metric category of the
 // first matched check (priority: log > balance). balanceOf must read the
 // committed (post-ApplyMessage, pre-revert) state. Used identically for deposit
-// and normal L2 txs (check① is no longer run on either; see file header).
+// and normal L2 txs.
 func (t *BlacklistTracer) Evaluate(snap *Snapshot, logs []*types.Log, balanceOf func(common.Address) *uint256.Int) (bool, string) {
 	if snap == nil || snap.Size() == 0 {
 		return false, ""

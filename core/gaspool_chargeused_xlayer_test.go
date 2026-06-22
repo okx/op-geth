@@ -2,10 +2,10 @@ package core
 
 import "testing"
 
-// TestGasPool_ChargeUsed verifies the X Layer blacklist gas-accounting primitive
-// (C-1 fix): ChargeUsed must move `remaining` DOWN and `cumulativeUsed` UP by the
-// same amount in one step, so Used() and CumulativeUsed() stay in sync — unlike
-// SubGas, which leaves cumulativeUsed stale.
+// TestGasPool_ChargeUsed verifies the X Layer blacklist gas-accounting
+// primitive: ChargeUsed must move `remaining` DOWN and `cumulativeUsed` UP by
+// the same amount in one step, so Used() and CumulativeUsed() stay in sync —
+// unlike SubGas, which leaves cumulativeUsed stale.
 func TestGasPool_ChargeUsed(t *testing.T) {
 	gp := NewGasPool(1000)
 	// Simulate a natural execution that consumed 200 (remaining 800, cumulative 200),
@@ -37,7 +37,7 @@ func TestGasPool_ChargeUsed(t *testing.T) {
 	// The invariant that matters for receipts root: Used() == CumulativeUsed()
 	// when the whole pool is attributed to consumed gas.
 	if gp.Used() != gp.CumulativeUsed() {
-		t.Fatalf("Used()=%d != CumulativeUsed()=%d (the C-1 divergence)", gp.Used(), gp.CumulativeUsed())
+		t.Fatalf("Used()=%d != CumulativeUsed()=%d (gas-accounting divergence)", gp.Used(), gp.CumulativeUsed())
 	}
 }
 

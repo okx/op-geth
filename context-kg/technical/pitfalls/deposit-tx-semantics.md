@@ -4,7 +4,7 @@ description: "Pitfall: reverting/intercepting an OP-Stack deposit transaction mu
 ---
 # OP-Stack Deposit Transaction Semantics Pitfalls
 
-[Pitfall] **A blanket `RevertToSnapshot` on an intercepted deposit forks consensus by undoing the mandatory nonce bump and the mint**: OP-Stack defines a specific *failed-deposit* post-state. In `core/state_transition.go:474-512` the mint is applied to `msg.From`, a **post-mint snapshot** is taken, and on failure only the post-mint call effects are rewound — the **mint is kept** and the depositor **nonce is always incremented** (`:494`, "always increment the nonce for the next deposit transaction"). If a feature intercepts a deposit and simply snapshots before `ApplyMessage` then reverts the whole thing, it wipes the mint (balance → 0) and the nonce bump (nonce stays N), producing a state root + receipt that diverge from canonical OP-Stack / xlayer-reth. This is consensus-critical and is NOT caught by the compiler, vet, or a passing build — only by a cross-client / canonical-path state-root assertion.
+[Pitfall] **A blanket `RevertToSnapshot` on an intercepted deposit forks consensus by undoing the mandatory nonce bump and the mint**: OP-Stack defines a specific *failed-deposit* post-state. In `core/state_transition.go:474-512` the mint is applied to `msg.From`, a **post-mint snapshot** is taken, and on failure only the post-mint call effects are rewound — the **mint is kept** and the depositor **nonce is always incremented** (`:494`, "always increment the nonce for the next deposit transaction"). If a feature intercepts a deposit and simply snapshots before `ApplyMessage` then reverts the whole thing, it wipes the mint (balance → 0) and the nonce bump (nonce stays N), producing a state root + receipt that diverge from canonical OP-Stack / other clients. This is consensus-critical and is NOT caught by the compiler, vet, or a passing build — only by a cross-client / canonical-path state-root assertion.
 
 **Trigger**: Intercepting, gating, or otherwise force-failing a deposit transaction (`tx.IsDepositTx()`) and reverting its effects.
 
@@ -25,9 +25,9 @@ receipt.Status = types.ReceiptStatusFailed
 if tx.IsDepositTx() { receipt.GasUsed = tx.Gas() } // explicit override
 ```
 
-[Rule] When force-failing/reverting a deposit transaction, KEEP the mint and SET nonce to N+1 (canonical OP-Stack failed-deposit post-state); never let a blanket pre-`ApplyMessage` revert erase the mint or nonce bump. Any client replicating the behaviour (xlayer-reth) must replicate the exact same choice — assert state-root equality with shared cross-client vectors.
+[Rule] When force-failing/reverting a deposit transaction, KEEP the mint and SET nonce to N+1 (canonical OP-Stack failed-deposit post-state); never let a blanket pre-`ApplyMessage` revert erase the mint or nonce bump. Any client replicating the behaviour must replicate the exact same choice — assert state-root equality with shared cross-client vectors.
 
 **Module**: core (`core/blacklist_gate_xlayer.go:209-269`), state-transition (`core/state_transition.go:474-512`).
-**Source**: review-finding F-03 — A-08 Code Review B1 (Blocker, resolved R2); A-06 TDD Summary §0/B1; regression test `core/blacklist_deposit_xlayer_test.go::TestDeposit_BlacklistedHit`.
+**Source**: regression test `core/blacklist_deposit_xlayer_test.go::TestDeposit_BlacklistedHit`.
 **Date**: 2026-06-11
 **Hit count**: 1

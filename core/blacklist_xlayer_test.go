@@ -130,7 +130,7 @@ func TestReadBlacklistSnapshot_DisabledChain(t *testing.T) {
 }
 
 // mirrorStubRuntimeHex is the runtime bytecode of a minimal MirrorStub
-// (solc 0.8.30, --evm-version shanghai) implementing the XLOP-1100 contract:
+// (solc 0.8.30, --evm-version shanghai) implementing the mirror contract:
 // getBlacklist(start,limit) -> (total=2, [0xAA,0xBB] sliced by start/limit).
 // Compiled with PUSH0 so this test also guards the merge/Random regression —
 // under a wrongly pre-Shanghai EVM the PUSH0 reverts and the read fails.

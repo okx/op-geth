@@ -54,7 +54,7 @@ func importGate(chainID uint64, addrs ...common.Address) *BlacklistGate {
 	return NewBlacklistGateFromSnapshot(chainID, NewSnapshot(addrs), false)
 }
 
-// TestDeposit_BlacklistedHit is the B1 regression anchor. A blacklisted deposit
+// TestDeposit_BlacklistedHit is the regression anchor. A blacklisted deposit
 // (value transfer to a listed address) must reproduce the canonical OP-Stack
 // failed-deposit post-state: status=0, gasUsed=tx.Gas(), depositor nonce==N+1,
 // mint kept, full gasLimit charged. This FAILS against the pre-fix blanket
@@ -91,8 +91,8 @@ func TestDeposit_BlacklistedHit(t *testing.T) {
 	}
 	// receipt.DepositNonce encodes the PRE-exec nonce N (0 here), deliberately
 	// NOT the account's post-state nonce N+1 (asserted as 1 just above). Both must
-	// hold simultaneously or the receipts root diverges from xlayer-reth
-	// (PRD FR-3 / I-6 — this field is the reth-alignment trap).
+	// hold simultaneously or the receipts root diverges across clients
+	// (this field is the cross-client alignment trap).
 	if receipt.DepositNonce == nil {
 		t.Fatal("receipt.DepositNonce = nil, want 0 (pre-exec N must be recorded under Regolith)")
 	}
@@ -111,8 +111,8 @@ func TestDeposit_BlacklistedHit(t *testing.T) {
 }
 
 // TestDeposit_BlacklistedHit_CanyonReceiptVersion covers the deposit receipt
-// fields that enter the receipts root and are the primary xlayer-reth alignment
-// trap (PRD FR-3 / I-6): with Canyon active, an intercepted deposit must carry
+// fields that enter the receipts root and are the primary cross-client alignment
+// trap: with Canyon active, an intercepted deposit must carry
 // receipt.DepositReceiptVersion == CanyonDepositReceiptVersion AND
 // receipt.DepositNonce == pre-exec N, alongside status=0 / gasUsed=gasLimit.
 // depositTestConfig() does not activate Canyon, so without this test the
@@ -152,11 +152,11 @@ func TestDeposit_BlacklistedHit_CanyonReceiptVersion(t *testing.T) {
 	}
 }
 
-// TestDeposit_BlacklistedHit_CumulativeGasUsed is the C-1 regression: an
+// TestDeposit_BlacklistedHit_CumulativeGasUsed is the cumulative-gas regression: an
 // intercepted deposit must report receipt.CumulativeGasUsed == tx.Gas() (full
 // gasLimit), matching gp.Used() and the canonical failed-deposit accounting. A
 // plain SubGas would leave CumulativeGasUsed at the natural consumed gas and
-// diverge the receipts root from xlayer-reth.
+// diverge the receipts root across clients.
 func TestDeposit_BlacklistedHit_CumulativeGasUsed(t *testing.T) {
 	const chainID = params.XLayerMainnetChainID
 	config := depositTestConfig()
@@ -176,7 +176,7 @@ func TestDeposit_BlacklistedHit_CumulativeGasUsed(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if receipt.CumulativeGasUsed != tx.Gas() {
-		t.Fatalf("CumulativeGasUsed = %d, want %d (full gasLimit; C-1)", receipt.CumulativeGasUsed, tx.Gas())
+		t.Fatalf("CumulativeGasUsed = %d, want %d (full gasLimit)", receipt.CumulativeGasUsed, tx.Gas())
 	}
 	if receipt.CumulativeGasUsed != gp.Used() {
 		t.Fatalf("CumulativeGasUsed (%d) != gp.Used() (%d) — receipt/header gas mismatch", receipt.CumulativeGasUsed, gp.Used())
@@ -186,7 +186,7 @@ func TestDeposit_BlacklistedHit_CumulativeGasUsed(t *testing.T) {
 // TestDeposit_BlacklistedHit_CumulativeAcrossTxs: on a shared block gas pool, a
 // tx following an intercepted deposit must see CumulativeGasUsed advance by the
 // deposit's full gasLimit (not its natural usage). This is the build-path
-// (worker) coverage of the cumulative C-1 fix across multiple txs.
+// (worker) coverage of the cumulative-gas fix across multiple txs.
 func TestDeposit_BlacklistedHit_CumulativeAcrossTxs(t *testing.T) {
 	const chainID = params.XLayerMainnetChainID
 	config := depositTestConfig()
@@ -225,7 +225,7 @@ func TestDeposit_BlacklistedHit_CumulativeAcrossTxs(t *testing.T) {
 }
 
 // TestDeposit_NaturalSuccess_CumulativeUnchanged: control — a non-intercepted
-// (successful) deposit is unaffected by the C-1 fix; its CumulativeGasUsed
+// (successful) deposit is unaffected by the cumulative-gas fix; its CumulativeGasUsed
 // equals its own natural GasUsed (single tx in the pool).
 func TestDeposit_NaturalSuccess_CumulativeUnchanged(t *testing.T) {
 	const chainID = params.XLayerMainnetChainID
@@ -287,8 +287,8 @@ func TestDeposit_BlacklistedHit_ExtraZero(t *testing.T) {
 
 // emitTransferToAAARuntime is hand-written runtime bytecode (no PUSH0, so it runs
 // on the build-path EVM's pre-Shanghai instruction set) that always emits
-// ERC20 Transfer(msg.sender, 0xAA, 1) via LOG3. Used to drive a real check②
-// (committed Transfer event) hit on a deposit.
+// ERC20 Transfer(msg.sender, 0xAA, 1) via LOG3. Used to drive a real committed
+// Transfer-event hit on a deposit.
 //
 //	PUSH1 1; PUSH1 0; MSTORE              ; mem[0:32]=1 (value)
 //	PUSH32 0x..AA                         ; topic2 = to = 0xAA (listed)
@@ -297,10 +297,11 @@ func TestDeposit_BlacklistedHit_ExtraZero(t *testing.T) {
 //	PUSH1 0x20; PUSH1 0; LOG3; STOP
 const emitTransferToAAARuntime = "60016000527f00000000000000000000000000000000000000000000000000000000000000aa337fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef60206000a300"
 
-// TestDeposit_EventHit_IncludedAsReverted is the end-to-end deposit check②
-// (Transfer event) case: a deposit calls a non-listed contract that emits a real
-// committed Transfer(_, 0xAA) event. The hit comes from check② (no value moved →
-// no check③), and the deposit must be included-as-reverted (status=0,
+// TestDeposit_EventHit_IncludedAsReverted is the end-to-end deposit
+// Transfer-event case: a deposit calls a non-listed contract that emits a real
+// committed Transfer(_, 0xAA) event. The hit comes from the Transfer-event check
+// (no value moved → no balance movement), and the deposit must be
+// included-as-reverted (status=0,
 // gasUsed=gasLimit). Pairs the event-path judgment with the included-as-reverted
 // processing end to end.
 func TestDeposit_EventHit_IncludedAsReverted(t *testing.T) {
@@ -319,7 +320,7 @@ func TestDeposit_EventHit_IncludedAsReverted(t *testing.T) {
 	evm := newBuildPathEVM(config, sdb, gate)
 
 	// deposit to the emitter, value=0: the only committed effect is the emitted
-	// Transfer(_, 0xAA) → check② hit (check③ no balance move).
+	// Transfer(_, 0xAA) → Transfer-event hit (no balance move).
 	tx := depositTx(depositor, emitter, 0, 0, 100000)
 	sdb.SetTxContext(tx.Hash(), 0) // logs are indexed by tx hash; gate reads GetLogs(tx.Hash())
 	gp := NewGasPool(30_000_000)
@@ -339,15 +340,16 @@ func TestDeposit_EventHit_IncludedAsReverted(t *testing.T) {
 // selfdestructToAAARuntime is runtime bytecode `PUSH20 0x..AA; SELFDESTRUCT`
 // that sends the contract's whole balance to the listed beneficiary 0xAA. No
 // PUSH0, so it runs on the build-path EVM's pre-Shanghai instruction set. Used to
-// drive a real check③ selfdestruct hit end to end.
+// drive a real balance-check selfdestruct hit end to end.
 const selfdestructToAAARuntime = "7300000000000000000000000000000000000000aaff"
 
-// TestDeposit_SelfdestructBeneficiary_IncludedAsReverted is the end-to-end check③
-// selfdestruct case (AC FR-2 names selfdestruct beneficiary explicitly): a deposit
-// funds a non-listed contract that selfdestructs, sending its balance to the listed
-// 0xAA. The committed beneficiary balance movement trips check③ (category
-// selfdestruct), and the deposit is included-as-reverted (status=0, beneficiary
-// balance reverted to 0). Complements the pure-function DM-2.12 coverage with a
+// TestDeposit_SelfdestructBeneficiary_IncludedAsReverted is the end-to-end
+// balance-check selfdestruct case (the spec names selfdestruct beneficiary
+// explicitly): a deposit funds a non-listed contract that selfdestructs, sending
+// its balance to the listed 0xAA. The committed beneficiary balance movement
+// trips the balance check (category selfdestruct), and the deposit is
+// included-as-reverted (status=0, beneficiary balance reverted to 0).
+// Complements the pure-function coverage with a
 // real SELFDESTRUCT opcode through the gated apply path.
 func TestDeposit_SelfdestructBeneficiary_IncludedAsReverted(t *testing.T) {
 	const chainID = params.XLayerMainnetChainID
@@ -365,7 +367,7 @@ func TestDeposit_SelfdestructBeneficiary_IncludedAsReverted(t *testing.T) {
 	evm := newBuildPathEVM(config, sdb, gate)
 
 	// deposit value=100 to the contract; on execution it selfdestructs, sending
-	// 100 to 0xAA → committed beneficiary balance movement → check③ hit.
+	// 100 to 0xAA → committed beneficiary balance movement → balance-check hit.
 	tx := depositTx(depositor, victim, 1000, 100, 100000)
 	sdb.SetTxContext(tx.Hash(), 0)
 	gp := NewGasPool(30_000_000)
@@ -440,7 +442,7 @@ func TestImportPath_DepositHit_CumulativeAcrossTxs(t *testing.T) {
 
 // TestDeposit_ExemptSenderNotIntercepted: a deposit from a deposit-exempt sender
 // (system / L1-attributes) carrying a listed address is NEVER intercepted, even
-// though it transfers value to the listed address (DM-3.2, IsDepositExemptSender
+// though it transfers value to the listed address (IsDepositExemptSender
 // short-circuit in evaluate).
 func TestDeposit_ExemptSenderNotIntercepted(t *testing.T) {
 	const chainID = params.XLayerMainnetChainID

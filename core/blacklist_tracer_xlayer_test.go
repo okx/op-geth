@@ -18,7 +18,7 @@ var (
 
 func snapOf(addrs ...common.Address) *Snapshot { return NewSnapshot(addrs) }
 
-// balances returns a balanceOf closure (committed final balances) for check③.
+// balances returns a balanceOf closure (committed final balances) for the balance check.
 func balances(m map[common.Address]int64) func(common.Address) *uint256.Int {
 	return func(a common.Address) *uint256.Int {
 		return uint256.NewInt(uint64(m[a]))
@@ -27,7 +27,7 @@ func balances(m map[common.Address]int64) func(common.Address) *uint256.Int {
 
 func zeroBalance(common.Address) *uint256.Int { return uint256.NewInt(0) }
 
-// --- check② committed Transfer-class events ---
+// --- Transfer-event check ---
 
 func erc20Transfer(from, to common.Address) *types.Log {
 	return &types.Log{Topics: []common.Hash{
@@ -63,14 +63,14 @@ func TestEvaluate_TransferEvents(t *testing.T) {
 		want bool
 		cat  string
 	}{
-		{"ERC20 from-hit (DM-2.1)", []*types.Log{erc20Transfer(addrAAA, addrBBB)}, snapOf(addrAAA), true, HookLog},
+		{"ERC20 from-hit", []*types.Log{erc20Transfer(addrAAA, addrBBB)}, snapOf(addrAAA), true, HookLog},
 		{"ERC20 to-hit", []*types.Log{erc20Transfer(addrBBB, addrAAA)}, snapOf(addrAAA), true, HookLog},
-		{"ERC20 miss (DM-2.5)", []*types.Log{erc20Transfer(addrBBB, addrCCC)}, snapOf(addrAAA), false, ""},
-		{"ERC1155 single hit (DM-2.3)", []*types.Log{erc1155Single(addrCCC, addrAAA, addrBBB)}, snapOf(addrAAA), true, HookLog},
+		{"ERC20 miss", []*types.Log{erc20Transfer(addrBBB, addrCCC)}, snapOf(addrAAA), false, ""},
+		{"ERC1155 single hit", []*types.Log{erc1155Single(addrCCC, addrAAA, addrBBB)}, snapOf(addrAAA), true, HookLog},
 		{"ERC1155 batch from-hit", []*types.Log{erc1155Batch(addrCCC, addrAAA, addrBBB)}, snapOf(addrAAA), true, HookLog},
 		{"ERC1155 batch to-hit", []*types.Log{erc1155Batch(addrCCC, addrBBB, addrAAA)}, snapOf(addrAAA), true, HookLog},
 		{"ERC1155 batch miss", []*types.Log{erc1155Batch(addrCCC, addrBBB, addrCCC)}, snapOf(addrAAA), false, ""},
-		{"non-Transfer topic (DM-2.7)", []*types.Log{{Topics: []common.Hash{common.HexToHash("0xdeadbeef"), common.BytesToHash(addrAAA.Bytes())}}}, snapOf(addrAAA), false, ""},
+		{"non-Transfer topic", []*types.Log{{Topics: []common.Hash{common.HexToHash("0xdeadbeef"), common.BytesToHash(addrAAA.Bytes())}}}, snapOf(addrAAA), false, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -87,14 +87,14 @@ func TestEvaluate_TransferEvents(t *testing.T) {
 	}
 }
 
-// --- check③ committed native-ETH balance diff (fee-stripped) ---
+// --- balance check (native-ETH, fee-stripped) ---
 
 func bc(h *tracing.Hooks, addr common.Address, prev, newBal int64, reason tracing.BalanceChangeReason) {
 	h.OnBalanceChange(addr, big.NewInt(prev), big.NewInt(newBal), reason)
 }
 
 func TestEvaluate_BalanceChecks(t *testing.T) {
-	t.Run("value transfer to 0xAAA hits eth_balance (DM-2.11)", func(t *testing.T) {
+	t.Run("value transfer to 0xAAA hits eth_balance", func(t *testing.T) {
 		tr := NewBlacklistTracer()
 		h := tr.Hooks()
 		h.OnTxStart(nil, nil, common.Address{})
@@ -106,7 +106,7 @@ func TestEvaluate_BalanceChecks(t *testing.T) {
 	})
 
 	t.Run("value transfer FROM 0xAAA (outflow, net<0) hits eth_balance", func(t *testing.T) {
-		// AC FR-2 requires both inflow and outflow. Listed address is the sender:
+		// The spec requires both inflow and outflow. Listed address is the sender:
 		// committed balance drops 100→0 (net -100, no fee reason) → hit.
 		tr := NewBlacklistTracer()
 		h := tr.Hooks()
@@ -118,7 +118,7 @@ func TestEvaluate_BalanceChecks(t *testing.T) {
 		}
 	})
 
-	t.Run("gas-only payer not intercepted (DM-2.15/2.16)", func(t *testing.T) {
+	t.Run("gas-only payer not intercepted", func(t *testing.T) {
 		tr := NewBlacklistTracer()
 		h := tr.Hooks()
 		h.OnTxStart(nil, nil, common.Address{})
@@ -129,7 +129,7 @@ func TestEvaluate_BalanceChecks(t *testing.T) {
 		}
 	})
 
-	t.Run("coinbase/fee recipient not intercepted (DM-2.17)", func(t *testing.T) {
+	t.Run("coinbase/fee recipient not intercepted", func(t *testing.T) {
 		tr := NewBlacklistTracer()
 		h := tr.Hooks()
 		h.OnTxStart(nil, nil, common.Address{})
@@ -139,7 +139,7 @@ func TestEvaluate_BalanceChecks(t *testing.T) {
 		}
 	})
 
-	t.Run("selfdestruct beneficiary hits selfdestruct (DM-2.12)", func(t *testing.T) {
+	t.Run("selfdestruct beneficiary hits selfdestruct", func(t *testing.T) {
 		tr := NewBlacklistTracer()
 		h := tr.Hooks()
 		h.OnTxStart(nil, nil, common.Address{})
@@ -150,7 +150,7 @@ func TestEvaluate_BalanceChecks(t *testing.T) {
 		}
 	})
 
-	t.Run("transient transfer in reverted frame not intercepted (DM-2.18)", func(t *testing.T) {
+	t.Run("transient transfer in reverted frame not intercepted", func(t *testing.T) {
 		tr := NewBlacklistTracer()
 		h := tr.Hooks()
 		h.OnTxStart(nil, nil, common.Address{})
@@ -162,7 +162,7 @@ func TestEvaluate_BalanceChecks(t *testing.T) {
 	})
 }
 
-// --- short-circuit when disabled/empty (DM-2.20) ---
+// --- short-circuit when disabled/empty ---
 
 func TestEvaluate_EmptySnapshotNoOp(t *testing.T) {
 	tr := NewBlacklistTracer()
@@ -175,11 +175,11 @@ func TestEvaluate_EmptySnapshotNoOp(t *testing.T) {
 	}
 }
 
-// --- check priority: log > balance (FR-2 / 跨端契约) ---
+// --- check priority: log > balance ---
 
 // TestEvaluate_CheckPriority locks the category priority when a single tx trips
 // both checks: the returned metric category must be the higher-priority one
-// (log > balance). (check① was removed — see tracer file header.)
+// (log > balance). (the CALL-touch check was removed — see tracer file header.)
 func TestEvaluate_CheckPriority(t *testing.T) {
 	t.Run("log beats balance", func(t *testing.T) {
 		// a Transfer log hit AND a committed ETH balance hit → category must be log.

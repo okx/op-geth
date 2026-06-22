@@ -86,9 +86,8 @@ type environment struct {
 	coinbase common.Address
 	evm      *vm.EVM
 
-	// XLayer emergency-freeze blacklist (XLOP-1099): per-block execution gate,
-	// nil when the chain is disabled or the list is empty. Shares the same
-	// decision anchor as the import path (TD R-1).
+	// XLayer blacklist per-block execution gate; nil when the chain is disabled or
+	// the list is empty. Shares the same decision anchor as the import path.
 	blGate *core.BlacklistGate
 
 	// OP-Stack addition: DA footprint block limit
@@ -565,9 +564,9 @@ func (miner *Miner) commitTransaction(ctx context.Context, env *environment, tx 
 
 	receipt, err := miner.applyTransaction(env, tx)
 	if err != nil {
-		// XLayer blacklist (XLOP-1099, FR-2): a committed normal-tx hit is dropped
-		// from the block and ejected from the mempool. applyTransaction already
-		// undid its state + gas via the outer snapshot.
+		// XLayer blacklist: a committed normal-tx hit is dropped from the block and
+		// ejected from the mempool. applyTransaction already undid its state + gas
+		// via the outer snapshot.
 		if errors.Is(err, core.ErrBlacklistDrop) {
 			tx.SetRejected()
 			log.Warn("Dropping blacklisted transaction during block-building", "hash", tx.Hash())
@@ -619,11 +618,11 @@ func (miner *Miner) applyTransaction(env *environment, tx *types.Transaction) (*
 		snap = env.state.Snapshot()
 		gp   = env.gasPool.Snapshot()
 	)
-	// XLayer blacklist build-path gate (XLOP-1099, FR-2/FR-3): pass the build-mode
-	// gate (nil when disabled) into the shared apply path. A committed normal-tx
-	// hit returns ErrBlacklistDrop, and the snapshot/gas-pool restore below fully
-	// undoes it so it is dropped from the block; a committed deposit hit is kept
-	// as included-as-reverted.
+	// XLayer blacklist build-path gate: pass the build-mode gate (nil when
+	// disabled) into the shared apply path. A committed normal-tx hit returns
+	// ErrBlacklistDrop, and the snapshot/gas-pool restore below fully undoes it so
+	// it is dropped from the block; a committed deposit hit is kept as
+	// included-as-reverted.
 	receipt, err := core.ApplyTransaction(env.blGate, env.evm, env.gasPool, env.state, env.header, tx)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)

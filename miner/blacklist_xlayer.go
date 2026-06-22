@@ -1,10 +1,10 @@
-// XLayer emergency-freeze blacklist — build-path wiring (XLOP-1099, FR-2/FR-3).
+// XLayer emergency-freeze blacklist — build-path wiring.
 //
-// Fork-local XLayer extension (KG naming rule): kept out of worker.go so the
-// upstream file's footprint stays minimal. attachBlacklistGate builds the
+// Fork-local XLayer extension (kept in a dedicated _xlayer.go file) so the
+// upstream worker.go footprint stays minimal. attachBlacklistGate builds the
 // build-mode execution gate and rebuilds env.evm against a hooked state so the
-// observational tracer (check③ OnBalanceChange) fires; the gate is then passed
-// into core.ApplyTransaction by miner.applyTransaction.
+// observational tracer (the balance check's OnBalanceChange) fires; the gate is
+// then passed into core.ApplyTransaction by miner.applyTransaction.
 
 package miner
 
@@ -32,8 +32,8 @@ func (miner *Miner) attachBlacklistGate(env *environment) {
 	}
 	env.blGate = gate
 	// Multiplex via CombineBlacklistHooks (rather than replacing) for symmetry
-	// with the import path (TD R-8). makeEnv builds env.evm with an empty
-	// vm.Config (no base tracer), so this preserves any future base tracer too.
+	// with the import path. makeEnv builds env.evm with an empty vm.Config (no
+	// base tracer), so this preserves any future base tracer too.
 	hooks := core.CombineBlacklistHooks(env.evm.Config.Tracer, gate.Hooks())
 	hooked := state.NewHookedState(env.state, hooks)
 	env.evm = vm.NewEVM(

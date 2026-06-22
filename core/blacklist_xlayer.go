@@ -1,8 +1,7 @@
-// XLayer emergency-freeze blacklist — on-chain data source (XLOP-1099, FR-4).
+// XLayer emergency-freeze blacklist — on-chain data source.
 //
-// This file is a fork-local XLayer extension (see KG naming rule: XLayer
-// additions to core live in a dedicated _xlayer.go file). It must not contain
-// upstream go-ethereum logic.
+// Fork-local XLayer extension (kept in a dedicated _xlayer.go file). It must not
+// contain upstream go-ethereum logic.
 
 package core
 
@@ -19,11 +18,11 @@ import (
 )
 
 // blacklistMirrorABIJSON is the read-only ABI the node uses to enumerate the
-// L2BlacklistMirror list (XLOP-1100 cross-client contract). The node depends
-// ONLY on this ABI, never on the contract's storage layout — so the contract
-// may use any internal layout (e.g. OpenZeppelin EnumerableSet) and change it
-// freely. This ABI is shared three ways with xlayer-reth and the contracts
-// repo: all must use the identical method and any change is synchronized.
+// L2BlacklistMirror list. The node depends ONLY on this ABI, never on the
+// contract's storage layout — so the contract may use any internal layout (e.g.
+// OpenZeppelin EnumerableSet) and change it freely. This ABI is shared across
+// all clients and the contracts repo: all must use the identical method and any
+// change is synchronized.
 //
 //	getBlacklist(uint256 start, uint256 limit)
 //	    view returns (uint256 total, address[] addresses)
@@ -46,8 +45,8 @@ var blacklistMirrorABI = func() abi.ABI {
 	return parsed
 }()
 
-// Deterministic read parameters — MUST be identical across op-geth and
-// xlayer-reth (different values would build different sets → consensus fork).
+// Deterministic read parameters — MUST be identical across all clients
+// (different values would build different sets → consensus fork).
 const (
 	// blacklistReadPageSize is how many addresses are requested per
 	// getBlacklist call.
@@ -60,9 +59,9 @@ const (
 // maxSnapshotEntries bounds how many entries ReadBlacklistSnapshot will read in
 // a single block, defending against a corrupt/pathological total word causing
 // unbounded work. The cap is deterministic and MUST be identical on every
-// client (XLOP-1100): a different cap would let one client read more entries
-// than another and fork. It equals the PRD engineering upper bound (300k) and
-// matches xlayer-reth; raising it requires a lockstep change in both clients.
+// client: a different cap would let one client read more entries than another
+// and fork. It is the engineering upper bound; raising it requires a lockstep
+// change in all clients.
 const maxSnapshotEntries = 300000
 
 // Snapshot is an immutable, block-head view of the blacklist address set. It is
@@ -72,8 +71,8 @@ type Snapshot struct {
 	blockHash common.Hash
 }
 
-// NewSnapshot builds a Snapshot from the given addresses. Used by the ingress
-// filter refresh path and by tests; the execution gate uses
+// NewSnapshot builds a Snapshot from the given addresses. Used as a test/seam
+// helper (e.g. NewBlacklistGateFromSnapshot); the execution gate uses
 // ReadBlacklistSnapshot.
 func NewSnapshot(addrs []common.Address) *Snapshot {
 	set := make(map[common.Address]struct{}, len(addrs))
@@ -113,12 +112,12 @@ func (s *Snapshot) BlockHash() common.Hash {
 // ReadBlacklistSnapshot reads the blacklist address set from the L2BlacklistMirror
 // contract for the given chain_id, by calling its read-only view ABI
 // (getBlacklist) — NOT by reading raw storage slots. This decouples the node
-// from the contract's storage layout (B-3 resolution): the contract may use any
-// internal representation behind the fixed ABI.
+// from the contract's storage layout: the contract may use any internal
+// representation behind the fixed ABI.
 //
 // statedb MUST be the parent / block-head state (never mid-block live state), so
-// an add landing in block N is only visible from block N+1 — no in-block delta
-// (FR-4). The whole list is read once per block and reused for every tx.
+// an add landing in block N is only visible from block N+1 — no in-block delta.
+// The whole list is read once per block and reused for every tx.
 //
 // Behavior:
 //   - chain not enabled (BlacklistMirror !ok)       → empty snapshot (no call)
@@ -126,7 +125,7 @@ func (s *Snapshot) BlockHash() common.Hash {
 //   - non-empty list                                → populated snapshot
 //   - view call / decode failure                    → empty snapshot + Error log
 //     (deterministic across clients; a well-formed mirror never fails. The exact
-//     failure policy is a cross-client agreed item — keep op-geth and reth identical.)
+//     failure policy is a cross-client agreed item — keep all clients identical.)
 func ReadBlacklistSnapshot(statedb vm.StateDB, header *types.Header, config *params.ChainConfig, chainID uint64) *Snapshot {
 	mirror, ok := params.BlacklistMirror(chainID)
 	if !ok {
@@ -178,8 +177,8 @@ func readBlacklistSet(chainID uint64, call blacklistViewCall) *Snapshot {
 	// `read` (entries consumed so far) doubles as the next page offset. Driving
 	// the offset off actual consumption — not a fixed PAGE_SIZE step — keeps the
 	// read self-consistent even if the contract returns a short non-final page:
-	// a client can never silently skip the [read, read+PAGE_SIZE) gap, which
-	// would otherwise risk reading a different set than xlayer-reth (a different
+	// a client can never silently skip the [read, read+PAGE_SIZE) gap, which would
+	// otherwise risk reading a different set than another client (a different
 	// pagination cursor on a misbehaving mirror = consensus fork).
 	for read < n {
 		_, page, ok := getBlacklistPage(chainID, call, read)
@@ -248,8 +247,8 @@ func accumulatePage(set map[common.Address]struct{}, page []common.Address, read
 
 // newReadOnlyEVM builds a minimal EVM over the given (block-head) state for a
 // read-only staticcall. It hand-builds the BlockContext (no ChainContext
-// needed) so all call sites — including the txpool, which has no EVM — can use
-// it. GetHash is a stub: a view enumerator never executes BLOCKHASH.
+// needed) so all call sites can use it. GetHash is a stub: a view enumerator
+// never executes BLOCKHASH.
 func newReadOnlyEVM(statedb vm.StateDB, header *types.Header, config *params.ChainConfig) *vm.EVM {
 	baseFee := new(big.Int)
 	if header.BaseFee != nil {

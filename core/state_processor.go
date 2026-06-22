@@ -71,11 +71,8 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 	)
 	var tracingStateDB = vm.StateDB(statedb)
 
-	// XLayer emergency-freeze blacklist execution gate (XLOP-1099, FR-2/FR-3/FR-4).
-	// Read the block-head/parent snapshot once and multiplex the observational
-	// tracer onto cfg.Tracer so detection runs on the shared apply path. Import
-	// path → dropNormalHit=false (followers never intercept L2 normal txs). nil
-	// gate (disabled chain / empty list) means the unmodified apply path is used.
+	// XLayer blacklist execution gate (import path → dropNormalHit=false; nil gate
+	// = unmodified apply path). See core/blacklist_gate_xlayer.go.
 	var blGate *BlacklistGate
 	if config.ChainID != nil {
 		if blGate = NewBlacklistGate(statedb, header, config, config.ChainID.Uint64(), false); blGate != nil {
@@ -188,8 +185,8 @@ func ApplyTransactionWithEVM(gate *BlacklistGate, msg *Message, gp *GasPool, sta
 		nonce = statedb.GetNonce(msg.From)
 	}
 
-	// xlayer XLOP-1099: blacklist execution gate — snapshot before execution so a
-	// committed hit can be reverted. nil gate keeps the upstream path untouched.
+	// xlayer: blacklist gate — snapshot before execution so a committed hit can be
+	// reverted. nil gate keeps the upstream path untouched.
 	var blSnap int
 	if gate != nil {
 		blSnap = statedb.Snapshot()
@@ -201,10 +198,9 @@ func ApplyTransactionWithEVM(gate *BlacklistGate, msg *Message, gp *GasPool, sta
 		return nil, err
 	}
 
-	// xlayer XLOP-1099: decide on committed effects between ApplyMessage and
-	// Finalise. A build-path normal-tx hit returns ErrBlacklistDrop (no Finalise)
-	// so the miner's outer snapshot drops it; a deposit hit is kept as
-	// included-as-reverted (decide reverts + re-mint/nonce/gas).
+	// xlayer: blacklist gate decision, between ApplyMessage and Finalise. A
+	// build-path normal-tx hit returns ErrBlacklistDrop (no Finalise); a deposit
+	// hit is kept as included-as-reverted.
 	blHit := false
 	if gate != nil {
 		var dropErr error
@@ -227,7 +223,7 @@ func ApplyTransactionWithEVM(gate *BlacklistGate, msg *Message, gp *GasPool, sta
 		statedb.AccessEvents().Merge(evm.AccessEvents)
 	}
 	receipt = MakeReceipt(evm, result, statedb, blockNumber, blockHash, blockTime, tx, gp.CumulativeUsed(), root, evm.ChainConfig(), nonce)
-	// xlayer XLOP-1099: rewrite the receipt of a kept (deposit) hit.
+	// xlayer: rewrite the receipt of a kept (deposit) hit.
 	if gate != nil && blHit {
 		gate.overrideReceipt(receipt, tx, statedb, blockNumber, blockHash, blockTime)
 	}
@@ -287,9 +283,9 @@ func MakeReceipt(evm *vm.EVM, result *ExecutionResult, statedb *state.StateDB, b
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction and an error if the transaction failed,
 // indicating the block was invalid.
-// The optional gate (XLOP-1099, nil = upstream behavior) carries the XLayer
-// blacklist execution gate; the build path (miner) passes a build-mode gate, all
-// other callers pass nil.
+// The optional gate (nil = upstream behavior) carries the XLayer blacklist
+// execution gate; the build path (miner) passes a build-mode gate, all other
+// callers pass nil.
 func ApplyTransaction(gate *BlacklistGate, evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction) (*types.Receipt, error) {
 	msg, err := TransactionToMessage(tx, types.MakeSigner(evm.ChainConfig(), header.Number, header.Time), header.BaseFee)
 	if err != nil {
