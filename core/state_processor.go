@@ -71,13 +71,11 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 	)
 	var tracingStateDB = vm.StateDB(statedb)
 
-	// XLayer emergency-freeze blacklist execution gate (XLOP-1099, FR-2/FR-3/FR-4).
-	// Read the block-head/parent snapshot once and multiplex the observational
-	// tracer onto cfg.Tracer so detection runs on the shared apply path. nil gate
-	// (disabled chain / empty list) means the unmodified apply path is used.
+	// XLayer blacklist execution gate (import path → dropNormalHit=false; nil gate
+	// = unmodified apply path). See core/blacklist_gate_xlayer.go.
 	var blGate *BlacklistGate
 	if config.ChainID != nil {
-		if blGate = NewBlacklistGate(statedb, config.ChainID.Uint64()); blGate != nil {
+		if blGate = NewBlacklistGate(statedb, header, config, config.ChainID.Uint64(), false); blGate != nil {
 			cfg.Tracer = CombineBlacklistHooks(cfg.Tracer, blGate.Hooks())
 		}
 	}
@@ -118,7 +116,7 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 			telemetry.Int64Attribute("tx.index", int64(i)),
 		)
 
-		receipt, err := applyTransactionDispatch(blGate, msg, gp, statedb, blockNumber, blockHash, context.Time, tx, evm)
+		receipt, err := ApplyTransactionWithEVM(blGate, msg, gp, statedb, blockNumber, blockHash, context.Time, tx, evm)
 		if err != nil {
 			spanEnd(&err)
 			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
@@ -172,7 +170,7 @@ func postExecution(ctx context.Context, config *params.ChainConfig, block *types
 // ApplyTransactionWithEVM attempts to apply a transaction to the given state database
 // and uses the input parameters for its environment similar to ApplyTransaction. However,
 // this method takes an already created EVM instance as input.
-func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, blockTime uint64, tx *types.Transaction, evm *vm.EVM) (receipt *types.Receipt, err error) {
+func ApplyTransactionWithEVM(gate *BlacklistGate, msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, blockTime uint64, tx *types.Transaction, evm *vm.EVM) (receipt *types.Receipt, err error) {
 	if hooks := evm.Config.Tracer; hooks != nil {
 		if hooks.OnTxStart != nil {
 			hooks.OnTxStart(evm.GetVMContext(), tx, msg.From)
@@ -187,11 +185,31 @@ func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, 
 		nonce = statedb.GetNonce(msg.From)
 	}
 
+	// xlayer: blacklist gate — snapshot before execution so a committed hit can be
+	// reverted. nil gate keeps the upstream path untouched.
+	var blSnap int
+	if gate != nil {
+		blSnap = statedb.Snapshot()
+	}
+
 	// Apply the transaction to the current state (included in the env).
 	result, err := ApplyMessage(evm, msg, gp)
 	if err != nil {
 		return nil, err
 	}
+
+	// xlayer: blacklist gate decision, between ApplyMessage and Finalise. A
+	// build-path normal-tx hit returns ErrBlacklistDrop (no Finalise); a deposit
+	// hit is kept as included-as-reverted.
+	blHit := false
+	if gate != nil {
+		var dropErr error
+		blHit, dropErr = gate.decide(msg, tx, statedb, gp, result, nonce, blSnap, blockNumber, blockHash, blockTime)
+		if dropErr != nil {
+			return nil, dropErr
+		}
+	}
+
 	// Update the state with pending changes.
 	var root []byte
 	if evm.ChainConfig().IsByzantium(blockNumber) {
@@ -204,7 +222,12 @@ func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, 
 	if statedb.Database().TrieDB().IsVerkle() {
 		statedb.AccessEvents().Merge(evm.AccessEvents)
 	}
-	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, blockTime, tx, gp.CumulativeUsed(), root, evm.ChainConfig(), nonce), nil
+	receipt = MakeReceipt(evm, result, statedb, blockNumber, blockHash, blockTime, tx, gp.CumulativeUsed(), root, evm.ChainConfig(), nonce)
+	// xlayer: rewrite the receipt of a kept (deposit) hit.
+	if gate != nil && blHit {
+		gate.overrideReceipt(receipt, tx, statedb, blockNumber, blockHash, blockTime)
+	}
+	return receipt, nil
 }
 
 // MakeReceipt generates the receipt object for a transaction given its execution result.
@@ -260,13 +283,16 @@ func MakeReceipt(evm *vm.EVM, result *ExecutionResult, statedb *state.StateDB, b
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction) (*types.Receipt, error) {
+// The optional gate (nil = upstream behavior) carries the XLayer blacklist
+// execution gate; the build path (miner) passes a build-mode gate, all other
+// callers pass nil.
+func ApplyTransaction(gate *BlacklistGate, evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction) (*types.Receipt, error) {
 	msg, err := TransactionToMessage(tx, types.MakeSigner(evm.ChainConfig(), header.Number, header.Time), header.BaseFee)
 	if err != nil {
 		return nil, err
 	}
 	// Create a new context to be used in the EVM environment
-	return ApplyTransactionWithEVM(msg, gp, statedb, header.Number, header.Hash(), header.Time, tx, evm)
+	return ApplyTransactionWithEVM(gate, msg, gp, statedb, header.Number, header.Hash(), header.Time, tx, evm)
 }
 
 // ProcessBeaconBlockRoot applies the EIP-4788 system call to the beacon block root

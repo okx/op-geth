@@ -12,12 +12,12 @@ func TestIsBlacklistEnabled(t *testing.T) {
 		chainID uint64
 		want    bool
 	}{
-		{"mainnet 196 (DM-6.1)", XLayerMainnetChainID, true},
-		{"testnet 1952 (DM-6.2)", XLayerTestnetChainID, true},
-		{"sepolia 195 (DM-6.3)", XLayerSepoliaTestnetChainID, true},
-		{"eth mainnet 1 (DM-6.4)", 1, false},
-		{"op mainnet 10 (DM-6.4)", 10, false},
-		{"zero (DM-6.5)", 0, false},
+		{"mainnet 196", XLayerMainnetChainID, true},
+		{"testnet 1952", XLayerTestnetChainID, true},
+		{"devnet 195", XLayerDevnetChainID, true},
+		{"eth mainnet 1", 1, false},
+		{"op mainnet 10", 10, false},
+		{"zero", 0, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -29,8 +29,8 @@ func TestIsBlacklistEnabled(t *testing.T) {
 }
 
 func TestBlacklistMirror(t *testing.T) {
-	// DM-6.7: returns (addr,true) for the three enabled chains, (_,false) otherwise.
-	for _, id := range []uint64{XLayerSepoliaTestnetChainID, XLayerTestnetChainID, XLayerMainnetChainID} {
+	// returns (addr,true) for the three enabled chains, (_,false) otherwise.
+	for _, id := range []uint64{XLayerDevnetChainID, XLayerTestnetChainID, XLayerMainnetChainID} {
 		addr, ok := BlacklistMirror(id)
 		if !ok {
 			t.Fatalf("BlacklistMirror(%d) ok=false, want true", id)
@@ -56,7 +56,7 @@ func TestBlacklistMirrorAddressesDistinct(t *testing.T) {
 }
 
 func TestIsDepositExemptSender(t *testing.T) {
-	// DM-3.2: system / L1-attributes deposit senders are exempt; others are not.
+	// system / L1-attributes deposit senders are exempt; others are not.
 	if !IsDepositExemptSender(SystemAddress) {
 		t.Fatalf("SystemAddress must be deposit-exempt")
 	}
