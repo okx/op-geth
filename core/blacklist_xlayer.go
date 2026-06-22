@@ -67,8 +67,7 @@ const maxSnapshotEntries = 300000
 // Snapshot is an immutable, block-head view of the blacklist address set. It is
 // safe for concurrent reads (never mutated after construction).
 type Snapshot struct {
-	set       map[common.Address]struct{}
-	blockHash common.Hash
+	set map[common.Address]struct{}
 }
 
 // NewSnapshot builds a Snapshot from the given addresses. Used as a test/seam
@@ -99,14 +98,6 @@ func (s *Snapshot) Size() int {
 		return 0
 	}
 	return len(s.set)
-}
-
-// BlockHash returns the block hash this snapshot was read at (zero if unset).
-func (s *Snapshot) BlockHash() common.Hash {
-	if s == nil {
-		return common.Hash{}
-	}
-	return s.blockHash
 }
 
 // ReadBlacklistSnapshot reads the blacklist address set from the L2BlacklistMirror
