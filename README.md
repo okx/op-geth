@@ -1,3 +1,44 @@
+> [!IMPORTANT]
+> ## op-geth support ends on July 20, 2026 — start migrating to xlayer-reth now
+>
+> As the X Layer ecosystem matures, X Layer is transitioning full execution client
+> support to [xlayer-reth](https://github.com/okx/xlayer-reth). This notice outlines the
+> op-geth deprecation timeline, scope of impact, and required actions.
+>
+> ### 1. What This Means
+>
+> - **op-geth is supported through July 20, 2026.** Security patches and critical bug
+>   fixes will continue to be issued during this window, after which support ends.
+> - All new feature development, including the next **Karst hardfork**, will happen on
+>   xlayer-reth only.
+> - **op-node is not being deprecated** and requires no migration.
+>
+> ### 2. Action Required
+>
+> op-geth will not support the L1 **Glamsterdam** hardfork. Chains still running op-geth
+> at activation will not be able to follow the canonical chain — nodes still running
+> op-geth will fall off the canonical chain.
+>
+> **Node Operators** should migrate to xlayer-reth as soon as possible. Recommended
+> migration steps:
+>
+> - Migrate to **xlayer-reth v0.0.6.3 or later**.
+> - Syncing xlayer-reth takes time. Start early to allow adequate validation before
+>   the hardfork window.
+>
+> 1. Start syncing an xlayer-reth node alongside your existing op-geth node.
+> 2. Validate sync correctness over a meaningful window — compare block hashes, state
+>    roots, and RPC outputs.
+> 3. Once confident, migrate production traffic to xlayer-reth.
+>
+> ### 3. Resources
+>
+> - xlayer-reth repository: https://github.com/okx/xlayer-reth
+> - xlayer-reth v0.0.6.3 release notes: https://github.com/okx/xlayer-reth/releases/tag/v0.0.6.3
+> - Quick-start script: https://web3.okx.com/onchainos/dev-docs/xlayer/developer/setup-rpc/setup-rpc
+> - Data snapshots: https://web3.okx.com/onchainos/dev-docs/xlayer/developer/setup-rpc/snapshots
+> - Original op-geth deprecation notice (Optimism): https://docs.optimism.io/notices/op-geth-deprecation
+
 ## Go Ethereum
 
 Golang execution layer implementation of the Ethereum protocol.
